@@ -641,24 +641,24 @@ def ensure_db_dir(path: Optional[Path] = None) -> Path:
 
 
 def get_db_path() -> Path:
-    env_path = os.environ.get("ZETATECH_DB")
-    return Path(env_path) if env_path else DEFAULT_DB_PATH
+    env = os.environ.get("ZETATECH_DB")
+    return Path(env) if env else DEFAULT_DB_PATH
 
 
 def _resolve_db_path(db_path: Optional[Path]) -> Path:
     if db_path is not None:
         return ensure_db_dir(db_path)
 
-    env_path = os.environ.get("ZETATECH_DB")
-    if env_path:
-        return ensure_db_dir(Path(env_path))
+    env = os.environ.get("ZETATECH_DB")
+    if env:
+        return ensure_db_dir(Path(env))
 
     return ensure_db_dir()
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
-    resolved_db_path = _resolve_db_path(db_path)
-    conn = sqlite3.connect(str(resolved_db_path))
+    resolved = _resolve_db_path(db_path)
+    conn = sqlite3.connect(str(resolved))
     cursor = conn.cursor()
     try:
         _execute_statements(cursor, SCAN_SCHEMA_STATEMENTS)
@@ -672,11 +672,11 @@ def init_db(db_path: Optional[Path] = None) -> None:
 
 @contextmanager
 def get_db(db_path: Optional[Path] = None):
-    resolved_db_path = _resolve_db_path(db_path)
-    if not resolved_db_path.exists():
-        init_db(resolved_db_path)
+    resolved = _resolve_db_path(db_path)
+    if not resolved.exists():
+        init_db(resolved)
 
-    conn = sqlite3.connect(str(resolved_db_path))
+    conn = sqlite3.connect(str(resolved))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     try:

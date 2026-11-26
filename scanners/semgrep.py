@@ -274,23 +274,23 @@ class SemgrepScanner:
         if not SAFE_SLUG_PATTERN.match(slug):
             return self._result(slug, errors=["Invalid slug format"])
 
-        path_obj = Path(plugin_path)
-        if not path_obj.exists():
+        path = Path(plugin_path)
+        if not path.exists():
             return self._result(slug, errors=["Plugin path does not exist"])
-        if not path_obj.is_dir():
+        if not path.is_dir():
             return self._result(slug, errors=["Plugin path is not a directory"])
 
         try:
-            resolved_path = path_obj.resolve()
-            plugin_target_path = str(resolved_path)
-            if any(char in plugin_target_path for char in DANGEROUS_PATH_CHARS):
+            resolved = path.resolve()
+            target = str(resolved)
+            if any(char in target for char in DANGEROUS_PATH_CHARS):
                 return self._result(slug, errors=["Invalid characters in path"])
         except Exception as exc:
             return self._result(slug, errors=[f"Path validation error: {str(exc)}"])
 
         return SemgrepTarget(
             slug=slug,
-            plugin_target_path=plugin_target_path,
+            plugin_target_path=target,
             output_file=self.output_dir / f"{slug}_results.json",
         )
 

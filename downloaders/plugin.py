@@ -59,76 +59,76 @@ class PluginDownloader:
         if not hostname:
             raise ValueError("Invalid URL: Missing hostname")
 
-        blocked_hostnames = {
+        blocked = {
             "metadata.google.internal",
             "metadata.goog",
             "169.254.169.254",
             "instance-data",
             "metadata",
         }
-        if hostname.lower() in blocked_hostnames:
+        if hostname.lower() in blocked:
             raise ValueError(
                 "SSRF Protection: Access to cloud metadata endpoint is blocked"
             )
 
-        validated_ips: List[str] = []
+        ips: List[str] = []
         try:
-            addr_infos = socket.getaddrinfo(hostname, None)
-            if not addr_infos:
+            addrs = socket.getaddrinfo(hostname, None)
+            if not addrs:
                 raise ValueError(f"Could not resolve hostname: {hostname}")
 
-            for info in addr_infos:
-                ip_str = info[4][0]
-                ip_obj = ipaddress.ip_address(ip_str)
+            for info in addrs:
+                ip = info[4][0]
+                addr = ipaddress.ip_address(ip)
 
-                if ip_obj.is_loopback:
+                if addr.is_loopback:
                     raise ValueError(
-                        f"SSRF Protection: Access to loopback address {ip_str} is blocked"
+                        f"SSRF Protection: Access to loopback address {ip} is blocked"
                     )
-                if ip_obj.is_private:
+                if addr.is_private:
                     raise ValueError(
-                        f"SSRF Protection: Access to private IP {ip_str} is blocked"
+                        f"SSRF Protection: Access to private IP {ip} is blocked"
                     )
-                if ip_obj.is_link_local:
+                if addr.is_link_local:
                     raise ValueError(
-                        f"SSRF Protection: Access to link-local address {ip_str} is blocked"
+                        f"SSRF Protection: Access to link-local address {ip} is blocked"
                     )
-                if ip_obj.is_reserved:
+                if addr.is_reserved:
                     raise ValueError(
-                        f"SSRF Protection: Access to reserved IP {ip_str} is blocked"
+                        f"SSRF Protection: Access to reserved IP {ip} is blocked"
                     )
-                if ip_obj.is_multicast:
+                if addr.is_multicast:
                     raise ValueError(
-                        f"SSRF Protection: Access to multicast address {ip_str} is blocked"
+                        f"SSRF Protection: Access to multicast address {ip} is blocked"
                     )
-                if str(ip_obj) == "169.254.169.254":
+                if str(addr) == "169.254.169.254":
                     raise ValueError(
                         "SSRF Protection: Access to cloud metadata endpoint is blocked"
                     )
-                if str(ip_obj) == "::1":
+                if str(addr) == "::1":
                     raise ValueError(
                         "SSRF Protection: Access to IPv6 localhost is blocked"
                     )
 
-                validated_ips.append(ip_str)
+                ips.append(ip)
 
         except socket.gaierror:
             raise ValueError(f"Could not resolve hostname: {hostname}")
 
-        if not validated_ips:
+        if not ips:
             raise ValueError(f"No valid IP addresses resolved for: {hostname}")
 
-        return hostname, validated_ips
+        return hostname, ips
 
-    def _select_pinned_ip(self, validated_ips: List[str]) -> str:
-        for ip_str in validated_ips:
-            if ipaddress.ip_address(ip_str).version == 4:
-                return ip_str
-        return validated_ips[0]
+    def _select_pinned_ip(self, ips: List[str]) -> str:
+        for ip in ips:
+            if ipaddress.ip_address(ip).version == 4:
+                return ip
+        return ips[0]
 
-    def _open_pinned_response(self, url: str, hostname: str, validated_ips: List[str]):
+    def _open_pinned_response(self, url: str, hostname: str, ips: List[str]):
         parsed = urlparse(url)
-        pinned_ip = self._select_pinned_ip(validated_ips)
+        ip = self._select_pinned_ip(ips)
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         path = parsed.path or "/"
         if parsed.query:
@@ -156,23 +156,23 @@ class PluginDownloader:
                 self.sock = self._context.wrap_socket(raw_sock, server_hostname=self.host)
 
         if parsed.scheme == "https":
-            connection = PinnedHTTPSConnection(pinned_ip, hostname, port, 60)
+            conn = PinnedHTTPSConnection(ip, hostname, port, 60)
         else:
-            connection = PinnedHTTPConnection(pinned_ip, hostname, port, 60)
+            conn = PinnedHTTPConnection(ip, hostname, port, 60)
 
-        host_header = hostname if parsed.port is None else f"{hostname}:{parsed.port}"
-        connection.request("GET", path, headers={"Host": host_header, "User-Agent": "ZetatechAgent/1.0"})
-        response = connection.getresponse()
-        return connection, response
+        host = hostname if parsed.port is None else f"{hostname}:{parsed.port}"
+        conn.request("GET", path, headers={"Host": host, "User-Agent": "ZetatechAgent/1.0"})
+        resp = conn.getresponse()
+        return conn, resp
 
     def _validate_zip_archive(self, zip_ref: zipfile.ZipFile) -> None:
         members = zip_ref.infolist()
         if len(members) > self.MAX_ZIP_ENTRIES:
             raise ValueError("ZIP archive has too many entries")
 
-        total_uncompressed = 0
+        total = 0
         for member in members:
-            total_uncompressed += member.file_size
+            total += member.file_size
 
             if member.file_size > self.MAX_SINGLE_FILE_SIZE:
                 raise ValueError(
@@ -186,46 +186,46 @@ class PluginDownloader:
                         f"Suspicious compression ratio in ZIP entry: {member.filename}"
                     )
 
-        if total_uncompressed > self.MAX_TOTAL_UNCOMPRESSED_SIZE:
+        if total > self.MAX_TOTAL_UNCOMPRESSED_SIZE:
             raise ValueError("ZIP archive uncompressed size exceeds safety limits")
 
     def _download_zip_with_validated_redirects(self, *, session, download_url: str, zip_path: Path) -> None:
         del session
-        current_url = download_url
+        url = download_url
 
         for _ in range(self.MAX_REDIRECTS):
-            hostname, validated_ips = self._validate_url(current_url)
-            connection, response = self._open_pinned_response(current_url, hostname, validated_ips)
+            hostname, ips = self._validate_url(url)
+            conn, resp = self._open_pinned_response(url, hostname, ips)
 
             try:
-                if response.status in {301, 302, 303, 307, 308}:
-                    location = response.getheader("Location", "")
+                if resp.status in {301, 302, 303, 307, 308}:
+                    location = resp.getheader("Location", "")
                     if not location:
                         raise ValueError("Redirect response missing Location header")
-                    current_url = urljoin(current_url, location)
-                    response.close()
-                    connection.close()
+                    url = urljoin(url, location)
+                    resp.close()
+                    conn.close()
                     continue
 
-                if response.status >= 400:
-                    raise ValueError(f"HTTP {response.status}")
+                if resp.status >= 400:
+                    raise ValueError(f"HTTP {resp.status}")
 
-                total_downloaded = 0
-                with open(zip_path, "wb") as file_handle:
+                total = 0
+                with open(zip_path, "wb") as f:
                     while True:
-                        chunk = response.read(8192)
+                        chunk = resp.read(8192)
                         if not chunk:
                             break
-                        total_downloaded += len(chunk)
-                        if total_downloaded > self.MAX_ZIP_DOWNLOAD_SIZE:
+                        total += len(chunk)
+                        if total > self.MAX_ZIP_DOWNLOAD_SIZE:
                             raise ValueError("ZIP archive exceeds download size limit")
-                        file_handle.write(chunk)
+                        f.write(chunk)
                 return
             finally:
                 try:
-                    response.close()
+                    resp.close()
                 finally:
-                    connection.close()
+                    conn.close()
 
         raise ValueError("Too many redirects")
 
