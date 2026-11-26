@@ -10,7 +10,7 @@
     --star-strip-height: 30px;
     --sidebar-width: 230px;
     --sidebar-collapsed-width: 64px;
-    
+
     --font-mono: 'JetBrains Mono', monospace;
     --font-sans: 'Space Grotesk', sans-serif;
 }
@@ -191,7 +191,7 @@ body {
         height: calc(100vh - var(--star-strip-height));
         min-height: calc(100vh - var(--star-strip-height));
     }
-    
+
     .sidebar {
         position: sticky;
         top: 0;
@@ -212,7 +212,7 @@ body {
         min-height: 0;
         overflow: visible;
     }
-    
+
     .sidebar {
         position: relative;
         height: auto;
@@ -518,7 +518,7 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 8px;
     margin-bottom: 25px;
-    overflow: visible; 
+    overflow: visible;
     transition: border-color 0.3s;
 }
 
@@ -540,7 +540,7 @@ body {
     align-items: center;
     gap: 15px;
     background: rgba(255, 255, 255, 0.01);
-    border-radius: 8px 8px 0 0; 
+    border-radius: 8px 8px 0 0;
 }
 
 .panel-icon {
@@ -1168,8 +1168,8 @@ body {
 }
 
 .control-group label {
-    display: flex; 
-    align-items: center; 
+    display: flex;
+    align-items: center;
     font-size: 12px;
     color: var(--text-muted);
     margin-bottom: 8px;
@@ -1408,10 +1408,10 @@ output {
     background: var(--accent-primary);
     color: #000;
     border: none;
-    height: 28px; 
+    height: 28px;
     padding: 0 12px;
     font-family: var(--font-mono);
-    font-size: 11px; 
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
     border-radius: 2px;
@@ -1740,7 +1740,7 @@ output {
 }
 
 .action-btn.copy-btn {
-    min-width: 60px; 
+    min-width: 60px;
 }
 
 .action-btn.random-btn {
@@ -1748,7 +1748,7 @@ output {
     border: 1px solid var(--accent-secondary);
     color: var(--accent-secondary);
     padding: 0;
-    width: 36px; 
+    width: 36px;
 }
 
 .action-btn.random-btn:hover {
