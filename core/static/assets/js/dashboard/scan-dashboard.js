@@ -16,27 +16,27 @@ window.openDashboardScanFromChart = function(scanId, source = 'chart') {
     viewScan(parsed);
 };
 
-function renderRecentScans(sessions) {
-    const recentList = document.getElementById('dashboard-recent-list');
-    const completedRate = document.getElementById('dashboard-completed-rate');
-    if (!recentList) return;
+function renderRecent(sessions) {
+    const list = document.getElementById('dashboard-recent-list');
+    const rate = document.getElementById('dashboard-completed-rate');
+    if (!list) return;
 
     if (!sessions || sessions.length === 0) {
-        recentList.innerHTML = '<div class="recent-empty">No scans yet</div>';
-        if (completedRate) completedRate.textContent = '0% completed';
+        list.innerHTML = '<div class="recent-empty">No scans yet</div>';
+        if (rate) rate.textContent = '0% completed';
         return;
     }
 
-    const completedCount = sessions.filter(s => String(s.status).toLowerCase() === 'completed').length;
-    const percent = Math.round((completedCount / sessions.length) * 100);
-    if (completedRate) completedRate.textContent = `${percent}% completed`;
+    const done = sessions.filter(s => String(s.status).toLowerCase() === 'completed').length;
+    const pct = Math.round((done / sessions.length) * 100);
+    if (rate) rate.textContent = `${pct}% completed`;
 
     const max = sessions.reduce((top, session) => {
         const count = parseInt(session.total_found || 0, 10) || 0;
         return Math.max(top, count);
     }, 1);
 
-    recentList.innerHTML = sessions.slice(0, 3).map(s => {
+    list.innerHTML = sessions.slice(0, 3).map(s => {
         const id = parseInt(s.id, 10) || 0;
         const sCls = String(s.status || 'unknown').toLowerCase();
         const sLbl = sCls === 'merged' ? 'MERGED' : sCls.toUpperCase();
@@ -84,16 +84,16 @@ window.renderRecentFavorites = function(favorites) {
         const slug = escapeHtml(rawSlug);
         const slugJs = JSON.stringify(rawSlug);
         const score = parseInt(plugin.score || 0, 10) || 0;
-        const riskLevel = score >= 40 ? 'high' : (score >= 20 ? 'medium' : 'low');
-        const scoreRatio = Math.max(0, Math.min(100, score));
-        const versionLabel = `v${String(plugin.version || 'n/a')}`;
+        const level = score >= 40 ? 'high' : (score >= 20 ? 'medium' : 'low');
+        const ratio = Math.max(0, Math.min(100, score));
+        const ver = `v${String(plugin.version || 'n/a')}`;
         return `
             <div class="recent-row recent-favorites-row" tabindex="0" onclick='openPluginModalBySlug(${slugJs})' onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPluginModalBySlug(${slugJs});}">
                 <span class="recent-title recent-favorites-slug">${slug}</span>
-                <span class="recent-meta history-date-stamp recent-favorites-version">${escapeHtml(versionLabel)}</span>
+                <span class="recent-meta history-date-stamp recent-favorites-version">${escapeHtml(ver)}</span>
                 <div class="history-risk-cell recent-favorites-risk" title="Risk score ${score}">
-                    <span class="history-risk-pill ${riskLevel}">${score}</span>
-                    <span class="history-risk-meter"><span class="history-risk-fill ${riskLevel}" style="width: ${scoreRatio}%;"></span></span>
+                    <span class="history-risk-pill ${level}">${score}</span>
+                    <span class="history-risk-meter"><span class="history-risk-fill ${level}" style="width: ${ratio}%;"></span></span>
                 </div>
                 <button class="history-action-open dashboard-history-open" type="button" onclick='event.stopPropagation();openPluginModalBySlug(${slugJs})' title="Open Favorite" aria-label="Open favorite ${slug}">
                     <span>OPEN</span>
@@ -104,32 +104,32 @@ window.renderRecentFavorites = function(favorites) {
     }).join('');
 }
 
-async function refreshDashboardFavorites() {
+async function loadFavs() {
     try {
-        const response = await fetch('/api/favorites');
-        if (!response.ok) throw new Error(`Favorites fetch failed: ${response.status}`);
-        const data = await response.json();
+        const res = await fetch('/api/favorites');
+        if (!res.ok) throw new Error(`Favorites fetch failed: ${res.status}`);
+        const data = await res.json();
         renderRecentFavorites(data.favorites || []);
     } catch (error) {
         renderRecentFavorites([]);
     }
 }
 
-function renderRiskBars(sessions) {
-    const riskBars = document.getElementById('dashboard-risk-bars');
-    const riskCaption = document.getElementById('dashboard-risk-caption');
-    if (!riskBars) return;
+function renderRisk(sessions) {
+    const bars = document.getElementById('dashboard-risk-bars');
+    const caption = document.getElementById('dashboard-risk-caption');
+    if (!bars) return;
 
     if (!sessions || sessions.length === 0) {
-        riskBars.innerHTML = '';
-        if (riskCaption) riskCaption.textContent = 'No history';
+        bars.innerHTML = '';
+        if (caption) caption.textContent = 'No history';
         return;
     }
 
     const recent = sessions.slice(0, 8).reverse();
     const maxFound = Math.max(1, ...recent.map(s => parseInt(s.total_found || 0)));
 
-    riskBars.innerHTML = recent.map((s) => {
+    bars.innerHTML = recent.map((s) => {
         const id = parseInt(s.id);
         const found = parseInt(s.total_found || 0);
         const high = parseInt(s.high_risk_count || 0);
@@ -137,47 +137,47 @@ function renderRiskBars(sessions) {
         const height = Math.max(10, Math.round((found / maxFound) * 100));
         const level = ratio >= 0.35 ? 'high' : (ratio >= 0.15 ? 'medium' : 'low');
         const title = `Scan #${id} | Found ${found} | High ${high}`;
-        const caption = `#${id} risk ${high}/${found}`;
+        const text = `#${id} risk ${high}/${found}`;
         return `
-            <button class="bar-item chart-point ${level}" type="button" data-scan-id="${id}" data-caption="${caption}" style="--h:${height}%" title="${title}" onclick="openDashboardScanFromChart(${id}, 'risk')"></button>
+            <button class="bar-item chart-point ${level}" type="button" data-scan-id="${id}" data-caption="${text}" style="--h:${height}%" title="${title}" onclick="openDashboardScanFromChart(${id}, 'risk')"></button>
         `;
     }).join('');
 
-    if (riskCaption) {
+    if (caption) {
         const highSum = recent.reduce((acc, s) => acc + parseInt(s.high_risk_count || 0), 0);
-        riskCaption.textContent = `${highSum} high-risk total - click a bar`;
+        caption.textContent = `${highSum} high-risk total - click a bar`;
     }
 }
 
 window.renderTrendBars = function() {
-    const trendBars = document.getElementById('dashboard-trend-bars');
-    const trendCaption = document.getElementById('dashboard-trend-caption');
-    if (!trendBars) return;
+    const bars = document.getElementById('dashboard-trend-bars');
+    const caption = document.getElementById('dashboard-trend-caption');
+    if (!bars) return;
 
-    const dashboardTrendPoints = runtime.getDashboardTrendPoints();
-    if (!dashboardTrendPoints.length) {
-        trendBars.innerHTML = '';
-        if (trendCaption) trendCaption.textContent = 'No trend data';
+    const points = runtime.getDashboardTrendPoints();
+    if (!points.length) {
+        bars.innerHTML = '';
+        if (caption) caption.textContent = 'No trend data';
         return;
     }
 
-    const maxVal = Math.max(1, ...dashboardTrendPoints.map(item => item.value));
-    trendBars.innerHTML = dashboardTrendPoints.map((item) => {
+    const maxVal = Math.max(1, ...points.map(item => item.value));
+    bars.innerHTML = points.map((item) => {
         const value = Number(item.value || 0);
         const h = Math.max(8, Math.round((value / maxVal) * 100));
         const scanId = Number(item.scanId || 0);
         if (scanId > 0) {
             const title = `Scan #${scanId} | Found ${value}`;
-            const caption = `#${scanId} found ${value}`;
-            return `<button class="spark-item chart-point" type="button" data-scan-id="${scanId}" data-caption="${caption}" style="--h:${h}%" title="${title}" onclick="openDashboardScanFromChart(${scanId}, 'trend')"></button>`;
+            const text = `#${scanId} found ${value}`;
+            return `<button class="spark-item chart-point" type="button" data-scan-id="${scanId}" data-caption="${text}" style="--h:${h}%" title="${title}" onclick="openDashboardScanFromChart(${scanId}, 'trend')"></button>`;
         }
         return `<div class="spark-item" style="--h:${h}%" title="Live found: ${value}"></div>`;
     }).join('');
 
-    if (trendCaption) trendCaption.textContent = `Recent ${dashboardTrendPoints.length} sessions - click a bar`;
+    if (caption) caption.textContent = `Recent ${points.length} sessions - click a bar`;
 }
 
-function renderTrendBarsFromSessions(sessions) {
+function renderTrend(sessions) {
     runtime.setDashboardTrendPoints((sessions || []).slice(0, 8).reverse().map((s) => ({
         value: parseInt(s.total_found || 0),
         scanId: parseInt(s.id || 0)
@@ -188,27 +188,27 @@ function renderTrendBarsFromSessions(sessions) {
 window.appendTrendPoint = function(value) {
     const parsed = parseInt(value || 0);
     if (!Number.isFinite(parsed)) return;
-    const trendPoints = [...runtime.getDashboardTrendPoints()];
-    trendPoints.push({
+    const points = [...runtime.getDashboardTrendPoints()];
+    points.push({
         value: parsed,
         scanId: Number(runtime.getCurrentScanIdForTrend()) || 0
     });
-    runtime.setDashboardTrendPoints(trendPoints.slice(-8));
+    runtime.setDashboardTrendPoints(points.slice(-8));
     window.renderTrendBars();
 }
 
+window.refreshDashboardFavorites = loadFavs;
+
 window.refreshScanDashboard = function(sessions) {
-    const safeSessions = sessions || [];
-    const totalScans = safeSessions.length;
-    const highRiskTotal = safeSessions.reduce((acc, s) => acc + parseInt(s.high_risk_count || 0), 0);
-    setDashboardMetric('dashboard-total-scans', totalScans);
-    setDashboardMetric('dashboard-high-risk', highRiskTotal);
-    renderRecentScans(safeSessions);
-    refreshDashboardFavorites();
-    renderRiskBars(safeSessions);
-    renderTrendBarsFromSessions(safeSessions);
+    const safe = sessions || [];
+    const total = safe.length;
+    const highTotal = safe.reduce((acc, s) => acc + parseInt(s.high_risk_count || 0), 0);
+    setDashboardMetric('dashboard-total-scans', total);
+    setDashboardMetric('dashboard-high-risk', highTotal);
+    renderRecent(safe);
+    loadFavs();
+    renderRisk(safe);
+    renderTrend(safe);
     resetDashboardChartCaptions();
 }
-
-
 })();

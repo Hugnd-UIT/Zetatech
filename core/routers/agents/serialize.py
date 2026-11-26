@@ -1,7 +1,7 @@
 import json
 from typing import Any, Dict, List
 
-from agents.context import resolve_existing_thread_source_path
+from agents.context import existing_source
 from paths import resolve_runtime_paths
 
 
@@ -59,7 +59,7 @@ def serialize_message(message: Dict[str, Any]) -> Dict[str, Any]:
 
 def serialize_thread(thread: Dict[str, Any]) -> Dict[str, Any]:
     last_src = str(thread.get("last_source_path") or "").strip()
-    existing = resolve_existing_thread_source_path(
+    existing = existing_source(
         db_path=None,
         plugin_slug=str(thread.get("plugin_slug") or "").strip(),
         is_theme=bool(thread.get("is_theme")),
@@ -85,7 +85,7 @@ def serialize_thread(thread: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def event_payloads_to_structured_activity(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def tool_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     activity: List[Dict[str, Any]] = []
     for event in events:
         kind = str(event.get("type") or "")
@@ -136,7 +136,7 @@ def serialize_run_approval(item: Dict[str, Any] | None) -> Dict[str, Any] | None
 def split_tool_activity(events: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     calls: List[Dict[str, Any]] = []
     results: List[Dict[str, Any]] = []
-    for item in event_payloads_to_structured_activity(events):
+    for item in tool_events(events):
         kind = str(item.get("type") or "")
         payload = {key: value for key, value in item.items() if key != "type"}
         if kind == "tool_call":
@@ -146,7 +146,7 @@ def split_tool_activity(events: List[Dict[str, Any]]) -> tuple[List[Dict[str, An
     return calls, results
 
 
-def list_structured_thread_events(repo, thread_id: int) -> List[Dict[str, Any]]:
+def thread_events(repo, thread_id: int) -> List[Dict[str, Any]]:
     events: List[Dict[str, Any]] = []
     for msg in repo.list_messages(thread_id):
         if msg.get("tool_calls"):
@@ -156,7 +156,7 @@ def list_structured_thread_events(repo, thread_id: int) -> List[Dict[str, Any]]:
     return events
 
 
-def list_latest_thread_team_events(repo, thread_id: int) -> List[Dict[str, Any]]:
+def team_events(repo, thread_id: int) -> List[Dict[str, Any]]:
     runs = repo.list_thread_runs(thread_id)
     if not runs:
         return []

@@ -1,5 +1,5 @@
 (function() {
-    function stopPluginAiThreadSyncPoll() {
+    function stopSync() {
         const state = window.getPluginAiState();
         if (state.threadSyncPollTimer) {
             window.clearTimeout(state.threadSyncPollTimer);
@@ -8,41 +8,41 @@
         state.threadSyncPollKey = null;
     }
 
-    function startPluginAiThreadSyncPoll(options = {}) {
+    function startSync(opts = {}) {
         const state = window.getPluginAiState();
-        const slug = String(options.slug || state.plugin || '').trim();
-        const threadId = Number(options.threadId || state.threadId || 0);
-        const viewToken = options.viewToken ?? state.viewToken;
-        if (!slug || !threadId) return;
+        const slug = String(opts.slug || state.plugin || '').trim();
+        const tid = Number(opts.threadId || state.threadId || 0);
+        const token = opts.viewToken ?? state.viewToken;
+        if (!slug || !tid) return;
 
-        const pollKey = `${slug}::${threadId}::${viewToken}`;
-        if (state.threadSyncPollKey === pollKey && state.threadSyncPollTimer) return;
+        const key = `${slug}::${tid}::${token}`;
+        if (state.threadSyncPollKey === key && state.threadSyncPollTimer) return;
 
-        stopPluginAiThreadSyncPoll();
-        state.threadSyncPollKey = pollKey;
+        stopSync();
+        state.threadSyncPollKey = key;
 
-        let tickCount = 0;
+        let ticks = 0;
         const poll = async () => {
-            const liveState = window.getPluginAiState();
-            if (!window.isPluginAiViewCurrent(slug, viewToken) || Number(liveState.threadId || 0) !== threadId) {
-                stopPluginAiThreadSyncPoll();
+            const live = window.getPluginAiState();
+            if (!window.isPluginAiViewCurrent(slug, token) || Number(live.threadId || 0) !== tid) {
+                stopSync();
                 return;
             }
-            if (liveState.loading) {
-                liveState.threadSyncPollTimer = window.setTimeout(poll, 600);
+            if (live.loading) {
+                live.threadSyncPollTimer = window.setTimeout(poll, 600);
                 return;
             }
 
-            await loadPluginAiMessages({ slug, threadId, viewToken, silent: true });
-            tickCount += 1;
-            const nextDelay = tickCount <= 4 ? 500 : 1500;
-            liveState.threadSyncPollTimer = window.setTimeout(poll, nextDelay);
+            await loadMsgs({ slug, threadId: tid, viewToken: token, silent: true });
+            ticks += 1;
+            const delay = ticks <= 4 ? 500 : 1500;
+            live.threadSyncPollTimer = window.setTimeout(poll, delay);
         };
 
         state.threadSyncPollTimer = window.setTimeout(poll, 120);
     }
 
-    function stopPluginAiPendingRunPoll() {
+    function stopPoll() {
         const state = window.getPluginAiState();
         if (state.pendingRunPollTimer) {
             window.clearTimeout(state.pendingRunPollTimer);
@@ -51,32 +51,32 @@
         state.pendingRunPollKey = null;
     }
 
-    function startPluginAiPendingRunPoll(options = {}) {
+    function startPoll(opts = {}) {
         const state = window.getPluginAiState();
-        const slug = String(options.slug || state.plugin || '').trim();
-        const threadId = Number(options.threadId || state.threadId || 0);
-        const viewToken = options.viewToken ?? state.viewToken;
-        if (!slug || !threadId) return;
+        const slug = String(opts.slug || state.plugin || '').trim();
+        const tid = Number(opts.threadId || state.threadId || 0);
+        const token = opts.viewToken ?? state.viewToken;
+        if (!slug || !tid) return;
 
-        const pollKey = `${slug}::${threadId}::${viewToken}`;
-        if (state.pendingRunPollKey === pollKey && state.pendingRunPollTimer) {
+        const key = `${slug}::${tid}::${token}`;
+        if (state.pendingRunPollKey === key && state.pendingRunPollTimer) {
             return;
         }
 
-        stopPluginAiPendingRunPoll();
-        stopPluginAiThreadSyncPoll();
-        state.pendingRunPollKey = pollKey;
+        stopPoll();
+        stopSync();
+        state.pendingRunPollKey = key;
 
         const poll = async () => {
-            if (!window.isPluginAiViewCurrent(slug, viewToken) || Number(window.getPluginAiState().threadId || 0) !== threadId) {
-                stopPluginAiPendingRunPoll();
+            if (!window.isPluginAiViewCurrent(slug, token) || Number(window.getPluginAiState().threadId || 0) !== tid) {
+                stopPoll();
                 return;
             }
 
-            const result = await loadPluginAiMessages({ slug, threadId, viewToken });
-            if (!result?.hasPendingRun) {
-                stopPluginAiPendingRunPoll();
-                if (window.isPluginAiViewCurrent(slug, viewToken) && Number(window.getPluginAiState().threadId || 0) === threadId) {
+            const res = await loadMsgs({ slug, threadId: tid, viewToken: token });
+            if (!res?.hasPendingRun) {
+                stopPoll();
+                if (window.isPluginAiViewCurrent(slug, token) && Number(window.getPluginAiState().threadId || 0) === tid) {
                     state.sending = false;
                     window.setPluginAiBadge(window.buildPluginAiThreadBadge());
                     window.updatePluginAiComposerState(true);
@@ -91,21 +91,21 @@
         state.pendingRunPollTimer = window.setTimeout(poll, 180);
     }
 
-    async function loadPluginAiThreads(plugin, options = {}) {
+    async function loadThreads(plugin, opts = {}) {
         const state = window.getPluginAiState();
         const slug = String(plugin?.slug || state.plugin || '').trim();
-        const isTheme = options.isTheme ?? !!plugin?.is_theme ?? state.isTheme;
-        const viewToken = options.viewToken ?? state.viewToken;
+        const theme = opts.isTheme ?? !!plugin?.is_theme ?? state.isTheme;
+        const token = opts.viewToken ?? state.viewToken;
         if (!slug) return [];
 
-        const response = await fetch(`/api/ai/threads/plugin?plugin_slug=${encodeURIComponent(slug)}&is_theme=${isTheme ? 'true' : 'false'}&_ts=${Date.now()}`, {
+        const res = await fetch(`/api/ai/threads/plugin?plugin_slug=${encodeURIComponent(slug)}&is_theme=${theme ? 'true' : 'false'}&_ts=${Date.now()}`, {
             cache: 'no-store',
         });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            throw new Error(data.detail || `HTTP ${response.status}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.detail || `HTTP ${res.status}`);
         }
-        if (!window.isPluginAiViewCurrent(slug, viewToken)) {
+        if (!window.isPluginAiViewCurrent(slug, token)) {
             return [];
         }
         const threads = Array.isArray(data.threads) ? data.threads : [];
@@ -114,12 +114,12 @@
         return threads;
     }
 
-    async function loadPluginAiMessages(options = {}) {
+    async function loadMsgs(opts = {}) {
         const state = window.getPluginAiState();
-        const slug = String(options.slug || state.plugin || '').trim();
-        const token = options.viewToken ?? state.viewToken;
-        const tid = options.threadId ?? state.threadId;
-        const silent = !!options.silent;
+        const slug = String(opts.slug || state.plugin || '').trim();
+        const token = opts.viewToken ?? state.viewToken;
+        const tid = opts.threadId ?? state.threadId;
+        const silent = !!opts.silent;
 
         if (tid && typeof window.hydratePluginAiThreadUiSnapshot === 'function') {
             const snap = window.hydratePluginAiThreadUiSnapshot(slug, tid, !!state.isTheme);
@@ -199,11 +199,11 @@
                     tool_results: [],
                 });
             }
-            if (hasPendingRun || shouldPreserveOptimisticState || isActiveStreamThread) {
-                if (!hydratedMessages.some((item) => item?.is_pending_assistant)) {
-                    hydratedMessages.push({
-                        id: `pending-refresh-${threadId}`,
-                        thread_id: threadId,
+            if (hasPending || preserve || active) {
+                if (!items.some((item) => item?.is_pending_assistant)) {
+                    items.push({
+                        id: `pending-refresh-${tid}`,
+                        thread_id: tid,
                         role: 'assistant',
                         content: '',
                         created_at: new Date().toISOString(),
@@ -213,7 +213,7 @@
                     });
                 }
                 if (!String(state.runStartedAt || '').trim()) {
-                    state.runStartedAt = String(pendingSnapshot?.createdAt || new Date().toISOString());
+                    state.runStartedAt = String(pending?.createdAt || new Date().toISOString());
                 }
                 state.sending = true;
                 window.setPluginAiRunningBadge();
@@ -221,7 +221,7 @@
                     window.setPluginAiStatus(window.buildPluginAiRunningStatusText(state.runStartedAt));
                 }
                 if (typeof window.startPluginAiPendingRunPoll === 'function') {
-                    window.startPluginAiPendingRunPoll({ slug, threadId, viewToken });
+                    window.startPluginAiPendingRunPoll({ slug, threadId: tid, viewToken: token });
                 }
             } else {
                 state.sending = false;
@@ -232,88 +232,88 @@
                 }
                 state.pendingSnapshotRetryInFlight = false;
                 if (typeof window.clearPluginAiPendingSnapshot === 'function') {
-                    window.clearPluginAiPendingSnapshot(slug, threadId, !!state.isTheme);
+                    window.clearPluginAiPendingSnapshot(slug, tid, !!state.isTheme);
                 }
                 if (typeof window.stopPluginAiPendingRunPoll === 'function') {
                     window.stopPluginAiPendingRunPoll();
                 }
             }
-            const existingMessages = Array.isArray(state.messages) ? state.messages : [];
-            const mergedHydratedMessages = shouldPreserveOptimisticState || isActiveStreamThread
-                ? window.mergePluginAiMessages(existingMessages, hydratedMessages)
-                : window.mergePluginAiMessages([], hydratedMessages);
-            window.capturePluginAiMessages(mergedHydratedMessages);
+            const cur = Array.isArray(state.messages) ? state.messages : [];
+            const merged = preserve || active
+                ? window.mergePluginAiMessages(cur, items)
+                : window.mergePluginAiMessages([], items);
+            window.capturePluginAiMessages(merged);
             state.pendingApproval = data.pending_approval && typeof data.pending_approval === 'object'
                 ? data.pending_approval
                 : null;
-            const persistedTeamEvents = Array.isArray(data.team_events) ? data.team_events : [];
-            if (persistedTeamEvents.length) {
-                state.events = persistedTeamEvents;
+            const evts = Array.isArray(data.team_events) ? data.team_events : [];
+            if (evts.length) {
+                state.events = evts;
                 state.liveActivity = state.events;
                 if (typeof window.rememberPluginAiEventsSnapshot === 'function') {
                     window.rememberPluginAiEventsSnapshot({
                         plugin: slug,
-                        threadId,
+                        threadId: tid,
                         isTheme: !!state.isTheme,
                         events: state.liveActivity,
                         createdAt: new Date().toISOString(),
                     });
                 }
             } else {
-                const cachedEventsSnapshot = typeof window.getPluginAiEventsSnapshot === 'function'
-                    ? window.getPluginAiEventsSnapshot(slug, threadId, !!state.isTheme)
+                const snap = typeof window.getPluginAiEventsSnapshot === 'function'
+                    ? window.getPluginAiEventsSnapshot(slug, tid, !!state.isTheme)
                     : null;
-                const cachedEvents = Array.isArray(cachedEventsSnapshot?.events) ? cachedEventsSnapshot.events : [];
-                if (cachedEvents.length) {
-                    state.events = cachedEvents;
-                    state.liveActivity = cachedEvents;
+                const cached = Array.isArray(snap?.events) ? snap.events : [];
+                if (cached.length) {
+                    state.events = cached;
+                    state.liveActivity = cached;
                 } else {
-                    window.capturePluginAiToolAudit(messages);
+                    window.capturePluginAiToolAudit(msgs);
                     state.liveActivity = state.events;
                 }
             }
             window.refreshPluginAiRenderedState();
             if (typeof window.syncCurrentPluginAiThreadSnapshot === 'function') {
                 window.syncCurrentPluginAiThreadSnapshot({
-                    threadId,
+                    threadId: tid,
                     messages: state.messages,
                     events: state.events,
                     liveActivity: state.liveActivity,
-                    sending: hasPendingRun,
+                    sending: hasPending,
                     pendingApproval: state.pendingApproval,
                 });
             }
-            if (!hasPendingRun) {
-                window.notePluginAiMessagesLoaded(messages);
+            if (!hasPending) {
+                window.notePluginAiMessagesLoaded(msgs);
             }
-            return { hasPendingRun, messages };
-        } catch (error) {
-            if (slug && !window.isPluginAiViewCurrent(slug, viewToken)) {
+            return { hasPendingRun: hasPending, messages: msgs };
+        } catch (err) {
+            if (slug && !window.isPluginAiViewCurrent(slug, token)) {
                 return { hasPendingRun: false, messages: [] };
             }
             if (!silent) {
                 window.setPluginAiActivityEmptyView();
-                window.setPluginAiStatus(`Unable to load AI messages: ${error.message}`);
+                window.setPluginAiStatus(`Unable to load AI messages: ${err.message}`);
             }
             return { hasPendingRun: false, messages: [] };
         }
     }
 
-    async function switchPluginAiThread(threadId) {
+    async function switchThread(tid) {
         const state = window.getPluginAiState();
         const slug = String(state.plugin || '').trim();
-        if (!threadId || !slug) return;
-        stopPluginAiPendingRunPoll();
-        state.threadId = threadId;
+        if (!tid || !slug) return;
+        stopPoll();
+        state.threadId = tid;
         if (typeof window.rememberPluginAiSelectedThread === 'function') {
-            window.rememberPluginAiSelectedThread(slug, threadId, !!state.isTheme);
+            window.rememberPluginAiSelectedThread(slug, tid, !!state.isTheme);
         }
         if (typeof window.hydratePluginAiThreadUiSnapshot === 'function') {
-            const snapshot = window.hydratePluginAiThreadUiSnapshot(slug, threadId, !!state.isTheme);
-            if (snapshot) {
+            const snap = window.hydratePluginAiThreadUiSnapshot(slug, tid, !!state.isTheme);
+            if (snap) {
                 window.refreshPluginAiRenderedState();
-                window.setPluginAiBadge(snapshot.badgeText || (snapshot.sending ? 'Running' : window.buildPluginAiThreadBadge()));
-                window.setPluginAiStatus(snapshot.statusText || (snapshot.sending ? 'Restoring running chat…' : 'Restoring chat…'));
+                window.setPluginAiBadge(snap.badgeText || (snap.sending ? 'Running' : window.buildPluginAiThreadBadge()));
+                window.setPluginAiStatus(snap.statusText || (snap.sending ? 'Restoring running chat…' : 'Restoring chat…'));
             } else {
                 window.setPluginAiThreadLoadingBadge();
                 window.setPluginAiStatus('Loading chat messages...');
@@ -323,22 +323,22 @@
             window.setPluginAiStatus('Loading chat messages...');
         }
         window.updatePluginAiSessionUi();
-        const result = await loadPluginAiMessages({ slug, threadId, viewToken: state.viewToken });
-        if (window.getPluginAiState().threadId === threadId) {
-            const isThreadStreaming = !!state.sending
-                && Number(state.streamThreadId || 0) === Number(threadId || 0)
+        const res = await loadMsgs({ slug, threadId: tid, viewToken: state.viewToken });
+        if (window.getPluginAiState().threadId === tid) {
+            const active = !!state.sending
+                && Number(state.streamThreadId || 0) === Number(tid || 0)
                 && !!String(state.streamRequestId || '').trim();
-            window.setPluginAiBadge(isThreadStreaming ? 'Running' : window.buildPluginAiThreadBadge());
-            window.updatePluginAiComposerState(!isThreadStreaming);
-            if (result?.hasPendingRun) {
-                startPluginAiPendingRunPoll({ slug, threadId, viewToken: state.viewToken });
+            window.setPluginAiBadge(active ? 'Running' : window.buildPluginAiThreadBadge());
+            window.updatePluginAiComposerState(!active);
+            if (res?.hasPendingRun) {
+                startPoll({ slug, threadId: tid, viewToken: state.viewToken });
             } else {
-                startPluginAiThreadSyncPoll({ slug, threadId, viewToken: state.viewToken });
+                startSync({ slug, threadId: tid, viewToken: state.viewToken });
             }
         }
     }
 
-    async function createNewPluginAiThread() {
+    async function createThread() {
         const state = window.getPluginAiState();
         const slug = String(state.plugin || '').trim();
         if (!slug || state.loading) return;
@@ -349,30 +349,30 @@
                 window.stopPluginAiPendingRunPoll();
             }
             window.setPluginAiStatus('Creating new chat...');
-            const response = await fetch('/api/ai/threads/plugin/new', {
+            const res = await fetch('/api/ai/threads/plugin/new', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(window.buildPluginThreadRequest({ slug, is_theme: state.isTheme })),
             });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data.detail || `HTTP ${response.status}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.detail || `HTTP ${res.status}`);
             }
-            await loadPluginAiThreads({ slug, is_theme: state.isTheme }, { viewToken: state.viewToken });
-            stopPluginAiThreadSyncPoll();
+            await loadThreads({ slug, is_theme: state.isTheme }, { viewToken: state.viewToken });
+            stopSync();
             window.rememberPluginAiThread(data);
             window.clearPluginAiTransientState(state);
             window.refreshPluginAiRenderedState();
             window.updatePluginAiSessionUi();
             window.setPluginAiBadge(window.buildPluginAiThreadBadge());
             window.setPluginAiStatus('New chat ready.');
-        } catch (error) {
+        } catch (err) {
             window.setPluginAiErrorBadge();
-            window.setPluginAiStatus(`Unable to create new chat: ${error.message}`);
+            window.setPluginAiStatus(`Unable to create new chat: ${err.message}`);
         }
     }
 
-    async function ensurePluginAiThread(plugin) {
+    async function ensureThread(plugin) {
         const slug = String(plugin?.slug || '').trim();
         if (!slug) return null;
 
@@ -385,13 +385,13 @@
             return state.threadId;
         }
 
-        const previousThreadId = Number(state.threadId || 0) || null;
-        const previousSnapshot = typeof window.getPluginAiThreadUiSnapshot === 'function'
-            ? window.getPluginAiThreadUiSnapshot(slug, previousThreadId, !!plugin?.is_theme)
+        const prevId = Number(state.threadId || 0) || null;
+        const prevSnap = typeof window.getPluginAiThreadUiSnapshot === 'function'
+            ? window.getPluginAiThreadUiSnapshot(slug, prevId, !!plugin?.is_theme)
             : null;
-        const viewToken = window.startPluginAiView(plugin);
+        const token = window.startPluginAiView(plugin);
         state.loading = true;
-        if (!(previousSnapshot && Array.isArray(previousSnapshot.messages) && previousSnapshot.messages.length)) {
+        if (!(prevSnap && Array.isArray(prevSnap.messages) && prevSnap.messages.length)) {
             window.setPluginAiMessagesEmptyView();
             window.setPluginAiActivityEmptyView();
         }
@@ -400,83 +400,83 @@
         window.updatePluginAiComposerState(false);
 
         try {
-            let threads = await loadPluginAiThreads(plugin, { viewToken, isTheme: !!plugin?.is_theme });
-            if (!window.isPluginAiViewCurrent(slug, viewToken)) {
+            let threads = await loadThreads(plugin, { viewToken: token, isTheme: !!plugin?.is_theme });
+            if (!window.isPluginAiViewCurrent(slug, token)) {
                 return null;
             }
 
-            const rememberedThreadId = typeof window.getPluginAiSelectedThread === 'function'
+            const savedId = typeof window.getPluginAiSelectedThread === 'function'
                 ? window.getPluginAiSelectedThread(slug, !!plugin?.is_theme)
                 : null;
-            let threadId = Array.isArray(threads)
-                ? (threads.find((item) => Number(item?.id || 0) === Number(rememberedThreadId || 0))?.id || null)
+            let tid = Array.isArray(threads)
+                ? (threads.find((item) => Number(item?.id || 0) === Number(savedId || 0))?.id || null)
                 : null;
-            if (!threadId) {
-                threadId = window.resolvePreferredPluginAiThreadId(threads);
+            if (!tid) {
+                tid = window.resolvePreferredPluginAiThreadId(threads);
             }
-            if (!threadId) {
-                const response = await fetch('/api/ai/threads/plugin', {
+            if (!tid) {
+                const res = await fetch('/api/ai/threads/plugin', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(window.buildPluginThreadRequest(plugin)),
                 });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(data.detail || `HTTP ${response.status}`);
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(data.detail || `HTTP ${res.status}`);
                 }
                 threads = [data];
                 window.rememberPluginAiThreads(threads);
                 window.renderPluginAiSessions(threads, data.id);
                 window.rememberPluginAiThread(data);
-                threadId = data.id;
+                tid = data.id;
             } else {
-                const activeThread = Array.isArray(threads) ? threads.find((item) => Number(item?.id || 0) === Number(threadId || 0)) : null;
-                window.rememberPluginAiThread(activeThread || { id: threadId, is_theme: !!plugin?.is_theme });
+                const active = Array.isArray(threads) ? threads.find((item) => Number(item?.id || 0) === Number(tid || 0)) : null;
+                window.rememberPluginAiThread(active || { id: tid, is_theme: !!plugin?.is_theme });
             }
 
-            if (!threadId || !window.isPluginAiViewCurrent(slug, viewToken)) {
+            if (!tid || !window.isPluginAiViewCurrent(slug, token)) {
                 return null;
             }
 
             window.updatePluginAiSessionUi();
             window.setPluginAiBadge(window.buildPluginAiThreadBadge());
             window.setPluginAiThreadReadyStatus();
-            const result = await loadPluginAiMessages({ slug, threadId, viewToken });
-            if (!window.isPluginAiViewCurrent(slug, viewToken)) {
+            const res = await loadMsgs({ slug, threadId: tid, viewToken: token });
+            if (!window.isPluginAiViewCurrent(slug, token)) {
                 return null;
             }
-            if (result?.hasPendingRun) {
-                startPluginAiPendingRunPoll({ slug, threadId, viewToken });
+            if (res?.hasPendingRun) {
+                startPoll({ slug, threadId: tid, viewToken: token });
                 window.updatePluginAiComposerState(false);
             } else {
-                stopPluginAiPendingRunPoll();
-                startPluginAiThreadSyncPoll({ slug, threadId, viewToken });
+                stopPoll();
+                startSync({ slug, threadId: tid, viewToken: token });
                 window.updatePluginAiComposerState(true);
             }
-            return threadId;
-        } catch (error) {
-            if (!window.isPluginAiViewCurrent(slug, viewToken)) {
+            return tid;
+        } catch (err) {
+            if (!window.isPluginAiViewCurrent(slug, token)) {
                 return null;
             }
             window.setPluginAiErrorBadge();
-            window.setPluginAiStatus(`Unable to load AI chat: ${error.message}`);
+            window.setPluginAiStatus(`Unable to load AI chat: ${err.message}`);
             window.setPluginAiMessagesEmptyView();
             window.updatePluginAiComposerState(!!state.threadId);
             return null;
         } finally {
-            if (window.isPluginAiViewCurrent(slug, viewToken)) {
+            if (window.isPluginAiViewCurrent(slug, token)) {
                 state.loading = false;
             }
         }
     }
 
-    window.stopPluginAiThreadSyncPoll = stopPluginAiThreadSyncPoll;
-    window.startPluginAiThreadSyncPoll = startPluginAiThreadSyncPoll;
-    window.stopPluginAiPendingRunPoll = stopPluginAiPendingRunPoll;
-    window.startPluginAiPendingRunPoll = startPluginAiPendingRunPoll;
-    window.loadPluginAiThreads = loadPluginAiThreads;
-    window.loadPluginAiMessages = loadPluginAiMessages;
-    window.switchPluginAiThread = switchPluginAiThread;
-    window.createNewPluginAiThread = createNewPluginAiThread;
-    window.ensurePluginAiThread = ensurePluginAiThread;
+    window.stopPluginAiThreadSyncPoll = stopSync;
+    window.startPluginAiThreadSyncPoll = startSync;
+    window.stopPluginAiPendingRunPoll = stopPoll;
+    window.startPluginAiPendingRunPoll = startPoll;
+    window.loadPluginAiThreads = loadThreads;
+    window.loadPluginAiMessages = loadMsgs;
+    window.switchPluginAiThread = switchThread;
+    window.createNewPluginAiThread = createThread;
+    window.ensurePluginAiThread = ensureThread;
 })();

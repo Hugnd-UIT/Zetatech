@@ -32,7 +32,7 @@ class PluginDownloader:
         self.plugins_dir = self.base_dir / "Plugins"
         self.plugins_dir.mkdir(parents=True, exist_ok=True)
 
-    def _sanitize_slug(self, slug: str) -> str:
+    def _clean_slug(self, slug: str) -> str:
         raw = (slug or "").strip()
         if not raw:
             raise ValueError("Invalid slug: empty")
@@ -42,11 +42,11 @@ class PluginDownloader:
             raise ValueError("Invalid slug format")
         return raw
 
-    def _ensure_within_base(self, target: Path, base: Path) -> None:
-        target_resolved = target.resolve()
-        base_resolved = base.resolve()
-        if os.path.commonpath([str(base_resolved), str(target_resolved)]) != str(
-            base_resolved
+    def _check_base(self, target: Path, base: Path) -> None:
+        resolved_target = target.resolve()
+        resolved_base = base.resolve()
+        if os.path.commonpath([str(resolved_base), str(resolved_target)]) != str(
+            resolved_base
         ):
             raise ValueError("Path traversal detected")
 
@@ -120,15 +120,15 @@ class PluginDownloader:
 
         return hostname, ips
 
-    def _select_pinned_ip(self, ips: List[str]) -> str:
+    def _pick_ip(self, ips: List[str]) -> str:
         for ip in ips:
             if ipaddress.ip_address(ip).version == 4:
                 return ip
         return ips[0]
 
-    def _open_pinned_response(self, url: str, hostname: str, ips: List[str]):
+    def _open_pinned(self, url: str, hostname: str, ips: List[str]):
         parsed = urlparse(url)
-        ip = self._select_pinned_ip(ips)
+        ip = self._pick_ip(ips)
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         path = parsed.path or "/"
         if parsed.query:
@@ -165,7 +165,7 @@ class PluginDownloader:
         resp = conn.getresponse()
         return conn, resp
 
-    def _validate_zip_archive(self, zip_ref: zipfile.ZipFile) -> None:
+    def _check_zip(self, zip_ref: zipfile.ZipFile) -> None:
         members = zip_ref.infolist()
         if len(members) > self.MAX_ZIP_ENTRIES:
             raise ValueError("ZIP archive has too many entries")
@@ -189,13 +189,13 @@ class PluginDownloader:
         if total > self.MAX_TOTAL_UNCOMPRESSED_SIZE:
             raise ValueError("ZIP archive uncompressed size exceeds safety limits")
 
-    def _download_zip_with_validated_redirects(self, *, session, download_url: str, zip_path: Path) -> None:
+    def _fetch_zip(self, *, session, download_url: str, zip_path: Path) -> None:
         del session
         url = download_url
 
         for _ in range(self.MAX_REDIRECTS):
             hostname, ips = self._validate_url(url)
-            conn, resp = self._open_pinned_response(url, hostname, ips)
+            conn, resp = self._open_pinned(url, hostname, ips)
 
             try:
                 if resp.status in {301, 302, 303, 307, 308}:
@@ -229,9 +229,9 @@ class PluginDownloader:
 
         raise ValueError("Too many redirects")
 
-    def _extract_archive(self, *, zip_path: Path, extract_path: Path) -> None:
+    def _extract(self, *, zip_path: Path, extract_path: Path) -> None:
         with zipfile.ZipFile(zip_path, "r") as zf:
-            self._validate_zip_archive(zf)
+            self._check_zip(zf)
             base = extract_path.resolve()
             for member in zf.infolist():
                 target = (extract_path / member.filename).resolve()
@@ -239,7 +239,7 @@ class PluginDownloader:
                     raise Exception(f"Zip Slip attempt detected: {member.filename}")
                 zf.extract(member, extract_path)
 
-    def _normalize_extracted_directory(self, extract_path: Path) -> None:
+    def _flatten(self, extract_path: Path) -> None:
         children = list(extract_path.iterdir())
         if len(children) != 1 or not children[0].is_dir():
             return
@@ -248,11 +248,11 @@ class PluginDownloader:
         shutil.rmtree(extract_path)
         tmp.rename(extract_path)
 
-    def _cleanup_failed_download(self, *, plugin_dir: Optional[Path]) -> None:
+    def _cleanup(self, *, plugin_dir: Optional[Path]) -> None:
         if not plugin_dir or not plugin_dir.exists():
             return
         try:
-            self._ensure_within_base(plugin_dir, self.plugins_dir)
+            self._check_base(plugin_dir, self.plugins_dir)
             shutil.rmtree(plugin_dir, ignore_errors=True)
         except Exception:
             pass
@@ -267,12 +267,12 @@ class PluginDownloader:
         epath: Optional[Path] = None
 
         try:
-            safe = self._sanitize_slug(slug)
+            safe = self._clean_slug(slug)
             pdir = self.plugins_dir / safe
             zpath = pdir / f"{safe}.zip"
             epath = pdir / "source"
-            self._ensure_within_base(pdir, self.plugins_dir)
-            self._ensure_within_base(epath, self.plugins_dir)
+            self._check_base(pdir, self.plugins_dir)
+            self._check_base(epath, self.plugins_dir)
             pdir.mkdir(exist_ok=True)
 
             if epath.exists():
@@ -282,7 +282,7 @@ class PluginDownloader:
 
             if verbose:
                 logger.info("Downloading plugin source", extra={"slug": safe})
-            self._download_zip_with_validated_redirects(
+            self._fetch_zip(
                 session=session,
                 download_url=download_url,
                 zip_path=zpath,
@@ -290,10 +290,10 @@ class PluginDownloader:
 
             if verbose:
                 logger.info("Extracting plugin source", extra={"slug": safe})
-            self._extract_archive(zip_path=zpath, extract_path=epath)
+            self._extract(zip_path=zpath, extract_path=epath)
 
             zpath.unlink(missing_ok=True)
-            self._normalize_extracted_directory(epath)
+            self._flatten(epath)
 
             if verbose:
                 count = sum(1 for item in epath.rglob("*") if item.is_file())
@@ -317,5 +317,5 @@ class PluginDownloader:
                     extra={"slug": slug},
                     exc_info=exc,
                 )
-            self._cleanup_failed_download(plugin_dir=pdir)
+            self._cleanup(plugin_dir=pdir)
             return None

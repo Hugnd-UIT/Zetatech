@@ -16,7 +16,7 @@ def _csv_field(value: Any) -> str:
     return str(value or "")
 
 
-def _parse_csv_field(value: Any) -> List[str]:
+def _parse_csv(value: Any) -> List[str]:
     return str(value).split(",") if value else []
 
 
@@ -129,9 +129,9 @@ class CatalogMixin:
                 d["is_user_facing"] = _to_bool(d.get("is_user_facing"))
                 d["is_theme"] = _to_bool(d.get("is_theme"))
 
-                d["risk_tags"] = _parse_csv_field(d.get("risk_tags"))
-                d["security_flags"] = _parse_csv_field(d.get("security_flags"))
-                d["feature_flags"] = _parse_csv_field(d.get("feature_flags"))
+                d["risk_tags"] = _parse_csv(d.get("risk_tags"))
+                d["security_flags"] = _parse_csv(d.get("security_flags"))
+                d["feature_flags"] = _parse_csv(d.get("feature_flags"))
 
                 if d.get("code_analysis_json"):
                     d["code_analysis"] = json.loads(d["code_analysis_json"])
@@ -353,7 +353,7 @@ class CatalogMixin:
                 )
 
                 prev = conn.total_changes
-                self._upsert_catalog_entry(
+                self._upsert_catalog(
                     cursor,
                     int(row["session_id"]),
                     row["session_created_at"] or "",

@@ -1,158 +1,158 @@
 (function() {
     const runtime = window.zetatechRuntime;
 
-    function getRunButtonMarkup() {
+    function runMarkup() {
         return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>RUN SCAN</span>';
     }
 
-    function resetRunButton(runBtn) {
-        if (!runBtn) return;
-        runBtn.disabled = false;
-        runBtn.innerHTML = getRunButtonMarkup();
+    function resetRun(btn) {
+        if (!btn) return;
+        btn.disabled = false;
+        btn.innerHTML = runMarkup();
     }
 
-    function buildScanRequestData(form) {
+    function scanReq(form) {
         const pages = preparePagesValueBeforeScan();
-        const formData = new FormData(form);
+        const fd = new FormData(form);
 
         return {
             pages,
-            limit: parseInt(formData.get('limit'), 10) || 0,
-            min_installs: parseInt(formData.get('min_installs'), 10) || 0,
-            max_installs: parseInt(formData.get('max_installs'), 10) || 0,
-            sort: formData.get('sort') || 'updated',
-            smart: formData.get('smart') === 'on',
-            abandoned: formData.get('abandoned') === 'on',
-            user_facing: formData.get('user_facing') === 'on',
-            themes: formData.get('themes') === 'on',
-            min_days: parseInt(formData.get('min_days'), 10) || 0,
-            max_days: parseInt(formData.get('max_days'), 10) || 0,
+            limit: parseInt(fd.get('limit'), 10) || 0,
+            min_installs: parseInt(fd.get('min_installs'), 10) || 0,
+            max_installs: parseInt(fd.get('max_installs'), 10) || 0,
+            sort: fd.get('sort') || 'updated',
+            smart: fd.get('smart') === 'on',
+            abandoned: fd.get('abandoned') === 'on',
+            user_facing: fd.get('user_facing') === 'on',
+            themes: fd.get('themes') === 'on',
+            min_days: parseInt(fd.get('min_days'), 10) || 0,
+            max_days: parseInt(fd.get('max_days'), 10) || 0,
         };
     }
 
-    function setRunButtonStarting(runBtn) {
-        if (!runBtn) return;
-        runBtn.disabled = true;
-        runBtn.innerHTML = '<span>STARTING...</span>';
+    function startRun(btn) {
+        if (!btn) return;
+        btn.disabled = true;
+        btn.innerHTML = '<span>STARTING...</span>';
     }
 
-    function setScanStatusUi(label, tone) {
-        const statusEl = document.getElementById('scan-status');
-        if (!statusEl) return;
-        statusEl.textContent = label;
-        statusEl.className = `metric-value info-value ${tone}`;
+    function setStatus(label, tone) {
+        const el = document.getElementById('scan-status');
+        if (!el) return;
+        el.textContent = label;
+        el.className = `metric-value info-value ${tone}`;
     }
 
-    function markScanRunning() {
-        setScanStatusUi('RUNNING', 'running');
+    function markRun() {
+        setStatus('RUNNING', 'running');
     }
 
-    function markScanCompleted() {
-        setScanStatusUi('COMPLETED', 'completed');
+    function markDone() {
+        setStatus('COMPLETED', 'completed');
     }
 
-    function markScanCancelled() {
-        setScanStatusUi('CANCELLED', 'cancelled');
+    function markCancel() {
+        setStatus('CANCELLED', 'cancelled');
     }
 
-    function markScanFailed() {
-        setScanStatusUi('FAILED', 'failed');
+    function markFail() {
+        setStatus('FAILED', 'failed');
     }
 
-    function markScanMerged() {
-        setScanStatusUi('MERGED', 'completed');
+    function markMerge() {
+        setStatus('MERGED', 'completed');
     }
 
-    function startScanDetailsPolling(sessionId) {
-        stopDetailsPolling();
-        const poller = setInterval(() => {
-            if (runtime.getCurrentScanId() === sessionId) {
-                window.viewScan(sessionId);
+    function startPoll(sid) {
+        stopPoll();
+        const timer = setInterval(() => {
+            if (runtime.getCurrentScanId() === sid) {
+                window.viewScan(sid);
                 return;
             }
-            clearInterval(poller);
+            clearInterval(timer);
             runtime.setDetailsPollingInterval(null);
         }, 3000);
-        runtime.setDetailsPollingInterval(poller);
+        runtime.setDetailsPollingInterval(timer);
     }
 
-    function stopDetailsPolling() {
-        const interval = runtime.getDetailsPollingInterval();
-        if (interval) {
-            clearInterval(interval);
+    function stopPoll() {
+        const timer = runtime.getDetailsPollingInterval();
+        if (timer) {
+            clearInterval(timer);
             runtime.setDetailsPollingInterval(null);
         }
     }
 
-    function closeActiveSocket() {
-        const currentSocket = runtime.getSocket();
-        if (currentSocket) currentSocket.close();
+    function closeSock() {
+        const sock = runtime.getSocket();
+        if (sock) sock.close();
     }
 
-    function setCurrentScanResults(results) {
-        window.currentScanResults = Array.isArray(results) ? results : [];
+    function setResults(res) {
+        window.currentScanResults = Array.isArray(res) ? res : [];
     }
 
-    function getCurrentScanResults() {
+    function getResults() {
         return Array.isArray(window.currentScanResults) ? window.currentScanResults : [];
     }
 
-    window.refreshAfterScanEvent = function(sessionId) {
+    window.refreshAfterScanEvent = function(sid) {
         loadHistory();
-        const catalogView = document.getElementById('catalog-view');
-        if (catalogView && catalogView.style.display !== 'none') {
+        const view = document.getElementById('catalog-view');
+        if (view && view.style.display !== 'none') {
             loadCatalog();
         }
-        if (!sessionId) return;
+        if (!sid) return;
 
-        if (isDetailsViewActive() && runtime.getCurrentScanId() === sessionId) {
+        if (isDetailsViewActive() && runtime.getCurrentScanId() === sid) {
             setTimeout(() => {
-                if (runtime.getCurrentScanId() === sessionId) window.viewScan(sessionId);
+                if (runtime.getCurrentScanId() === sid) window.viewScan(sid);
             }, 250);
             setTimeout(() => {
-                if (runtime.getCurrentScanId() === sessionId) window.viewScan(sessionId);
+                if (runtime.getCurrentScanId() === sid) window.viewScan(sid);
             }, 1200);
         }
     };
 
-    window.syncFinalScanResults = async function(sessionId, expectedCount = 0) {
-        if (!sessionId || !isDetailsViewActive()) return;
-        const targetCount = parseInt(expectedCount || 0, 10);
+    window.syncFinalScanResults = async function(sid, total = 0) {
+        if (!sid || !isDetailsViewActive()) return;
+        const target = parseInt(total || 0, 10);
         for (let i = 0; i < 6; i += 1) {
-            if (runtime.getCurrentScanId() !== sessionId) return;
-            await window.viewScan(sessionId);
-            const currentCount = getCurrentScanResults().length;
-            if (targetCount <= 0 || currentCount >= targetCount) return;
+            if (runtime.getCurrentScanId() !== sid) return;
+            await window.viewScan(sid);
+            const cur = getResults().length;
+            if (target <= 0 || cur >= target) return;
             await new Promise((resolve) => setTimeout(resolve, 350 * (i + 1)));
         }
     };
 
-    window.setScanProgressState = function(percent, stage, detail) {
+    window.setScanProgressState = function(pct, stage, detail) {
         const fill = document.getElementById('scan-progress-fill');
         const track = document.getElementById('scan-progress-track');
-        const percentLabel = document.getElementById('scan-progress-percent');
-        const stageLabel = document.getElementById('scan-stage-text');
-        const detailLabel = document.getElementById('scan-stage-subtext');
+        const pctEl = document.getElementById('scan-progress-percent');
+        const stageEl = document.getElementById('scan-stage-text');
+        const detailEl = document.getElementById('scan-stage-subtext');
 
         if (!fill || !track) return;
 
-        const currentPercent = Number(fill.dataset.percent || '0');
-        const resolved = percent == null ? currentPercent : Math.max(0, Math.min(100, Number(percent)));
+        const curPct = Number(fill.dataset.percent || '0');
+        const val = pct == null ? curPct : Math.max(0, Math.min(100, Number(pct)));
 
-        fill.style.width = `${resolved}%`;
-        fill.dataset.percent = String(resolved);
-        track.setAttribute('aria-valuenow', String(Math.round(resolved)));
+        fill.style.width = `${val}%`;
+        fill.dataset.percent = String(val);
+        track.setAttribute('aria-valuenow', String(Math.round(val)));
 
-        if (percentLabel) percentLabel.textContent = `${Math.round(resolved)}%`;
-        if (stageLabel && stage) stageLabel.textContent = stage;
-        if (detailLabel && detail) detailLabel.textContent = detail;
+        if (pctEl) pctEl.textContent = `${Math.round(val)}%`;
+        if (stageEl && stage) stageEl.textContent = stage;
+        if (detailEl && detail) detailEl.textContent = detail;
     };
 
     window.setProgressDetailsButton = function(visible) {
         const btn = document.getElementById('scan-progress-details-btn');
         if (!btn) return;
-        const shouldShow = Boolean(visible) && Boolean(runtime.getCurrentScanId());
-        btn.style.display = shouldShow ? 'inline-flex' : 'none';
+        const show = Boolean(visible) && Boolean(runtime.getCurrentScanId());
+        btn.style.display = show ? 'inline-flex' : 'none';
     };
 
     window.openProgressScanDetails = function() {
@@ -161,14 +161,14 @@
     };
 
     window.logTerminal = function(text, type = 'info') {
-        const stageMap = {
+        const map = {
             error: 'Failed',
             'high-risk': 'Warning',
             success: 'Completed',
             warn: 'Notice',
             info: 'Running'
         };
-        const stage = stageMap[type] || 'Running';
+        const stage = map[type] || 'Running';
         window.setScanProgressState(null, stage, text);
     };
 
@@ -177,12 +177,12 @@
         window.setProgressDetailsButton(false);
     };
 
-    window.connectWebSocket = function(sessionId) {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/scans/${sessionId}`;
-        closeActiveSocket();
+    window.connectWebSocket = function(sid) {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const url = `${proto}//${window.location.host}/ws/scans/${sid}`;
+        closeSock();
 
-        const ws = new WebSocket(wsUrl);
+        const ws = new WebSocket(url);
         runtime.setSocket(ws);
 
         ws.onopen = () => {
@@ -193,62 +193,62 @@
         ws.onmessage = (event) => {
             if (runtime.getSocket() !== ws) return;
             const payload = JSON.parse(event.data);
-            window.handleMessage(payload, sessionId);
+            window.handleMessage(payload, sid);
         };
         ws.onclose = () => {
             if (runtime.getSocket() !== ws) return;
             window.logTerminal('WebSocket connection closed', 'info');
-            window.reconcileScanStatus(sessionId);
+            window.reconcileScanStatus(sid);
         };
         ws.onerror = () => {
             if (runtime.getSocket() !== ws) return;
             window.logTerminal('WebSocket error', 'error');
-            window.reconcileScanStatus(sessionId);
+            window.reconcileScanStatus(sid);
         };
     };
 
-    window.reconcileScanStatus = async function(sessionId) {
-        if (!sessionId) return;
-        if (runtime.getCurrentScanId() !== sessionId) return;
+    window.reconcileScanStatus = async function(sid) {
+        if (!sid) return;
+        if (runtime.getCurrentScanId() !== sid) return;
 
-        const runBtn = document.getElementById('runBtn');
+        const btn = document.getElementById('runBtn');
         try {
-            const response = await fetch(apiNoCacheUrl(`/api/scans/${sessionId}`));
-            if (!response.ok) return;
-            const session = await response.json();
+            const res = await fetch(apiNoCacheUrl(`/api/scans/${sid}`));
+            if (!res.ok) return;
+            const session = await res.json();
             const status = String(session.status || '').toLowerCase();
-            const totalFound = Number(session.total_found || 0);
-            const highRiskCount = Number(session.high_risk_count || 0);
+            const found = Number(session.total_found || 0);
+            const high = Number(session.high_risk_count || 0);
 
             if (status === 'completed') {
-                markScanCompleted();
-                window.setScanProgressState(100, 'Completed', `Found ${totalFound} total / ${highRiskCount} high risk`);
+                markDone();
+                window.setScanProgressState(100, 'Completed', `Found ${found} total / ${high} high risk`);
                 window.setProgressDetailsButton(true);
-                window.refreshAfterScanEvent(sessionId);
+                window.refreshAfterScanEvent(sid);
             } else if (status === 'cancelled') {
-                markScanCancelled();
-                window.setScanProgressState(100, 'Cancelled', `Found ${totalFound} total / ${highRiskCount} high risk`);
+                markCancel();
+                window.setScanProgressState(100, 'Cancelled', `Found ${found} total / ${high} high risk`);
                 window.setProgressDetailsButton(true);
-                window.refreshAfterScanEvent(sessionId);
+                window.refreshAfterScanEvent(sid);
             } else if (status === 'failed') {
-                markScanFailed();
+                markFail();
                 window.setScanProgressState(100, 'Failed', 'Scan terminated with an error');
                 window.setProgressDetailsButton(false);
-                window.refreshAfterScanEvent(sessionId);
+                window.refreshAfterScanEvent(sid);
             }
-        } catch (error) {
-            console.error('Failed to reconcile scan status:', error);
+        } catch (err) {
+            console.error('Failed to reconcile scan status:', err);
         } finally {
-            resetRunButton(runBtn);
+            resetRun(btn);
         }
     };
 
-    window.handleMessage = function(msg, sourceSessionId = null) {
-        const runBtn = document.getElementById('runBtn');
-        const currentScanId = runtime.getCurrentScanId();
+    window.handleMessage = function(msg, sourceSid = null) {
+        const btn = document.getElementById('runBtn');
+        const curId = runtime.getCurrentScanId();
 
-        if (sourceSessionId && currentScanId && Number(sourceSessionId) !== Number(currentScanId)) return;
-        if (msg && msg.session_id && currentScanId && Number(msg.session_id) !== Number(currentScanId)) return;
+        if (sourceSid && curId && Number(sourceSid) !== Number(curId)) return;
+        if (msg && msg.session_id && curId && Number(msg.session_id) !== Number(curId)) return;
 
         switch (msg.type) {
             case 'start':
@@ -257,12 +257,12 @@
                 window.setProgressDetailsButton(false);
                 break;
             case 'progress': {
-                const percent = Number(msg.percent || 0);
-                const current = Number(msg.current || 0);
+                const pct = Number(msg.percent || 0);
+                const cur = Number(msg.current || 0);
                 const total = Number(msg.total || 0);
-                const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
-                const detail = total > 0 ? `Processed ${current}/${total} targets` : `Processed ${current} targets`;
-                window.setScanProgressState(safePercent, 'Running', detail);
+                const val = Math.max(0, Math.min(100, Math.round(pct)));
+                const detail = total > 0 ? `Processed ${cur}/${total} targets` : `Processed ${cur} targets`;
+                window.setScanProgressState(val, 'Running', detail);
                 break;
             }
             case 'result':
@@ -275,41 +275,41 @@
                 window.logTerminal(`Scan identical to Session #${msg.original_session_id}. Merging...`, 'warn');
                 window.logTerminal('Session merged. History updated.', 'success');
                 runtime.setCurrentScanId(msg.original_session_id);
-                markScanMerged();
-                resetRunButton(runBtn);
+                markMerge();
+                resetRun(btn);
                 window.setScanProgressState(100, 'Merged', `Merged into Session #${msg.original_session_id}`);
                 window.setProgressDetailsButton(true);
                 window.refreshAfterScanEvent(runtime.getCurrentScanId());
                 break;
             case 'cancelled':
                 window.logTerminal(`Scan cancelled. Found: ${msg.total_found || 0}, High Risk: ${msg.high_risk_count || 0}`, 'warn');
-                markScanCancelled();
-                resetRunButton(runBtn);
+                markCancel();
+                resetRun(btn);
                 window.setScanProgressState(100, 'Cancelled', `Found ${msg.total_found || 0} total / ${msg.high_risk_count || 0} high risk`);
                 window.setProgressDetailsButton(true);
                 window.refreshAfterScanEvent(runtime.getCurrentScanId());
-                stopDetailsPolling();
+                stopPoll();
                 break;
             case 'complete':
                 window.logTerminal(`Scan completed. Found: ${msg.total_found}, High Risk: ${msg.high_risk_count}`, 'success');
-                markScanCompleted();
-                resetRunButton(runBtn);
+                markDone();
+                resetRun(btn);
                 window.setScanProgressState(100, 'Completed', `Found ${msg.total_found} total / ${msg.high_risk_count} high risk`);
                 window.setProgressDetailsButton(true);
                 window.refreshAfterScanEvent(runtime.getCurrentScanId());
                 if (runtime.getCurrentScanId() && isDetailsViewActive()) {
                     window.syncFinalScanResults(runtime.getCurrentScanId(), msg.total_found);
                 }
-                stopDetailsPolling();
+                stopPoll();
                 break;
             case 'error':
                 window.logTerminal(`Error: ${msg.message}`, 'error');
-                markScanFailed();
-                resetRunButton(runBtn);
+                markFail();
+                resetRun(btn);
                 window.setScanProgressState(100, 'Failed', msg.message || 'Scan terminated with an error');
                 window.setProgressDetailsButton(false);
                 window.refreshAfterScanEvent(runtime.getCurrentScanId());
-                stopDetailsPolling();
+                stopPoll();
                 break;
             default:
                 break;
@@ -318,28 +318,28 @@
 
     window.runScan = async function() {
         const form = document.getElementById('configForm');
-        const runBtn = document.getElementById('runBtn');
-        const requestData = buildScanRequestData(form);
+        const btn = document.getElementById('runBtn');
+        const req = scanReq(form);
 
-        setRunButtonStarting(runBtn);
+        startRun(btn);
         window.setProgressDetailsButton(false);
         window.clearTerminal();
         window.logTerminal('Initializing scan...', 'info');
         window.setScanProgressState(5, 'Starting', 'Submitting scan request');
 
         try {
-            const response = await fetch('/api/scans', {
+            const res = await fetch('/api/scans', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestData)
+                body: JSON.stringify(req)
             });
-            const data = await response.json();
+            const data = await res.json();
 
             if (!data.session_id) {
                 window.logTerminal('Failed to start scan', 'error');
                 window.setScanProgressState(100, 'Failed', 'Scan session could not be started');
                 window.setProgressDetailsButton(false);
-                resetRunButton(runBtn);
+                resetRun(btn);
                 return;
             }
 
@@ -347,16 +347,16 @@
             window.logTerminal(`Scan session started: ID ${runtime.getCurrentScanId()}`, 'success');
             window.setScanProgressState(8, 'Starting', `Session #${runtime.getCurrentScanId()} created`);
             window.connectWebSocket(runtime.getCurrentScanId());
-            markScanRunning();
-        } catch (error) {
-            window.logTerminal(`Error: ${error.message}`, 'error');
-            window.setScanProgressState(100, 'Failed', error.message || 'Unknown error');
+            markRun();
+        } catch (err) {
+            window.logTerminal(`Error: ${err.message}`, 'error');
+            window.setScanProgressState(100, 'Failed', err.message || 'Unknown error');
             window.setProgressDetailsButton(false);
-            resetRunButton(runBtn);
+            resetRun(btn);
         }
     };
 
-    function setDeepScanButtonState(state) {
+    function setScanBtn(state) {
         const btn = document.getElementById('btn-deep-scan');
         if (!btn) return;
 
@@ -388,7 +388,7 @@
         btn.title = '';
     }
 
-    function resolvePluginModalReturnHash(urlState) {
+    function returnHash(urlState) {
         if (urlState.view && urlState.view !== 'plugin-detail') {
             if (urlState.view === 'details' && urlState.scanId) {
                 return `details/${urlState.scanId}`;
@@ -396,20 +396,20 @@
             return urlState.view;
         }
 
-        const currentReturnHash = runtime.getModalReturnHash();
-        if (!currentReturnHash || String(currentReturnHash).startsWith('plugin/')) {
+        const hash = runtime.getModalReturnHash();
+        if (!hash || String(hash).startsWith('plugin/')) {
             return runtime.getCurrentScanId() ? `details/${runtime.getCurrentScanId()}` : 'history';
         }
 
-        return currentReturnHash;
+        return hash;
     }
 
-    function initializePluginAiPanel(plugin) {
+    function initAiPanel(plugin) {
         bindPluginAiUiEvents();
         const state = typeof window.getPluginAiState === 'function' ? window.getPluginAiState() : {};
-        const samePlugin = String(state.plugin || '').trim() === String(plugin.slug || '').trim() && !!state.isTheme === !!plugin.is_theme;
+        const same = String(state.plugin || '').trim() === String(plugin.slug || '').trim() && !!state.isTheme === !!plugin.is_theme;
 
-        if (!samePlugin) {
+        if (!same) {
             beginPluginAiView(plugin.slug, !!plugin.is_theme);
             renderPluginAiMessages([]);
             renderPluginAiActivity([]);
@@ -427,16 +427,16 @@
         setPluginAiComposerEnabled(!state.sending && !!state.threadId);
     }
 
-    function buildPluginTagsHtml(plugin) {
-        let tagsHtml = '';
-        if (plugin.is_user_facing) tagsHtml += '<span class="tag warn">USER FACING</span>';
-        if (plugin.is_risky_category) tagsHtml += '<span class="tag risk">RISKY CATEGORY</span>';
-        if (plugin.author_trusted) tagsHtml += '<span class="tag safe">TRUSTED AUTHOR</span>';
-        if (plugin.is_duplicate) tagsHtml += '<span class="tag" style="background: #333;">PREVIOUSLY FOUND</span>';
-        return tagsHtml || '<span class="tag">NO TAGS</span>';
+    function tagsHtml(plugin) {
+        let html = '';
+        if (plugin.is_user_facing) html += '<span class="tag warn">USER FACING</span>';
+        if (plugin.is_risky_category) html += '<span class="tag risk">RISKY CATEGORY</span>';
+        if (plugin.author_trusted) html += '<span class="tag safe">TRUSTED AUTHOR</span>';
+        if (plugin.is_duplicate) html += '<span class="tag" style="background: #333;">PREVIOUSLY FOUND</span>';
+        return html || '<span class="tag">NO TAGS</span>';
     }
 
-    function buildPluginModalViewModel(plugin) {
+    function modalVm(plugin) {
         const type = plugin.is_theme ? 'theme' : 'plugin';
         const ver = plugin.version || 'latest';
         const url = plugin.download_link || `https://downloads.wordpress.org/${type}/${plugin.slug}.${ver}.zip`;
@@ -448,7 +448,7 @@
             pluginSlugJs: JSON.stringify(slug),
             downloadUrl: url,
             downloadUrlJs: JSON.stringify(String(url || '')),
-            tagsHtml: buildPluginTagsHtml(plugin),
+            tagsHtml: tagsHtml(plugin),
             isFav: isFavoriteSlug(plugin.slug),
             pluginScore: score,
             pluginScoreColor: getRiskColorForScore(score),
@@ -456,11 +456,11 @@
         };
     }
 
-    function renderPluginModalContent(plugin, content) {
-        if (!content) return null;
-        const vm = buildPluginModalViewModel(plugin);
+    function renderModal(plugin, box) {
+        if (!box) return null;
+        const vm = modalVm(plugin);
 
-        content.innerHTML = `
+        box.innerHTML = `
             <section class="plugin-hero">
                 <div class="plugin-metrics-grid">
                     <article class="plugin-metric-card"><span class="plugin-metric-label">Risk Score</span><span class="plugin-metric-value" style="color:${vm.pluginScoreColor}">${vm.pluginScore}/100</span><span class="plugin-metric-sub">Current plugin risk level</span></article>
@@ -493,22 +493,22 @@
         return vm;
     }
 
-    function preloadPluginSemgrepState(slug) {
+    function loadSemgrep(slug) {
         fetch(`/api/semgrep/scan/${slug}`)
             .then((res) => res.json())
             .then((data) => {
                 if (data.status === 'completed') {
-                    loadSemgrepResultsIntoModal(data);
+                    renderSemgrep(data);
                 } else if (data.status === 'running' || data.status === 'pending') {
                     document.getElementById('semgrep-results-container').innerHTML = '<div class="plugin-semgrep-empty">Semgrep scan in progress...</div>';
-                    setDeepScanButtonState('scanning');
-                    pollSemgrepResults(slug);
+                    setScanBtn('scanning');
+                    pollSemgrep(slug);
                 }
             })
             .catch(() => {});
     }
 
-    function preloadPluginSemgrepAvailability() {
+    function checkSemgrep() {
         fetch('/api/semgrep/rules')
             .then((res) => res.json())
             .then((rules) => {
@@ -526,39 +526,39 @@
             .catch(() => {});
     }
 
-    function loadSemgrepResultsIntoModal(scanData) {
+    function renderSemgrep(scan) {
         const box = document.getElementById('semgrep-results-container');
         if (!box) return;
 
-        const findings = Array.isArray(scanData && scanData.findings) ? scanData.findings : null;
-        const summary = (scanData && scanData.summary && typeof scanData.summary === 'object') ? scanData.summary : {};
-        const total = Number(summary.total_findings || 0);
-        const doneAt = scanData && scanData.completed_at ? String(scanData.completed_at) : '';
-        const done = String((scanData && scanData.status) || '').toLowerCase() === 'completed';
-        const errs = Array.isArray(summary.errors) ? summary.errors.filter(Boolean) : [];
+        const findings = Array.isArray(scan && scan.findings) ? scan.findings : null;
+        const sum = (scan && scan.summary && typeof scan.summary === 'object') ? scan.summary : {};
+        const total = Number(sum.total_findings || 0);
+        const doneAt = scan && scan.completed_at ? String(scan.completed_at) : '';
+        const done = String((scan && scan.status) || '').toLowerCase() === 'completed';
+        const errs = Array.isArray(sum.errors) ? sum.errors.filter(Boolean) : [];
 
-        if (!scanData || !done || findings === null) {
+        if (!scan || !done || findings === null) {
             box.innerHTML = '<div class="plugin-semgrep-empty">Semgrep result is incomplete or unavailable right now. Please retry the scan or refresh this plugin view.</div>';
-            setDeepScanButtonState('rescan');
+            setScanBtn('rescan');
             return;
         }
 
         if (findings.length === 0 && total === 0) {
             const label = doneAt ? ` Last completed: <strong>${escapeHtml(doneAt)}</strong>.` : '';
             const warn = errs.length
-                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((error) => `• ${escapeHtml(String(error))}`).join('<br>')}</div>`
+                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
                 : '';
             box.innerHTML = `${warn}<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${label}</div>`;
-            setDeepScanButtonState('rescan');
+            setScanBtn('rescan');
             return;
         }
 
-        const breakdown = (summary && summary.breakdown) ? summary.breakdown : {};
+        const counts = (sum && sum.breakdown) ? sum.breakdown : {};
         const warn = errs.length
-            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((error) => `• ${escapeHtml(String(error))}`).join('<br>')}</div>`
+            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
             : '';
 
-        let html = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${breakdown.ERROR || 0}</span>, WARNING: <span class="sev-warning">${breakdown.WARNING || 0}</span>)</div>`;
+        let html = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${counts.ERROR || 0}</span>, WARNING: <span class="sev-warning">${counts.WARNING || 0}</span>)</div>`;
 
         html += findings.map((f) => {
             const sev = String(f.severity || 'INFO').toUpperCase();
@@ -577,78 +577,78 @@
         }).join('');
 
         box.innerHTML = html;
-        setDeepScanButtonState('rescan');
+        setScanBtn('rescan');
     }
 
-    async function pollSemgrepResults(slug) {
-        const interval = setInterval(async () => {
+    async function pollSemgrep(slug) {
+        const timer = setInterval(async () => {
             try {
-                const response = await fetch(`/api/semgrep/scan/${slug}`);
-                const data = await response.json();
+                const res = await fetch(`/api/semgrep/scan/${slug}`);
+                const data = await res.json();
 
                 if (data.status === 'completed') {
-                    clearInterval(interval);
-                    loadSemgrepResultsIntoModal(data);
-                    const summaryErrors = Array.isArray(data && data.summary && data.summary.errors) ? data.summary.errors.filter(Boolean) : [];
-                    if (summaryErrors.length) {
-                        showToast(`Semgrep scan completed with ${summaryErrors.length} warning(s). Findings were preserved.`, 'warn');
+                    clearInterval(timer);
+                    renderSemgrep(data);
+                    const errs = Array.isArray(data && data.summary && data.summary.errors) ? data.summary.errors.filter(Boolean) : [];
+                    if (errs.length) {
+                        showToast(`Semgrep scan completed with ${errs.length} warning(s). Findings were preserved.`, 'warn');
                     }
                 } else if (data.status === 'failed') {
-                    clearInterval(interval);
+                    clearInterval(timer);
                     showToast('Semgrep scan failed: ' + (data.error_message || 'Unknown error'), 'error');
-                    setDeepScanButtonState('rescan');
+                    setScanBtn('rescan');
                 }
-            } catch (e) {
-                clearInterval(interval);
+            } catch (_) {
+                clearInterval(timer);
             }
         }, 3000);
     }
 
-    window.runPluginSemgrep = async function(slug, downloadUrl) {
+    window.runPluginSemgrep = async function(slug, url) {
         try {
-            const rulesResponse = await fetch('/api/semgrep/rules');
-            const rulesData = await rulesResponse.json();
-            const activeRulesets = (rulesData.rulesets || []).filter((r) => r.enabled).length;
-            const activeCustomRules = (rulesData.custom_rules || []).filter((r) => r.enabled).length;
+            const res = await fetch('/api/semgrep/rules');
+            const data = await res.json();
+            const sets = (data.rulesets || []).filter((r) => r.enabled).length;
+            const custom = (data.custom_rules || []).filter((r) => r.enabled).length;
 
-            if (activeRulesets === 0 && activeCustomRules === 0) {
+            if (sets === 0 && custom === 0) {
                 showToast('Semgrep is disabled. Please enable at least one ruleset in Semgrep Settings.', 'warn');
                 switchTab('semgrep');
                 return;
             }
-        } catch (e) {
+        } catch (_) {
             showToast('Failed to check Semgrep configuration.', 'error');
             return;
         }
 
-        const confirmed = await showConfirm(`Run deep Semgrep analysis on ${slug}? This may take a few minutes.`);
-        if (!confirmed) return;
+        const ok = await showConfirm(`Run deep Semgrep analysis on ${slug}? This may take a few minutes.`);
+        if (!ok) return;
 
-        setDeepScanButtonState('scanning');
+        setScanBtn('scanning');
 
         try {
-            const response = await fetch('/api/semgrep/scan', {
+            const res = await fetch('/api/semgrep/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slug, download_url: downloadUrl })
+                body: JSON.stringify({ slug, download_url: url })
             });
 
-            const data = await response.json();
+            const data = await res.json();
             if (data.success) {
                 showToast('Semgrep scan started in background. Check back in a few minutes.', 'success');
-                pollSemgrepResults(slug);
+                pollSemgrep(slug);
             } else {
                 showToast('Failed to start scan', 'error');
-                setDeepScanButtonState('rescan');
+                setScanBtn('rescan');
             }
-        } catch (e) {
-            showToast('Error: ' + e.message, 'error');
-            setDeepScanButtonState('rescan');
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            setScanBtn('rescan');
         }
     };
 
-    window.viewScan = async function(id, options = {}) {
-        const { syncUrl = true } = options;
+    window.viewScan = async function(id, opts = {}) {
+        const { syncUrl = true } = opts;
         switchTab('details', { syncUrl: false });
         runtime.setCurrentScanId(id);
         if (syncUrl) {
@@ -664,65 +664,65 @@
         if (list) list.innerHTML = '<tr><td colspan="7" class="favorites-empty">Loading results...</td></tr>';
 
         try {
-            const sessionResp = await fetch(apiNoCacheUrl(`/api/scans/${id}`));
-            const session = await sessionResp.json();
+            const sRes = await fetch(apiNoCacheUrl(`/api/scans/${id}`));
+            const session = await sRes.json();
 
-            const resultsResp = await fetch(apiNoCacheUrl(`/api/scans/${id}/results?limit=500`));
-            const resultsData = await resultsResp.json();
-            setCurrentScanResults(resultsData.results || []);
-            runtime.setDetailsSourceCache(getCurrentScanResults());
+            const rRes = await fetch(apiNoCacheUrl(`/api/scans/${id}/results?limit=500`));
+            const rData = await rRes.json();
+            setResults(rData.results || []);
+            runtime.setDetailsSourceCache(getResults());
             await refreshFavoriteSlugs();
 
             initializeDetailsFilters();
             runtime.setDetailsCurrentPage(1);
-            window.renderDetailsDashboard(getCurrentScanResults());
+            window.renderDetailsDashboard(getResults());
             applyDetailsFilters();
 
-            const existingBulkInterval = runtime.getDetailsBulkPollingInterval();
-            if (existingBulkInterval) {
-                clearInterval(existingBulkInterval);
+            const prev = runtime.getDetailsBulkPollingInterval();
+            if (prev) {
+                clearInterval(prev);
                 runtime.setDetailsBulkPollingInterval(null);
             }
-            const bulkStats = await window.refreshDetailsBulkStatus(id);
-            if (bulkStats && bulkStats.is_running) {
-                const bulkTimer = setInterval(async () => {
+            const bulk = await window.refreshDetailsBulkStatus(id);
+            if (bulk && bulk.is_running) {
+                const timer = setInterval(async () => {
                     try {
                         const stats = await window.refreshDetailsBulkStatus(id);
                         if (!stats.is_running) {
-                            clearInterval(bulkTimer);
+                            clearInterval(timer);
                             runtime.setDetailsBulkPollingInterval(null);
                         }
                     } catch (err) {
                         console.error('Details bulk polling error', err);
                     }
                 }, 1500);
-                runtime.setDetailsBulkPollingInterval(bulkTimer);
+                runtime.setDetailsBulkPollingInterval(timer);
             }
 
             if ((session.status || '').toUpperCase() === 'RUNNING') {
-                startScanDetailsPolling(id);
+                startPoll(id);
             } else {
-                stopDetailsPolling();
+                stopPoll();
             }
-        } catch (error) {
+        } catch (_) {
             window.setDetailsBulkControls('idle');
             window.renderDetailsDashboard([]);
             if (list) list.innerHTML = '<tr><td colspan="7" class="favorites-empty">Failed to load scan details</td></tr>';
         }
     };
 
-    window.openPluginModal = function(index, options = {}) {
-        const { syncUrl = true } = options;
-        const plugin = getCurrentScanResults()[index];
+    window.openPluginModal = function(idx, opts = {}) {
+        const { syncUrl = true } = opts;
+        const plugin = getResults()[idx];
         if (!plugin) return;
 
-        const urlState = getUrlState();
-        runtime.setModalReturnHash(resolvePluginModalReturnHash(urlState));
+        const url = getUrlState();
+        runtime.setModalReturnHash(returnHash(url));
 
         if (syncUrl) {
             setUrlState({
                 view: 'plugin-detail',
-                scanId: runtime.getCurrentScanId() || urlState.scanId || null,
+                scanId: runtime.getCurrentScanId() || url.scanId || null,
                 plugin: plugin.slug,
             }, { replace: false });
         }
@@ -731,38 +731,38 @@
 
         const title = document.getElementById('plugin-page-title');
         const desc = document.getElementById('plugin-page-desc');
-        const content = document.getElementById('plugin-page-content');
+        const box = document.getElementById('plugin-page-content');
 
         if (title) title.textContent = String(plugin.slug || plugin.name || 'PLUGIN').toUpperCase();
         if (desc) desc.textContent = `Inspect metadata and Semgrep findings for ${plugin.slug || plugin.name || 'the selected plugin'}.`;
 
-        initializePluginAiPanel(plugin);
-        if (!content) return;
+        initAiPanel(plugin);
+        if (!box) return;
 
-        renderPluginModalContent(plugin, content);
-        setDeepScanButtonState('default');
+        renderModal(plugin, box);
+        setScanBtn('default');
         ensurePluginAiThread(plugin);
-        preloadPluginSemgrepState(plugin.slug);
-        preloadPluginSemgrepAvailability();
+        loadSemgrep(plugin.slug);
+        checkSemgrep();
     };
 
     window.closeModal = function() {
-        const fallbackHash = runtime.getCurrentScanId() ? `details/${runtime.getCurrentScanId()}` : 'history';
-        const currentReturnHash = runtime.getModalReturnHash();
-        const targetHash = currentReturnHash && !String(currentReturnHash).startsWith('plugin/') ? currentReturnHash : fallbackHash;
+        const fb = runtime.getCurrentScanId() ? `details/${runtime.getCurrentScanId()}` : 'history';
+        const cur = runtime.getModalReturnHash();
+        const target = cur && !String(cur).startsWith('plugin/') ? cur : fb;
 
-        if (String(targetHash).startsWith('details/')) {
-            const scanId = parseInt(String(targetHash).split('/')[1], 10);
-            const resolvedScan = Number.isFinite(scanId) ? scanId : (runtime.getCurrentScanId() || null);
-            if (resolvedScan) {
-                setUrlState({ view: 'details', scanId: resolvedScan, plugin: '' }, { replace: false });
-                window.viewScan(resolvedScan, { syncUrl: false });
+        if (String(target).startsWith('details/')) {
+            const sid = parseInt(String(target).split('/')[1], 10);
+            const resolved = Number.isFinite(sid) ? sid : (runtime.getCurrentScanId() || null);
+            if (resolved) {
+                setUrlState({ view: 'details', scanId: resolved, plugin: '' }, { replace: false });
+                window.viewScan(resolved, { syncUrl: false });
                 return;
             }
         }
 
-        const tabId = runtime.getViewToTab()[String(targetHash)] || 'history';
-        setUrlState({ view: runtime.getTabToView()[tabId] || 'history', scanId: null, plugin: '' }, { replace: false });
-        switchTab(tabId, { syncUrl: false });
+        const tab = runtime.getViewToTab()[String(target)] || 'history';
+        setUrlState({ view: runtime.getTabToView()[tab] || 'history', scanId: null, plugin: '' }, { replace: false });
+        switchTab(tab, { syncUrl: false });
     };
 })();

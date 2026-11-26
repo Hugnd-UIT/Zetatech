@@ -10,7 +10,7 @@ def get_log_file() -> Path:
     return resolve_runtime_paths().logs_dir / "zetatech.log"
 
 
-def build_rotating_file_handler() -> RotatingFileHandler | None:
+def file_handler() -> RotatingFileHandler | None:
     path = get_log_file()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -41,7 +41,7 @@ def setup_logger(name: str = "zetatech") -> logging.Logger:
     logger.setLevel(logging.INFO)
     logger.addHandler(_console_handler())
 
-    file = build_rotating_file_handler()
+    file = file_handler()
     if file is not None:
         logger.addHandler(file)
     else:

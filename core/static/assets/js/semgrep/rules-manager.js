@@ -1,17 +1,15 @@
 (function() {
-
-
 window.loadSemgrepRules = async function() {
-    const rulesetsListEl = document.getElementById('semgrep-rulesets-list');
-    const customRulesListEl = document.getElementById('semgrep-custom-rules-list');
+    const setsEl = document.getElementById('semgrep-rulesets-list');
+    const customEl = document.getElementById('semgrep-custom-rules-list');
 
-    if (!rulesetsListEl || !customRulesListEl) return;
+    if (!setsEl || !customEl) return;
 
     try {
-        const response = await fetch('/api/semgrep/rules');
-        const data = await response.json();
+        const res = await fetch('/api/semgrep/rules');
+        const data = await res.json();
 
-        const formatRulesetLabel = (rs) => {
+        const fmtSet = (rs) => {
             const id = String(rs?.id || '').trim();
             if (!id) return 'p/custom';
             if (id.startsWith('p/') || id.startsWith('r/')) return id;
@@ -22,9 +20,9 @@ window.loadSemgrepRules = async function() {
             };
             return known[id] || `p/${id}`;
         };
-        const jsArg = (value) => JSON.stringify(String(value || ''));
+        const jsArg = (val) => JSON.stringify(String(val || ''));
 
-        let rulesetsHtml = `
+        let setsHtml = `
             <div class="semgrep-section-head">
                 <h3>SECURITY RULESETS</h3>
             </div>
@@ -34,21 +32,21 @@ window.loadSemgrepRules = async function() {
             </div>
         `;
 
-        const renderRulesetCard = (rs) => {
-            const idText = escapeHtml(formatRulesetLabel(rs));
+        const cardHtml = (rs) => {
+            const label = escapeHtml(fmtSet(rs));
             const rawId = escapeHtml(String(rs.id || ''));
             const link = escapeHtml(String(rs.url || '#'));
-            const enabled = !!rs.enabled;
-            const toggleTitle = enabled ? 'Set Disabled' : 'Set Active';
+            const on = !!rs.enabled;
+            const tip = on ? 'Set Disabled' : 'Set Active';
             return `
-                <div class="semgrep-ruleset-card${enabled ? '' : ' is-disabled'}">
+                <div class="semgrep-ruleset-card${on ? '' : ' is-disabled'}">
                     <div class="semgrep-ruleset-row">
                         <div class="semgrep-ruleset-meta">
-                            <span class="semgrep-ruleset-id" title="${rawId}">${idText}</span>
+                            <span class="semgrep-ruleset-id" title="${rawId}">${label}</span>
                             <a class="semgrep-ruleset-view" href="${link}" target="_blank" rel="noreferrer noopener">View ↗</a>
                         </div>
                         <div class="semgrep-card-actions">
-                            <button onclick='toggleRuleset(${jsArg(rs.id)})' class="semgrep-mini-toggle${enabled ? ' is-on' : ''}" title="${toggleTitle}" aria-label="${toggleTitle}"></button>
+                            <button onclick='toggleRuleset(${jsArg(rs.id)})' class="semgrep-mini-toggle${on ? ' is-on' : ''}" title="${tip}" aria-label="${tip}"></button>
                             ${rs.deletable ? `
                             <button onclick='deleteRuleset(${jsArg(rs.id)}, true)' class="action-btn semgrep-icon-btn semgrep-delete-btn" title="Delete Ruleset" aria-label="Delete Ruleset">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
@@ -60,20 +58,20 @@ window.loadSemgrepRules = async function() {
         };
 
         if (data.rulesets && data.rulesets.length > 0) {
-            const coreRulesetIds = new Set(['owasp-top-ten', 'php-security', 'security-audit']);
-            const coreRulesets = data.rulesets.filter(rs => coreRulesetIds.has(String(rs.id || '').trim()));
-            const extraRulesets = data.rulesets.filter(rs => !coreRulesetIds.has(String(rs.id || '').trim()));
+            const coreIds = new Set(['owasp-top-ten', 'php-security', 'security-audit']);
+            const core = data.rulesets.filter(rs => coreIds.has(String(rs.id || '').trim()));
+            const extra = data.rulesets.filter(rs => !coreIds.has(String(rs.id || '').trim()));
 
-            rulesetsHtml += coreRulesets.map(renderRulesetCard).join('');
+            setsHtml += core.map(cardHtml).join('');
 
-            if (extraRulesets.length > 0) {
-                rulesetsHtml += `<div style="margin-top: 12px; margin-bottom: 10px;">
-                    <div class="semgrep-subgroup-label">Advanced / Extra Rulesets (${extraRulesets.length})</div>
-                    ${extraRulesets.map(renderRulesetCard).join('')}
+            if (extra.length > 0) {
+                setsHtml += `<div style="margin-top: 12px; margin-bottom: 10px;">
+                    <div class="semgrep-subgroup-label">Advanced / Extra Rulesets (${extra.length})</div>
+                    ${extra.map(cardHtml).join('')}
                 </div>`;
             }
         } else {
-            rulesetsHtml += '<div class="semgrep-empty">No rulesets found. Add one above (example: p/cwe-top-25).</div>';
+            setsHtml += '<div class="semgrep-empty">No rulesets found. Add one above (example: p/cwe-top-25).</div>';
         }
 
         const custom = data.custom_rules || [];
@@ -85,9 +83,7 @@ window.loadSemgrepRules = async function() {
             ? 'background: rgba(255,0,85,0.1); color: #ff0055; border: 1px solid rgba(255,0,85,0.35);'
             : 'background: rgba(0,255,157,0.1); color: var(--accent-primary); border: 1px solid rgba(0,255,157,0.35);';
         const empty = custom.length === 0;
-        const disabledAttr = empty
-            ? 'disabled title="No custom rules to toggle"'
-            : '';
+        const disAttr = empty ? 'disabled title="No custom rules to toggle"' : '';
         const btnStyle = empty
             ? 'opacity:0.6; cursor:not-allowed; border:1px solid #444; color:#777; background:rgba(90,90,90,0.1);'
             : onStyle;
@@ -98,7 +94,7 @@ window.loadSemgrepRules = async function() {
                         onclick="toggleAllCustomRules(${nextOn})"
                         class="action-btn semgrep-outline-btn ${allOn ? 'is-danger' : ''}"
                         style="${btnStyle}"
-                        ${disabledAttr}
+                        ${disAttr}
                     >${btnText}</button>
                 </div>`;
 
@@ -126,16 +122,15 @@ window.loadSemgrepRules = async function() {
             customHtml += '<div class="semgrep-empty">No custom rules defined. Add one above.</div>';
         }
 
-        rulesetsListEl.innerHTML = rulesetsHtml;
-        customRulesListEl.innerHTML = customHtml;
-
-    } catch (error) {
-        console.error('Error loading Semgrep rules:', error);
-        const errHtml = `<div class="semgrep-empty" style="color: var(--accent-secondary);">Error loading rules: ${escapeHtml(error.message)}</div>`;
-        rulesetsListEl.innerHTML = errHtml;
-        customRulesListEl.innerHTML = errHtml;
+        setsEl.innerHTML = setsHtml;
+        customEl.innerHTML = customHtml;
+    } catch (err) {
+        console.error('Error loading Semgrep rules:', err);
+        const errHtml = `<div class="semgrep-empty" style="color: var(--accent-secondary);">Error loading rules: ${escapeHtml(err.message)}</div>`;
+        setsEl.innerHTML = errHtml;
+        customEl.innerHTML = errHtml;
     }
-}
+};
 
 window.toggleRuleset = async function(rulesetId) {
     try {

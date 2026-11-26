@@ -10,11 +10,11 @@ from core.routers.semgrep import helper as semgrep_helpers
 from core.routers.semgrep.task import SEMGREP_OUTPUTS_DIR
 
 
-def test_canonical_runtime_root_constant_matches_contract():
+def test_canonical_root():
     assert CANONICAL_RUNTIME_ROOT == Path("/home/appuser/.zetatech")
 
 
-def test_runtime_paths_define_canonical_root_and_children():
+def test_runtime_children():
     paths = resolve_runtime_paths()
 
     assert paths.root == Path("/home/appuser/.zetatech")
@@ -26,7 +26,7 @@ def test_runtime_paths_define_canonical_root_and_children():
     assert paths.approvals_dir == paths.root / "approvals"
 
 
-def test_runtime_paths_are_stable_within_one_process():
+def test_runtime_cached():
     first = resolve_runtime_paths()
     second = resolve_runtime_paths()
 
@@ -34,7 +34,7 @@ def test_runtime_paths_are_stable_within_one_process():
     assert first == second
 
 
-def test_semgrep_helpers_and_scanner_use_runtime_paths():
+def test_semgrep_paths():
     paths = resolve_runtime_paths()
 
     assert semgrep_helpers.SEMGREP_STATE_DIR == paths.semgrep_dir
@@ -45,28 +45,28 @@ def test_semgrep_helpers_and_scanner_use_runtime_paths():
     assert DEFAULT_SEMGREP_OUTPUT_DIR == paths.semgrep_outputs_dir
 
 
-def test_database_defaults_use_runtime_resolver(monkeypatch):
+def test_db_default(monkeypatch):
     monkeypatch.delenv("ZETATECH_DB", raising=False)
 
     assert DEFAULT_DB_PATH == resolve_runtime_paths().db_file
     assert get_db_path() == resolve_runtime_paths().db_file
 
 
-def test_logger_uses_runtime_resolver():
+def test_log_path():
     assert get_log_file() == resolve_runtime_paths().logs_dir / "zetatech.log"
 
 
-def test_scan_repository_accepts_explicit_runtime_resolver_path(tmp_path):
-    runtime_db_path = tmp_path / "runtime-root" / "zetatech.db"
-    repo = ScanRepository(db_path=runtime_db_path)
+def test_scan_repo_path(tmp_path):
+    db = tmp_path / "runtime-root" / "zetatech.db"
+    repo = ScanRepository(db_path=db)
 
-    assert repo.db_path == runtime_db_path
-    assert runtime_db_path.exists()
+    assert repo.db_path == db
+    assert db.exists()
 
 
-def test_ai_repository_accepts_explicit_runtime_resolver_path(tmp_path):
-    runtime_db_path = tmp_path / "runtime-root" / "zetatech.db"
-    repository = AIRepository(db_path=runtime_db_path)
+def test_ai_repo_path(tmp_path):
+    db = tmp_path / "runtime-root" / "zetatech.db"
+    repo = AIRepository(db_path=db)
 
-    assert repository.db_path == runtime_db_path
-    assert runtime_db_path.exists()
+    assert repo.db_path == db
+    assert db.exists()

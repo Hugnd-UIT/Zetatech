@@ -22,7 +22,7 @@ DEFAULT_PROVIDER_BASE_URLS = {
 OPENAI_COMPATIBLE_PROVIDERS = {"openai", "grok", "gemini"}
 
 
-def normalize_provider_base_url(provider: str, base_url: str | None) -> str:
+def norm_url(provider: str, base_url: str | None) -> str:
     url = str(base_url or "").strip().rstrip("/")
     if url:
         return url
@@ -82,7 +82,7 @@ def test_openai_connection(*, api_key: str, model: str, base_url: str | None) ->
         "temperature": 0,
     }
     response = post_json(
-        f"{normalize_provider_base_url('openai', base_url)}/chat/completions",
+        f"{norm_url('openai', base_url)}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},
         body=payload,
     )
@@ -114,7 +114,7 @@ def test_anthropic_connection(*, api_key: str, model: str, base_url: str | None)
         "system": TEST_PROMPT,
     }
     res = post_json(
-        f"{normalize_provider_base_url('anthropic', base_url)}/v1/messages",
+        f"{norm_url('anthropic', base_url)}/v1/messages",
         headers={
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01",
@@ -135,7 +135,7 @@ def test_anthropic_connection(*, api_key: str, model: str, base_url: str | None)
     return content
 
 
-def run_provider_connection_test(*, provider: str, api_key: str, model: str, base_url: str | None) -> str:
+def test_provider(*, provider: str, api_key: str, model: str, base_url: str | None) -> str:
     if provider == "anthropic":
         return test_anthropic_connection(api_key=api_key, model=model, base_url=base_url)
     if provider in OPENAI_COMPATIBLE_PROVIDERS:

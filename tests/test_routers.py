@@ -15,7 +15,7 @@ UPDATE_COMMAND = (
 )
 
 
-def test_update_command_fixture_uses_single_named_volume():
+def test_update_cmd():
     assert UPDATE_COMMAND.count("-v ") == 1
     assert "-v zetatech-data:/home/appuser/.zetatech" in UPDATE_COMMAND
     assert "zetatech-plugins" not in UPDATE_COMMAND
@@ -79,7 +79,7 @@ class _DummyUpdateManager:
             "last_error": None,
         }
 
-    def get_manual_update_payload(self):
+    def manual_payload(self):
         self.manual_payload_calls += 1
         if self.raise_manual_payload:
             raise self.raise_manual_payload
@@ -106,20 +106,20 @@ def _create_test_client(monkeypatch):
     return TestClient(create_app(), base_url="http://localhost"), manager
 
 
-def test_catalog_plugins_endpoint_forwards_query_params(monkeypatch):
+def test_catalog_plugins(monkeypatch):
     from core.routers import catalog
 
     repo = _DummyRepo()
     monkeypatch.setattr(catalog, "repo", repo)
     client, _ = _create_test_client(monkeypatch)
 
-    response = client.get(
+    res = client.get(
         "/api/catalog/plugins",
         params={"q": "seo", "sort_by": "score", "order": "asc", "limit": 25, "offset": 10},
     )
 
-    assert response.status_code == 200
-    assert response.json() == {"items": [{"slug": "akismet"}], "total": 1}
+    assert res.status_code == 200
+    assert res.json() == {"items": [{"slug": "akismet"}], "total": 1}
     assert repo.calls == [
         (
             "get_catalog_plugins",
@@ -128,20 +128,20 @@ def test_catalog_plugins_endpoint_forwards_query_params(monkeypatch):
     ]
 
 
-def test_catalog_plugin_sessions_endpoint_wraps_repo_response(monkeypatch):
+def test_catalog_sessions(monkeypatch):
     from core.routers import catalog
 
     repo = _DummyRepo()
     monkeypatch.setattr(catalog, "repo", repo)
     client, _ = _create_test_client(monkeypatch)
 
-    response = client.get(
+    res = client.get(
         "/api/catalog/plugins/akismet/sessions",
         params={"is_theme": "false", "limit": 5},
     )
 
-    assert response.status_code == 200
-    assert response.json() == {
+    assert res.status_code == 200
+    assert res.json() == {
         "slug": "akismet",
         "sessions": [{"session_id": 7, "score": 90}],
     }
@@ -153,21 +153,21 @@ def test_catalog_plugin_sessions_endpoint_wraps_repo_response(monkeypatch):
     ]
 
 
-def test_system_update_endpoint_exposes_runtime_metadata(monkeypatch):
-    manager = _DummyUpdateManager()
-    test_db_path = Path("/Users/Hugnd-UIT/Desktop/zetatech/.pytest-task05-router.db")
-    monkeypatch.setattr("core.app.ensure_db_dir", lambda path=None: test_db_path)
-    monkeypatch.setattr("core.app.release.manager", manager)
-    monkeypatch.setattr("core.routers.system.release.manager", manager)
+def test_update_metadata(monkeypatch):
+    mgr = _DummyUpdateManager()
+    db = Path("/Users/Hugnd-UIT/Desktop/zetatech/.pytest-task05-router.db")
+    monkeypatch.setattr("core.app.ensure_db_dir", lambda path=None: db)
+    monkeypatch.setattr("core.app.release.manager", mgr)
+    monkeypatch.setattr("core.routers.system.release.manager", mgr)
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_BUILD", "build-123")
     client = TestClient(create_app(), base_url="http://localhost")
 
-    response = client.get("/api/system/update")
+    res = client.get("/api/system/update")
 
-    assert response.status_code == 200
-    assert response.json() == {
+    assert res.status_code == 200
+    assert res.json() == {
         "current_version": "0.1.3",
         "current_tag": "v0.1.3",
         "build_id": "build-123",
@@ -187,18 +187,18 @@ def test_system_update_endpoint_exposes_runtime_metadata(monkeypatch):
         "last_error": None,
     }
     assert client.app.version == "0.1.3"
-    assert manager.status_calls == [False, False]
+    assert mgr.status_calls == [False, False]
 
 
-def test_favorites_endpoints_delegate_to_repository(monkeypatch):
+def test_favorites_routes(monkeypatch):
     from core.routers import favorites
 
     repo = _DummyRepo()
     monkeypatch.setattr(favorites, "repo", repo)
     client, _ = _create_test_client(monkeypatch)
 
-    list_response = client.get("/api/favorites")
-    add_response = client.post(
+    list_res = client.get("/api/favorites")
+    add_res = client.post(
         "/api/favorites",
         json={
             "slug": "akismet",
@@ -223,14 +223,14 @@ def test_favorites_endpoints_delegate_to_repository(monkeypatch):
             "code_analysis": {"summary": "ok"},
         },
     )
-    delete_response = client.delete("/api/favorites/akismet")
+    del_res = client.delete("/api/favorites/akismet")
 
-    assert list_response.status_code == 200
-    assert list_response.json() == {"favorites": [{"slug": "akismet"}]}
-    assert add_response.status_code == 200
-    assert add_response.json() == {"success": True}
-    assert delete_response.status_code == 200
-    assert delete_response.json() == {"success": True}
+    assert list_res.status_code == 200
+    assert list_res.json() == {"favorites": [{"slug": "akismet"}]}
+    assert add_res.status_code == 200
+    assert add_res.json() == {"success": True}
+    assert del_res.status_code == 200
+    assert del_res.json() == {"success": True}
 
     assert repo.calls[0] == ("get_favorites", {})
     assert repo.calls[1][0] == "add_favorite"
@@ -239,13 +239,13 @@ def test_favorites_endpoints_delegate_to_repository(monkeypatch):
     assert repo.calls[2] == ("remove_favorite", {"slug": "akismet"})
 
 
-def test_system_update_status_endpoint_returns_manager_payload(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
+def test_update_status(monkeypatch):
+    client, mgr = _create_test_client(monkeypatch)
 
-    response = client.get("/api/system/update", params={"force": "true"})
+    res = client.get("/api/system/update", params={"force": "true"})
 
-    assert response.status_code == 200
-    assert response.json() == {
+    assert res.status_code == 200
+    assert res.json() == {
         "current_version": "0.1.3",
         "current_tag": "v0.1.3",
         "build_id": "build-123",
@@ -264,14 +264,14 @@ def test_system_update_status_endpoint_returns_manager_payload(monkeypatch):
         "checked_at": "2026-04-16T00:00:00Z",
         "last_error": None,
     }
-    assert manager.status_calls[-1] is True
+    assert mgr.status_calls[-1] is True
 
 
-def test_system_update_status_endpoint_returns_degraded_payload(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
+def test_update_degraded(monkeypatch):
+    client, mgr = _create_test_client(monkeypatch)
 
-    def degraded_status(force=False):
-        manager.status_calls.append(force)
+    def _degraded(force=False):
+        mgr.status_calls.append(force)
         return {
             "current_version": "0.1.3",
             "current_tag": "v0.1.3",
@@ -284,12 +284,12 @@ def test_system_update_status_endpoint_returns_degraded_payload(monkeypatch):
             "manual_update_required": False,
         }
 
-    manager.get_status = degraded_status
+    mgr.get_status = _degraded
 
-    response = client.get("/api/system/update")
+    res = client.get("/api/system/update")
 
-    assert response.status_code == 200
-    assert response.json() == {
+    assert res.status_code == 200
+    assert res.json() == {
         "current_version": "0.1.3",
         "current_tag": "v0.1.3",
         "runtime_status": "degraded",
@@ -300,40 +300,40 @@ def test_system_update_status_endpoint_returns_degraded_payload(monkeypatch):
         "message": "Release information is temporarily unavailable.",
         "manual_update_required": False,
     }
-    assert manager.status_calls[-1] is False
+    assert mgr.status_calls[-1] is False
 
 
-def test_system_update_status_endpoint_payload_is_stable_across_states(monkeypatch):
+def test_update_shape(monkeypatch):
     client, _ = _create_test_client(monkeypatch)
 
-    up_to_date_response = client.get("/api/system/update")
-    update_available_response = client.get("/api/system/update", params={"force": "true"})
+    up_res = client.get("/api/system/update")
+    new_res = client.get("/api/system/update", params={"force": "true"})
 
-    up_to_date_payload = up_to_date_response.json()
-    update_available_payload = update_available_response.json()
+    up = up_res.json()
+    new = new_res.json()
 
-    assert up_to_date_response.status_code == 200
-    assert update_available_response.status_code == 200
-    assert set(up_to_date_payload.keys()) == set(update_available_payload.keys())
-    assert up_to_date_payload["status"] == "up_to_date"
-    assert update_available_payload["status"] == "update_available"
-    assert up_to_date_payload["current_version"] == update_available_payload["current_version"] == "0.1.3"
-    assert up_to_date_payload["current_tag"] == update_available_payload["current_tag"] == "v0.1.3"
-    assert up_to_date_payload["update_command"] is None
-    assert update_available_payload["update_command"] == UPDATE_COMMAND
-    assert up_to_date_payload["update_available"] is False
-    assert update_available_payload["update_available"] is True
-    assert up_to_date_payload["manual_update_required"] is False
-    assert update_available_payload["manual_update_required"] is True
-    assert up_to_date_payload["latest_version"] == "v0.1.3"
-    assert update_available_payload["latest_version"] == "v0.2.0"
+    assert up_res.status_code == 200
+    assert new_res.status_code == 200
+    assert set(up.keys()) == set(new.keys())
+    assert up["status"] == "up_to_date"
+    assert new["status"] == "update_available"
+    assert up["current_version"] == new["current_version"] == "0.1.3"
+    assert up["current_tag"] == new["current_tag"] == "v0.1.3"
+    assert up["update_command"] is None
+    assert new["update_command"] == UPDATE_COMMAND
+    assert up["update_available"] is False
+    assert new["update_available"] is True
+    assert up["manual_update_required"] is False
+    assert new["manual_update_required"] is True
+    assert up["latest_version"] == "v0.1.3"
+    assert new["latest_version"] == "v0.2.0"
 
 
-def test_system_update_endpoint_degraded_payload_is_frontend_consumable(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
+def test_degraded_shape(monkeypatch):
+    client, mgr = _create_test_client(monkeypatch)
 
-    def degraded_status(force=False):
-        manager.status_calls.append(force)
+    def _degraded(force=False):
+        mgr.status_calls.append(force)
         return {
             "current_version": "0.1.3",
             "current_tag": "v0.1.3",
@@ -346,13 +346,13 @@ def test_system_update_endpoint_degraded_payload_is_frontend_consumable(monkeypa
             "manual_update_required": False,
         }
 
-    manager.get_status = degraded_status
+    mgr.get_status = _degraded
 
-    response = client.get("/api/system/update")
-    payload = response.json()
+    res = client.get("/api/system/update")
+    data = res.json()
 
-    assert response.status_code == 200
-    assert set(payload.keys()) == {
+    assert res.status_code == 200
+    assert set(data.keys()) == {
         "current_version",
         "current_tag",
         "runtime_status",
@@ -363,86 +363,86 @@ def test_system_update_endpoint_degraded_payload_is_frontend_consumable(monkeypa
         "message",
         "manual_update_required",
     }
-    assert payload["status"] == "degraded"
-    assert payload["runtime_status"] == "degraded"
-    assert payload["latest_version"] is None
-    assert payload["update_command"] is None
-    assert payload["update_available"] is False
+    assert data["status"] == "degraded"
+    assert data["runtime_status"] == "degraded"
+    assert data["latest_version"] is None
+    assert data["update_command"] is None
+    assert data["update_available"] is False
 
 
-def test_system_update_status_endpoint_returns_503_on_failure(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
-    manager.raise_status = RuntimeError("boom")
+def test_update_503(monkeypatch):
+    client, mgr = _create_test_client(monkeypatch)
+    mgr.raise_status = RuntimeError("boom")
 
-    response = client.get("/api/system/update")
+    res = client.get("/api/system/update")
 
-    assert response.status_code == 503
-    assert response.json()["detail"] == "Unable to check for releases right now."
+    assert res.status_code == 503
+    assert res.json()["detail"] == "Unable to check for releases right now."
 
 
-def test_create_app_starts_when_file_logging_is_unwritable(monkeypatch, tmp_path):
-    import logger as logger_module
+def test_unwritable_logs(monkeypatch, tmp_path):
+    import logger as mod
     from paths import RuntimePaths
 
-    unwritable_logs_dir = tmp_path / "blocked-home" / ".zetatech" / "logs"
-    runtime_root = unwritable_logs_dir.parent
-    runtime_paths = RuntimePaths(
-        root=runtime_root,
-        db_file=runtime_root / "zetatech.db",
-        logs_dir=unwritable_logs_dir,
-        plugins_dir=runtime_root / "plugins",
-        semgrep_dir=runtime_root / "semgrep",
-        semgrep_outputs_dir=runtime_root / "semgrep-results",
-        approvals_dir=runtime_root / "approvals",
+    logs = tmp_path / "blocked-home" / ".zetatech" / "logs"
+    root = logs.parent
+    paths = RuntimePaths(
+        root=root,
+        db_file=root / "zetatech.db",
+        logs_dir=logs,
+        plugins_dir=root / "plugins",
+        semgrep_dir=root / "semgrep",
+        semgrep_outputs_dir=root / "semgrep-results",
+        approvals_dir=root / "approvals",
     )
 
-    def fail_mkdir(self, *args, **kwargs):
-        if self == unwritable_logs_dir:
+    def _fail(self, *args, **kwargs):
+        if self == logs:
             raise PermissionError("blocked")
-        return original_mkdir(self, *args, **kwargs)
+        return mkdir(self, *args, **kwargs)
 
-    original_mkdir = Path.mkdir
-    monkeypatch.setattr(logger_module, "resolve_runtime_paths", lambda: runtime_paths)
+    mkdir = Path.mkdir
+    monkeypatch.setattr(mod, "resolve_runtime_paths", lambda: paths)
 
-    def db_dir_ok(path=None):
+    def _ok(path=None):
         assert path is None
-        runtime_root.mkdir(parents=True, exist_ok=True)
-        return runtime_paths.db_file
+        root.mkdir(parents=True, exist_ok=True)
+        return paths.db_file
 
-    monkeypatch.setattr("core.app.ensure_db_dir", db_dir_ok)
-    monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+    monkeypatch.setattr("core.app.ensure_db_dir", _ok)
+    monkeypatch.setattr(Path, "mkdir", _fail)
 
-    client, manager = _create_test_client(monkeypatch)
-    response = client.get("/health")
+    client, mgr = _create_test_client(monkeypatch)
+    res = client.get("/health")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-    assert manager.status_calls == [False]
+    assert res.status_code == 200
+    assert res.json() == {"status": "ok"}
+    assert mgr.status_calls == [False]
 
 
-def test_create_app_fails_when_runtime_db_root_is_unwritable(monkeypatch, tmp_path):
-    blocked_db_path = tmp_path / "blocked-home" / ".zetatech" / "zetatech.db"
+def test_unwritable_db(monkeypatch, tmp_path):
+    db = tmp_path / "blocked-home" / ".zetatech" / "zetatech.db"
 
-    def fail_db_dir(path=None):
+    def _fail(path=None):
         assert path is None
-        raise PermissionError(f"Database directory is not writable: {blocked_db_path.parent}")
+        raise PermissionError(f"Database directory is not writable: {db.parent}")
 
-    monkeypatch.setattr("core.app.ensure_db_dir", fail_db_dir)
+    monkeypatch.setattr("core.app.ensure_db_dir", _fail)
 
     try:
         create_app()
         assert False, "Expected PermissionError"
     except PermissionError as exc:
-        assert str(blocked_db_path.parent) in str(exc)
+        assert str(db.parent) in str(exc)
 
 
-def test_system_trigger_update_returns_manual_helper_payload(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
+def test_trigger_update(monkeypatch):
+    client, mgr = _create_test_client(monkeypatch)
 
-    response = client.post("/api/system/update")
+    res = client.post("/api/system/update")
 
-    assert response.status_code == 200
-    assert response.json() == {
+    assert res.status_code == 200
+    assert res.json() == {
         "status": "update_available",
         "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
         "current_version": "0.1.3",
@@ -454,28 +454,28 @@ def test_system_trigger_update_returns_manual_helper_payload(monkeypatch):
         "manual_update_only": True,
         "deprecated": True,
     }
-    assert manager.manual_payload_calls == 1
+    assert mgr.manual_payload_calls == 1
 
 
-def test_system_trigger_update_is_deprecated_manual_only_endpoint(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
+def test_trigger_deprecated(monkeypatch):
+    client, mgr = _create_test_client(monkeypatch)
 
-    response = client.post("/api/system/update")
-    payload = response.json()
+    res = client.post("/api/system/update")
+    data = res.json()
 
-    assert response.status_code == 200
-    assert payload["deprecated"] is True
-    assert payload["manual_update_only"] is True
-    assert payload["update_command"] == UPDATE_COMMAND
-    assert manager.manual_payload_calls == 1
-    assert manager.status_calls == [False]
+    assert res.status_code == 200
+    assert data["deprecated"] is True
+    assert data["manual_update_only"] is True
+    assert data["update_command"] == UPDATE_COMMAND
+    assert mgr.manual_payload_calls == 1
+    assert mgr.status_calls == [False]
 
 
-def test_system_trigger_update_degraded_payload_stays_notify_only(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
+def test_trigger_degraded(monkeypatch):
+    client, mgr = _create_test_client(monkeypatch)
 
-    def degraded_manual_payload():
-        manager.manual_payload_calls += 1
+    def _degraded():
+        mgr.manual_payload_calls += 1
         return {
             "status": "degraded",
             "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
@@ -489,12 +489,12 @@ def test_system_trigger_update_degraded_payload_stays_notify_only(monkeypatch):
             "deprecated": True,
         }
 
-    manager.get_manual_update_payload = degraded_manual_payload
+    mgr.manual_payload = _degraded
 
-    response = client.post("/api/system/update")
+    res = client.post("/api/system/update")
 
-    assert response.status_code == 200
-    assert response.json() == {
+    assert res.status_code == 200
+    assert res.json() == {
         "status": "degraded",
         "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
         "current_version": "0.1.3",
@@ -506,16 +506,16 @@ def test_system_trigger_update_degraded_payload_stays_notify_only(monkeypatch):
         "manual_update_only": True,
         "deprecated": True,
     }
-    assert manager.manual_payload_calls == 1
-    assert manager.status_calls == [False]
+    assert mgr.manual_payload_calls == 1
+    assert mgr.status_calls == [False]
 
 
-def test_system_trigger_update_returns_503_when_helper_generation_fails(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
-    manager.raise_manual_payload = RuntimeError("boom")
+def test_trigger_503(monkeypatch):
+    client, mgr = _create_test_client(monkeypatch)
+    mgr.raise_manual_payload = RuntimeError("boom")
 
-    response = client.post("/api/system/update")
+    res = client.post("/api/system/update")
 
-    assert response.status_code == 503
-    assert response.json()["detail"] == "Unable to prepare manual update instructions right now."
-    assert manager.manual_payload_calls == 1
+    assert res.status_code == 503
+    assert res.json()["detail"] == "Unable to prepare manual update instructions right now."
+    assert mgr.manual_payload_calls == 1

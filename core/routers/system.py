@@ -25,7 +25,7 @@ async def get_update_status(force: bool = False):
 @router.post("/update")
 async def trigger_update():
     try:
-        payload = await asyncio.to_thread(release.manager.get_manual_update_payload)
+        payload = await asyncio.to_thread(release.manager.manual_payload)
         return payload
     except Exception as exc:
         logger.exception("Update helper request failed")

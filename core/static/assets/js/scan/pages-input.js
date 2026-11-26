@@ -1,94 +1,91 @@
 (function() {
-const RANDOM_PAGES_MIN = 1;
-const RANDOM_PAGES_MAX = 50;
-const PAGES_FIXED_ATTR = 'data-pages-fixed';
+    const MIN = 1;
+    const MAX = 50;
+    const ATTR = 'data-pages-fixed';
 
-function getPagesInput() {
-    return document.querySelector('#configForm input[name="pages"]');
-}
-
-function randomInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function clampPagesValue(value) {
-    if (!Number.isFinite(value)) return randomInt(RANDOM_PAGES_MIN, RANDOM_PAGES_MAX);
-    return Math.max(RANDOM_PAGES_MIN, Math.min(RANDOM_PAGES_MAX, value));
-}
-
-function isPagesFixedByUser() {
-    const input = getPagesInput();
-    return !!input && input.getAttribute(PAGES_FIXED_ATTR) === '1';
-}
-
-function setRandomPagesValue(force = false) {
-    const input = getPagesInput();
-    if (!input) return;
-    if (!force && isPagesFixedByUser()) return;
-    input.value = String(randomInt(RANDOM_PAGES_MIN, RANDOM_PAGES_MAX));
-    if (!isPagesFixedByUser()) {
-        input.setAttribute(PAGES_FIXED_ATTR, '0');
+    function pagesInput() {
+        return document.querySelector('#configForm input[name="pages"]');
     }
-}
 
-function initializePagesAutoRandom() {
-    const input = getPagesInput();
-    if (!input) return;
-
-    input.setAttribute(PAGES_FIXED_ATTR, '0');
-    input.min = String(RANDOM_PAGES_MIN);
-    input.max = String(RANDOM_PAGES_MAX);
-
-    const markFixedOrRandom = () => {
-        const raw = String(input.value || '').trim();
-        if (!raw) {
-            input.setAttribute(PAGES_FIXED_ATTR, '0');
-            setRandomPagesValue(true);
-            return;
-        }
-
-        const parsed = Number.parseInt(raw, 10);
-        if (!Number.isFinite(parsed)) {
-            input.setAttribute(PAGES_FIXED_ATTR, '0');
-            setRandomPagesValue(true);
-            return;
-        }
-
-        const clamped = clampPagesValue(parsed);
-        input.value = String(clamped);
-        input.setAttribute(PAGES_FIXED_ATTR, '1');
-    };
-
-    input.addEventListener('input', () => {
-        const raw = String(input.value || '').trim();
-        if (!raw) {
-            input.setAttribute(PAGES_FIXED_ATTR, '0');
-            return;
-        }
-        const parsed = Number.parseInt(raw, 10);
-        if (Number.isFinite(parsed)) {
-            input.setAttribute(PAGES_FIXED_ATTR, '1');
-        }
-    });
-
-    input.addEventListener('blur', markFixedOrRandom);
-
-    setRandomPagesValue(true);
-}
-
-function preparePagesValueBeforeScan() {
-    const input = getPagesInput();
-    if (!input) return randomInt(RANDOM_PAGES_MIN, RANDOM_PAGES_MAX);
-    if (!isPagesFixedByUser()) {
-        setRandomPagesValue(true);
+    function randInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
     }
-    const parsed = Number.parseInt(String(input.value || ''), 10);
-    const clamped = clampPagesValue(parsed);
-    input.value = String(clamped);
-    return clamped;
-}
 
+    function clampPages(val) {
+        if (!Number.isFinite(val)) return randInt(MIN, MAX);
+        return Math.max(MIN, Math.min(MAX, val));
+    }
 
-    window.initializePagesAutoRandom = initializePagesAutoRandom;
-    window.preparePagesValueBeforeScan = preparePagesValueBeforeScan;
+    function isFixed() {
+        const el = pagesInput();
+        return !!el && el.getAttribute(ATTR) === '1';
+    }
+
+    function setRandom(force = false) {
+        const el = pagesInput();
+        if (!el) return;
+        if (!force && isFixed()) return;
+        el.value = String(randInt(MIN, MAX));
+        if (!isFixed()) {
+            el.setAttribute(ATTR, '0');
+        }
+    }
+
+    function initPages() {
+        const el = pagesInput();
+        if (!el) return;
+
+        el.setAttribute(ATTR, '0');
+        el.min = String(MIN);
+        el.max = String(MAX);
+
+        const onBlur = () => {
+            const raw = String(el.value || '').trim();
+            if (!raw) {
+                el.setAttribute(ATTR, '0');
+                setRandom(true);
+                return;
+            }
+
+            const num = Number.parseInt(raw, 10);
+            if (!Number.isFinite(num)) {
+                el.setAttribute(ATTR, '0');
+                setRandom(true);
+                return;
+            }
+
+            el.value = String(clampPages(num));
+            el.setAttribute(ATTR, '1');
+        };
+
+        el.addEventListener('input', () => {
+            const raw = String(el.value || '').trim();
+            if (!raw) {
+                el.setAttribute(ATTR, '0');
+                return;
+            }
+            const num = Number.parseInt(raw, 10);
+            if (Number.isFinite(num)) {
+                el.setAttribute(ATTR, '1');
+            }
+        });
+
+        el.addEventListener('blur', onBlur);
+        setRandom(true);
+    }
+
+    function prepPages() {
+        const el = pagesInput();
+        if (!el) return randInt(MIN, MAX);
+        if (!isFixed()) {
+            setRandom(true);
+        }
+        const num = Number.parseInt(String(el.value || ''), 10);
+        const val = clampPages(num);
+        el.value = String(val);
+        return val;
+    }
+
+    window.initializePagesAutoRandom = initPages;
+    window.preparePagesValueBeforeScan = prepPages;
 })();

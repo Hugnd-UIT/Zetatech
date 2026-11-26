@@ -44,7 +44,7 @@ PACKAGE_CUSTOM_RULES_PATH = (
 )
 
 
-def ensure_semgrep_state_dir() -> bool:
+def ensure_state() -> bool:
     try:
         SEMGREP_STATE_DIR.mkdir(parents=True, exist_ok=True)
         return True
@@ -53,7 +53,7 @@ def ensure_semgrep_state_dir() -> bool:
         return False
 
 
-def _yaml_file_has_rules(path: Path) -> bool:
+def _has_rules(path: Path) -> bool:
     try:
         if not path.exists():
             return False
@@ -65,18 +65,18 @@ def _yaml_file_has_rules(path: Path) -> bool:
         return False
 
 
-def bootstrap_default_custom_rules() -> None:
-    if not ensure_semgrep_state_dir():
+def bootstrap_rules() -> None:
+    if not ensure_state():
         return
 
-    boot = not _yaml_file_has_rules(CUSTOM_RULES_PATH)
+    boot = not _has_rules(CUSTOM_RULES_PATH)
     if boot:
         for candidate in (
             ROOT_CUSTOM_RULES_PATH,
             LEGACY_CUSTOM_RULES_PATH,
             PACKAGE_CUSTOM_RULES_PATH,
         ):
-            if not _yaml_file_has_rules(candidate):
+            if not _has_rules(candidate):
                 continue
             try:
                 shutil.copy2(candidate, CUSTOM_RULES_PATH)
@@ -106,11 +106,11 @@ def get_disabled_config() -> Dict[str, List[str]]:
                     "extra_rulesets": cfg.get("extra_rulesets", []),
                 }
                 norm["rulesets"] = list(
-                    dict.fromkeys(_canonicalize_ruleset_value(r) for r in norm["rulesets"])
+                    dict.fromkeys(_canon_ruleset(r) for r in norm["rulesets"])
                 )
                 norm["extra_rulesets"] = list(
                     dict.fromkeys(
-                        _canonicalize_ruleset_value(r)
+                        _canon_ruleset(r)
                         for r in norm["extra_rulesets"]
                     )
                 )
@@ -131,7 +131,7 @@ def get_disabled_config() -> Dict[str, List[str]]:
 
 
 def save_disabled_config(config: Dict[str, List[str]]):
-    if not ensure_semgrep_state_dir():
+    if not ensure_state():
         raise PermissionError("Semgrep persistent state is not writable in the current runtime environment.")
     DISABLED_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(DISABLED_CONFIG_PATH, "w") as f:
@@ -147,7 +147,7 @@ def get_active_rulesets() -> List[str]:
     return [rs for rs in unique if rs not in disabled]
 
 
-def _normalize_ruleset_value(raw: str) -> str:
+def _norm_ruleset(raw: str) -> str:
     value = (raw or "").strip()
     if not value:
         return value
@@ -159,51 +159,51 @@ def _normalize_ruleset_value(raw: str) -> str:
     return value
 
 
-def _canonicalize_ruleset_value(raw: str) -> str:
-    normalized = _normalize_ruleset_value(raw)
+def _canon_ruleset(raw: str) -> str:
+    normalized = _norm_ruleset(raw)
     return CORE_RULESET_CONFIG_TO_KEY.get(normalized, normalized)
 
 
-def _validate_slug_or_raise(slug: str) -> str:
+def _check_slug(slug: str) -> str:
     value = (slug or "").strip()
     if not SLUG_PATTERN.fullmatch(value):
         raise ValueError("Invalid slug format")
     return value
 
 
-def _validate_rule_id_or_raise(rule_id: str) -> str:
+def _check_rule(rule_id: str) -> str:
     value = (rule_id or "").strip()
     if not RULE_ID_PATTERN.match(value):
         raise ValueError("Invalid rule ID format")
     return value
 
 
-def validate_ruleset_or_raise(ruleset_id: str) -> str:
-    ruleset_id = _canonicalize_ruleset_value(ruleset_id)
+def check_ruleset(ruleset_id: str) -> str:
+    ruleset_id = _canon_ruleset(ruleset_id)
     if not RULESET_PATTERN.match(ruleset_id):
         raise ValueError("Invalid ruleset format")
     return ruleset_id
 
 
-def _build_bulk_download_url(plugin: Dict[str, Any], slug: str) -> str:
+def _bulk_url(plugin: Dict[str, Any], slug: str) -> str:
     version = plugin.get("version") or "latest"
     return plugin.get("download_link") or (
         f"https://downloads.wordpress.org/plugin/{slug}.{version}.zip"
     )
 
 
-def _extract_bulk_plugin_meta(plugin: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def _bulk_meta(plugin: Dict[str, Any]) -> Optional[Dict[str, str]]:
     raw_slug = plugin.get("slug")
     if not raw_slug:
         return None
 
-    slug = _validate_slug_or_raise(str(raw_slug))
+    slug = _check_slug(str(raw_slug))
     version = str(plugin.get("version") or "latest")
-    download_url = _build_bulk_download_url(plugin, slug)
+    download_url = _bulk_url(plugin, slug)
     return {"slug": slug, "version": version, "download_url": download_url}
 
 
-def _validate_semgrep_rules_config(rules_config: Dict[str, Any]) -> Optional[str]:
+def _check_rules(rules_config: Dict[str, Any]) -> Optional[str]:
     cmd = get_semgrep_command()
     if not cmd:
         return "Semgrep is not available for rule validation."
@@ -242,7 +242,7 @@ def _validate_semgrep_rules_config(rules_config: Dict[str, Any]) -> Optional[str
 
 
 def load_custom_rules() -> List[Dict[str, Any]]:
-    bootstrap_default_custom_rules()
+    bootstrap_rules()
     items: List[Dict[str, Any]] = []
     if CUSTOM_RULES_PATH.exists():
         try:
@@ -275,8 +275,8 @@ def load_custom_rules() -> List[Dict[str, Any]]:
     return items
 
 
-def load_custom_rules_document() -> Dict[str, Any]:
-    bootstrap_default_custom_rules()
+def load_doc() -> Dict[str, Any]:
+    bootstrap_rules()
     if CUSTOM_RULES_PATH.exists():
         try:
             with open(CUSTOM_RULES_PATH, "r") as f:
@@ -286,15 +286,15 @@ def load_custom_rules_document() -> Dict[str, Any]:
     return {"rules": []}
 
 
-def save_custom_rules_document(rules_data: Dict[str, Any]) -> None:
-    if not ensure_semgrep_state_dir():
+def save_doc(rules_data: Dict[str, Any]) -> None:
+    if not ensure_state():
         raise PermissionError("Semgrep persistent state is not writable in the current runtime environment.")
     CUSTOM_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CUSTOM_RULES_PATH, "w") as f:
         yaml.dump(rules_data, f, default_flow_style=False, sort_keys=False)
 
 
-def build_semgrep_rules_response() -> Dict[str, Any]:
+def rules_response() -> Dict[str, Any]:
     installed = is_semgrep_available()
     cfg = get_disabled_config()
     disabled_rules = set(cfg["rules"])
@@ -317,7 +317,7 @@ def build_semgrep_rules_response() -> Dict[str, Any]:
 
     seen = {r["id"] for r in rulesets}
     for extra in cfg.get("extra_rulesets", []):
-        norm = _normalize_ruleset_value(extra)
+        norm = _norm_ruleset(extra)
         if not norm or norm in seen:
             continue
         url = (

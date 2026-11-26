@@ -1,10 +1,10 @@
 from typing import Any, Dict, List, Optional
 
 from agents.repos.utils import (
+    decode_event,
     decode_message_row,
     decode_row,
-    decode_run_event_row,
-    decode_run_task_row,
+    decode_task,
     fetch_message,
     fetch_run,
     fetch_run_events,
@@ -14,7 +14,7 @@ from agents.repos.utils import (
     insert_run,
     insert_run_event,
     touch_thread_row,
-    upsert_run_task_row,
+    upsert_task,
 )
 from database.models import get_db
 
@@ -95,7 +95,7 @@ class RunMixin:
             event_id = insert_run_event(cursor, run_id, event_type, agent_name, task_id, payload)
             conn.commit()
             cursor.execute("SELECT * FROM ai_run_events WHERE id = ?", (event_id,))
-            return decode_run_event_row(cursor.fetchone())
+            return decode_event(cursor.fetchone())
 
     def create_run_events(self, run_id: int, events: List[Dict[str, Any]]) -> None:
         if not events:
@@ -116,7 +116,7 @@ class RunMixin:
     def list_run_events(self, run_id: int) -> List[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            return [decode_run_event_row(row) for row in fetch_run_events(cursor, run_id)]
+            return [decode_event(row) for row in fetch_run_events(cursor, run_id)]
 
     def upsert_run_task(
         self,
@@ -130,13 +130,13 @@ class RunMixin:
     ) -> Dict[str, Any]:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            upsert_run_task_row(cursor, run_id, task_id, title, status, assignee, depends_on, result_text)
+            upsert_task(cursor, run_id, task_id, title, status, assignee, depends_on, result_text)
             conn.commit()
             cursor.execute(
                 "SELECT * FROM ai_run_tasks WHERE run_id = ? AND task_id = ?",
                 (run_id, task_id),
             )
-            return decode_run_task_row(cursor.fetchone())
+            return decode_task(cursor.fetchone())
 
     def upsert_run_tasks(self, run_id: int, tasks: List[Dict[str, Any]]) -> None:
         if not tasks:
@@ -144,7 +144,7 @@ class RunMixin:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             for task in tasks:
-                upsert_run_task_row(
+                upsert_task(
                     cursor,
                     run_id,
                     task["task_id"],
@@ -159,7 +159,7 @@ class RunMixin:
     def list_run_tasks(self, run_id: int) -> List[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            return [decode_run_task_row(row) for row in fetch_run_tasks(cursor, run_id)]
+            return [decode_task(row) for row in fetch_run_tasks(cursor, run_id)]
 
     def list_thread_runs(self, thread_id: int) -> List[Dict[str, Any]]:
         with get_db(self.db_path) as conn:

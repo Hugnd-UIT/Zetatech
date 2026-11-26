@@ -34,7 +34,7 @@ def decode_message_row(row) -> Dict[str, Any]:
     return payload
 
 
-def decode_run_event_row(row) -> Dict[str, Any]:
+def decode_event(row) -> Dict[str, Any]:
     payload = decode_row(row)
     if not payload:
         return payload
@@ -42,7 +42,7 @@ def decode_run_event_row(row) -> Dict[str, Any]:
     return payload
 
 
-def decode_run_task_row(row) -> Dict[str, Any]:
+def decode_task(row) -> Dict[str, Any]:
     payload = decode_row(row)
     if not payload:
         return payload
@@ -50,7 +50,7 @@ def decode_run_task_row(row) -> Dict[str, Any]:
     return payload
 
 
-def decode_run_approval_row(row) -> Dict[str, Any]:
+def decode_approval(row) -> Dict[str, Any]:
     payload = decode_row(row)
     if not payload:
         return payload
@@ -120,7 +120,7 @@ def fetch_latest_thread(cursor, plugin_slug: str, is_theme: bool):
     return cursor.fetchone()
 
 
-def fetch_threads_for_scope(cursor, plugin_slug: str, is_theme: bool):
+def scope_threads(cursor, plugin_slug: str, is_theme: bool):
     cursor.execute(
         """
         SELECT * FROM ai_threads
@@ -132,7 +132,7 @@ def fetch_threads_for_scope(cursor, plugin_slug: str, is_theme: bool):
     return cursor.fetchall()
 
 
-def fetch_thread_for_scope_by_id(cursor, thread_id: int, plugin_slug: str, is_theme: bool):
+def scope_thread_id(cursor, thread_id: int, plugin_slug: str, is_theme: bool):
     cursor.execute(
         """
         SELECT * FROM ai_threads
@@ -161,12 +161,12 @@ def build_thread_title(plugin_slug: str, title: Optional[str], sequence: int) ->
     return f"Chat {pos}"
 
 
-def fetch_thread_by_id(cursor, thread_id: int):
+def thread_by_id(cursor, thread_id: int):
     cursor.execute("SELECT * FROM ai_threads WHERE id = ?", (thread_id,))
     return cursor.fetchone()
 
 
-def ensure_thread_for_scope(
+def ensure_scope_thread(
     cursor,
     plugin_slug: str,
     is_theme: bool,
@@ -184,7 +184,7 @@ def ensure_thread_for_scope(
         build_thread_title(plugin_slug, title, seq),
         last_scan_session_id,
     )
-    return fetch_thread_by_id(cursor, tid)
+    return thread_by_id(cursor, tid)
 
 
 def create_thread_record(
@@ -202,19 +202,19 @@ def create_thread_record(
         build_thread_title(plugin_slug, title, seq),
         last_scan_session_id,
     )
-    return fetch_thread_by_id(cursor, tid)
+    return thread_by_id(cursor, tid)
 
 
 def list_threads(cursor, plugin_slug: str, is_theme: bool):
-    return fetch_threads_for_scope(cursor, plugin_slug, is_theme)
+    return scope_threads(cursor, plugin_slug, is_theme)
 
 
-def fetch_thread_by_scope(cursor, plugin_slug: str, is_theme: bool):
+def scope_latest(cursor, plugin_slug: str, is_theme: bool):
     return fetch_latest_thread(cursor, plugin_slug, is_theme)
 
 
-def fetch_thread_for_scope(cursor, thread_id: int, plugin_slug: str, is_theme: bool):
-    return fetch_thread_for_scope_by_id(cursor, thread_id, plugin_slug, is_theme)
+def scope_thread(cursor, thread_id: int, plugin_slug: str, is_theme: bool):
+    return scope_thread_id(cursor, thread_id, plugin_slug, is_theme)
 
 
 def finalize_run(cursor, run_id: int, status: str, error_message: Optional[str] = None) -> None:
@@ -291,7 +291,7 @@ def insert_run_event(
     return cursor.lastrowid
 
 
-def upsert_run_task_row(
+def upsert_task(
     cursor,
     run_id: int,
     task_id: str,
@@ -319,7 +319,7 @@ def upsert_run_task_row(
     )
 
 
-def fetch_provider_by_profile_key(cursor, profile_key: str):
+def provider_by_key(cursor, profile_key: str):
     cursor.execute(
         "SELECT * FROM ai_provider_settings WHERE profile_key = ? LIMIT 1",
         (profile_key,),
@@ -327,7 +327,7 @@ def fetch_provider_by_profile_key(cursor, profile_key: str):
     return cursor.fetchone()
 
 
-def fetch_all_provider_profiles(cursor):
+def all_providers(cursor):
     cursor.execute(
         "SELECT * FROM ai_provider_settings ORDER BY is_active DESC, updated_at DESC, id DESC"
     )
@@ -381,7 +381,7 @@ def fetch_run_approval(cursor, run_id: int):
     return cursor.fetchone()
 
 
-def fetch_thread_pending_approval(cursor, thread_id: int):
+def pending_approval(cursor, thread_id: int):
     cursor.execute(
         """
         SELECT a.*

@@ -22,7 +22,7 @@ class ScanRepository(
         self.bootstrapper.initialize()
         self.bootstrapper.ensure_catalog_backfill(self.rebuild_plugin_catalog)
 
-    def _get_session_created_at(self, cursor: Any, session_id: int) -> str:
+    def _session_time(self, cursor: Any, session_id: int) -> str:
         cached = self._session_created_at_cache.get(session_id)
         if cached:
             return cached
@@ -35,7 +35,7 @@ class ScanRepository(
         self._session_created_at_cache[session_id] = created_at
         return created_at
 
-    def _upsert_catalog_entry(
+    def _upsert_catalog(
         self,
         cursor: Any,
         session_id: int,
@@ -161,7 +161,7 @@ class ScanRepository(
             ),
         )
 
-    def _refresh_catalog_entry(self, cursor: Any, catalog_id: int) -> None:
+    def _refresh_catalog(self, cursor: Any, catalog_id: int) -> None:
         cursor.execute(
             """
             SELECT COUNT(*) AS c, MIN(seen_at) AS first_seen, MAX(seen_at) AS last_seen

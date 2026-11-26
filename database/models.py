@@ -333,7 +333,7 @@ AI_MIGRATION_STATEMENTS = [
 DEFAULT_DB_PATH = resolve_runtime_paths().db_file
 
 
-def _table_has_unique_thread_scope(cursor) -> bool:
+def _has_thread_scope(cursor) -> bool:
     cursor.execute("PRAGMA index_list(ai_threads)")
     for row in cursor.fetchall():
         if not row[2]:
@@ -351,7 +351,7 @@ def _table_columns(cursor, table_name: str) -> set[str]:
     return {str(row[1]) for row in cursor.fetchall()}
 
 
-def _table_sql_references(cursor, table_name: str, referenced_name: str) -> bool:
+def _sql_refs(cursor, table_name: str, referenced_name: str) -> bool:
     cursor.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
         (table_name,),
@@ -376,16 +376,16 @@ def _execute_statements(cursor, statements: list[str]) -> None:
         cursor.execute(statement)
 
 
-def _safe_execute_statements(cursor, statements: list[str]) -> None:
+def _safe_batch(cursor, statements: list[str]) -> None:
     for statement in statements:
         _safe_execute(cursor, statement)
 
 
-def _migrate_ai_threads_for_multi_session(cursor) -> None:
+def _migrate_threads(cursor) -> None:
     cursor.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_threads'"
     )
-    if cursor.fetchone() is None or not _table_has_unique_thread_scope(cursor):
+    if cursor.fetchone() is None or not _has_thread_scope(cursor):
         return
 
     cursor.execute("ALTER TABLE ai_threads RENAME TO ai_threads_legacy")
@@ -413,7 +413,7 @@ def _migrate_ai_threads_for_multi_session(cursor) -> None:
     cursor.execute("DROP TABLE ai_threads_legacy")
 
 
-def _migrate_ai_provider_settings_for_profiles(cursor) -> None:
+def _migrate_providers(cursor) -> None:
     cursor.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_provider_settings'"
     )
@@ -467,8 +467,8 @@ def _migrate_ai_provider_settings_for_profiles(cursor) -> None:
     cursor.execute("DROP TABLE ai_provider_settings_legacy")
 
 
-def _rebuild_ai_messages_table(cursor) -> None:
-    if not _table_sql_references(cursor, "ai_messages", '"ai_threads_legacy"'):
+def _rebuild_msgs(cursor) -> None:
+    if not _sql_refs(cursor, "ai_messages", '"ai_threads_legacy"'):
         return
     cols = _table_columns(cursor, "ai_messages")
     cursor.execute("ALTER TABLE ai_messages RENAME TO ai_messages_legacy")
@@ -499,8 +499,8 @@ def _rebuild_ai_messages_table(cursor) -> None:
     cursor.execute("DROP TABLE ai_messages_legacy")
 
 
-def _rebuild_ai_runs_table(cursor) -> None:
-    if not _table_sql_references(cursor, "ai_runs", '"ai_threads_legacy"'):
+def _rebuild_runs(cursor) -> None:
+    if not _sql_refs(cursor, "ai_runs", '"ai_threads_legacy"'):
         return
     cols = _table_columns(cursor, "ai_runs")
     cursor.execute("ALTER TABLE ai_runs RENAME TO ai_runs_legacy")
@@ -543,8 +543,8 @@ def _rebuild_ai_runs_table(cursor) -> None:
     cursor.execute("DROP TABLE ai_runs_legacy")
 
 
-def _rebuild_ai_run_event_tables(cursor) -> None:
-    if _table_sql_references(cursor, "ai_run_events", "ai_runs_legacy"):
+def _rebuild_events(cursor) -> None:
+    if _sql_refs(cursor, "ai_run_events", "ai_runs_legacy"):
         cursor.execute("ALTER TABLE ai_run_events RENAME TO ai_run_events_legacy")
         cursor.execute(
             """
@@ -570,7 +570,7 @@ def _rebuild_ai_run_event_tables(cursor) -> None:
         )
         cursor.execute("DROP TABLE ai_run_events_legacy")
 
-    if _table_sql_references(cursor, "ai_run_tasks", "ai_runs_legacy"):
+    if _sql_refs(cursor, "ai_run_tasks", "ai_runs_legacy"):
         cursor.execute("ALTER TABLE ai_run_tasks RENAME TO ai_run_tasks_legacy")
         cursor.execute(
             """
@@ -601,7 +601,7 @@ def _rebuild_ai_run_event_tables(cursor) -> None:
         cursor.execute("DROP TABLE ai_run_tasks_legacy")
 
 
-def _backfill_ai_defaults(cursor) -> None:
+def _backfill_ai(cursor) -> None:
     cursor.execute("UPDATE ai_provider_settings SET provider_label = COALESCE(provider_label, provider)")
     cursor.execute("UPDATE ai_provider_settings SET profile_key = COALESCE(profile_key, LOWER(provider || '-' || COALESCE(NULLIF(REPLACE(model, ' ', '-'), ''), 'default'))) WHERE profile_key IS NULL OR profile_key = ''")
     cursor.execute("UPDATE ai_provider_settings SET display_name = COALESCE(display_name, COALESCE(provider_label, provider) || ' / ' || COALESCE(NULLIF(model, ''), 'default')) WHERE display_name IS NULL OR display_name = ''")
@@ -609,20 +609,20 @@ def _backfill_ai_defaults(cursor) -> None:
     cursor.execute("UPDATE ai_threads SET is_theme = COALESCE(is_theme, 0)")
 
 
-def _migrate_ai_tables(cursor) -> None:
-    _rebuild_ai_messages_table(cursor)
-    _rebuild_ai_runs_table(cursor)
-    _rebuild_ai_run_event_tables(cursor)
-    _migrate_ai_threads_for_multi_session(cursor)
-    _migrate_ai_provider_settings_for_profiles(cursor)
-    _rebuild_ai_messages_table(cursor)
-    _rebuild_ai_runs_table(cursor)
-    _rebuild_ai_run_event_tables(cursor)
-    _safe_execute_statements(cursor, AI_MIGRATION_STATEMENTS)
-    _backfill_ai_defaults(cursor)
+def _migrate_ai(cursor) -> None:
+    _rebuild_msgs(cursor)
+    _rebuild_runs(cursor)
+    _rebuild_events(cursor)
+    _migrate_threads(cursor)
+    _migrate_providers(cursor)
+    _rebuild_msgs(cursor)
+    _rebuild_runs(cursor)
+    _rebuild_events(cursor)
+    _safe_batch(cursor, AI_MIGRATION_STATEMENTS)
+    _backfill_ai(cursor)
 
 
-def _is_directory_writable(directory: Path) -> bool:
+def _dir_writable(directory: Path) -> bool:
     try:
         directory.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(dir=directory, delete=True):
@@ -634,7 +634,7 @@ def _is_directory_writable(directory: Path) -> bool:
 
 def ensure_db_dir(path: Optional[Path] = None) -> Path:
     target = path or DEFAULT_DB_PATH
-    if _is_directory_writable(target.parent):
+    if _dir_writable(target.parent):
         return target
 
     raise PermissionError(f"Database directory is not writable: {target.parent}")
@@ -645,7 +645,7 @@ def get_db_path() -> Path:
     return Path(env) if env else DEFAULT_DB_PATH
 
 
-def _resolve_db_path(db_path: Optional[Path]) -> Path:
+def _db_path(db_path: Optional[Path]) -> Path:
     if db_path is not None:
         return ensure_db_dir(db_path)
 
@@ -657,13 +657,13 @@ def _resolve_db_path(db_path: Optional[Path]) -> Path:
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
-    resolved = _resolve_db_path(db_path)
+    resolved = _db_path(db_path)
     conn = sqlite3.connect(str(resolved))
     cursor = conn.cursor()
     try:
         _execute_statements(cursor, SCAN_SCHEMA_STATEMENTS)
         _execute_statements(cursor, AI_SCHEMA_STATEMENTS)
-        _migrate_ai_tables(cursor)
+        _migrate_ai(cursor)
         _execute_statements(cursor, INDEX_STATEMENTS)
         conn.commit()
     finally:
@@ -672,7 +672,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
 
 @contextmanager
 def get_db(db_path: Optional[Path] = None):
-    resolved = _resolve_db_path(db_path)
+    resolved = _db_path(db_path)
     if not resolved.exists():
         init_db(resolved)
 

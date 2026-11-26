@@ -5,25 +5,25 @@ from fastapi import HTTPException, status
 
 from core.routers.agents.bridge import build_bridge_payload
 from core.routers.agents.intent import (
+    recent_context,
     resolve_message_intent,
     summarize_intent_decision,
-    summarize_recent_thread_context,
 )
 from core.routers.agents.memory import (
-    build_updated_thread_memory,
+    next_memory,
     summarize_thread_memory,
 )
 from core.routers.agents.runtime import (
-    arm_manual_run_approval_if_needed,
-    auto_approve_pending_run_approval,
+    arm_approval,
+    auto_approve,
     cleanup_workspace,
-    create_user_message_and_run,
     persist_completed_run,
-    prepare_thread_for_message,
-    prepare_thread_run_context,
-    raise_mapped_ai_error,
+    prep_context,
+    prep_thread,
+    raise_ai_error,
+    start_run,
 )
-from core.routers.agents.serialize import list_structured_thread_events, serialize_message, serialize_thread
+from core.routers.agents.serialize import serialize_message, serialize_thread, thread_events
 
 
 def resolve_active_provider(*, repo, payload) -> Dict[str, Any]:
@@ -46,11 +46,11 @@ def resolve_active_provider(*, repo, payload) -> Dict[str, Any]:
 
 
 def prepare_message_execution(*, repo, payload, active_provider: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    thread, last_sid = prepare_thread_for_message(
+    thread, last_sid = prep_thread(
         repo=repo,
         payload=payload,
     )
-    recent = summarize_recent_thread_context(repo, payload.thread_id)
+    recent = recent_context(repo, payload.thread_id)
     mem = summarize_thread_memory(repo, payload.thread_id)
     summary = "\n".join(
         part for part in [mem, recent] if part
@@ -87,20 +87,20 @@ def prepare_execution_workspace(
     thread: Dict[str, Any],
     last_scan_session_id: int | None,
     path_cwd: Callable[[], Path],
-    resolve_existing_thread_source_path,
-    build_plugin_context_for_source,
+    existing_source,
+    source_context,
     runtime_events: List[Dict[str, Any]],
     intent_info: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    src, root, src_path = prepare_thread_run_context(
+    src, root, src_path = prep_context(
         repo=repo,
         thread=thread,
         last_scan_session_id=last_scan_session_id,
         path_cwd=path_cwd,
-        resolve_existing_thread_source_path=resolve_existing_thread_source_path,
+        existing_source=existing_source,
         runtime_events=runtime_events,
     )
-    ctx = build_plugin_context_for_source(
+    ctx = source_context(
         db_path=repo.db_path,
         plugin_slug=thread["plugin_slug"],
         is_theme=bool(thread.get("is_theme")),
@@ -117,7 +117,7 @@ def prepare_execution_workspace(
     }
 
 
-def build_effective_context_summary(*, intent_info: Dict[str, Any], context_summary: str) -> str:
+def effective_summary(*, intent_info: Dict[str, Any], context_summary: str) -> str:
     del intent_info
     return context_summary
 
@@ -161,7 +161,7 @@ def build_bridge_request(
     )
 
 
-def update_thread_memory_from_run(
+def save_memory(
     *,
     repo,
     payload,
@@ -173,7 +173,7 @@ def update_thread_memory_from_run(
 ) -> None:
     repo.update_thread_memory(
         payload.thread_id,
-        **build_updated_thread_memory(
+        **next_memory(
             repo=repo,
             thread_id=payload.thread_id,
             user_content=payload.content,
@@ -201,7 +201,7 @@ def build_final_response(
     return {
         "user_message": serialize_message(user_message),
         "assistant_message": serialize_message(assistant_message),
-        "events": list_structured_thread_events(repo, payload.thread_id),
+        "events": thread_events(repo, payload.thread_id),
         "run_id": int(run["id"]) if run is not None else None,
         "team_events": team_events,
         "tasks": persisted_tasks,
@@ -216,8 +216,8 @@ def execute_ai_message(
     repo,
     payload,
     path_cwd: Callable[[], Path],
-    build_plugin_context_for_source,
-    resolve_existing_thread_source_path,
+    source_context,
+    existing_source,
     cleanup_run_workspace: Callable[[Path], None],
     run_agent_bridge,
 ) -> Dict[str, object]:
@@ -241,8 +241,8 @@ def execute_ai_message(
             thread=thread,
             last_scan_session_id=exec_ctx["last_scan_session_id"],
             path_cwd=path_cwd,
-            resolve_existing_thread_source_path=resolve_existing_thread_source_path,
-            build_plugin_context_for_source=build_plugin_context_for_source,
+            existing_source=existing_source,
+            source_context=source_context,
             runtime_events=evts,
             intent_info=exec_ctx["intent_info"],
         )
@@ -257,14 +257,14 @@ def execute_ai_message(
             }
         )
 
-        user_msg, run = create_user_message_and_run(
+        user_msg, run = start_run(
             repo=repo,
             thread_id=payload.thread_id,
             content=payload.content,
             active_provider=prov,
             workspace_source_path=ws["workspace_source_path"],
         )
-        ctrl = arm_manual_run_approval_if_needed(
+        ctrl = arm_approval(
             repo=repo,
             payload=payload,
             run_id=run["id"],
@@ -279,7 +279,7 @@ def execute_ai_message(
             execution_mode=exec_ctx["execution_mode"],
             team_mode=exec_ctx["team_mode"],
             strategy=exec_ctx["strategy"],
-            context_summary=build_effective_context_summary(
+            context_summary=effective_summary(
                 intent_info=exec_ctx["intent_info"],
                 context_summary=exec_ctx["context_summary"],
             ),
@@ -294,12 +294,12 @@ def execute_ai_message(
             source_dir=src,
             runtime_events=evts,
         )
-        auto_approve_pending_run_approval(
+        auto_approve(
             repo=repo,
             run_id=run["id"],
             thread_id=payload.thread_id,
         )
-        update_thread_memory_from_run(
+        save_memory(
             repo=repo,
             payload=payload,
             assistant_message=bot_msg,
@@ -309,7 +309,7 @@ def execute_ai_message(
             run_tasks=tasks,
         )
     except Exception as exc:
-        raise_mapped_ai_error(
+        raise_ai_error(
             repo=repo,
             exc=exc,
             run=run,

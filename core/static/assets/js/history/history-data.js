@@ -1,9 +1,9 @@
 (function() {
     const runtime = window.zetatechRuntime;
-    const historySemgrepStatsCache = new Map();
+    const cache = new Map();
 
-    function getHistorySemgrepState(stats, isThemeSession = false) {
-        if (isThemeSession) {
+    function semgrepState(stats, theme = false) {
+        if (theme) {
             return {
                 cls: 'na',
                 state: 'N/A',
@@ -26,7 +26,7 @@
         const scanned = parseInt(stats.scanned_count || 0, 10) || 0;
         const total = parseInt(stats.total_plugins || 0, 10) || 0;
         const findings = parseInt(stats.total_findings || 0, 10) || 0;
-        const progress = Math.max(0, Math.min(100, parseInt(stats.progress || 0, 10) || 0));
+        const pct = Math.max(0, Math.min(100, parseInt(stats.progress || 0, 10) || 0));
         const safe = total > 0 ? total : Math.max(scanned, 0);
         const pair = safe > 0 ? `${scanned}/${safe}` : '--/--';
 
@@ -35,8 +35,8 @@
                 cls: 'running',
                 state: 'RUN',
                 count: pair,
-                progress,
-                title: `Semgrep scanning in progress (${progress}% - ${pair}).`
+                progress: pct,
+                title: `Semgrep scanning in progress (${pct}% - ${pair}).`
             };
         }
 
@@ -50,7 +50,7 @@
             };
         }
 
-        if (progress >= 100 || (safe > 0 && scanned >= safe)) {
+        if (pct >= 100 || (safe > 0 && scanned >= safe)) {
             if (findings > 0) {
                 return {
                     cls: 'alert',
@@ -73,19 +73,19 @@
             cls: 'partial',
             state: 'PART',
             count: pair,
-            progress,
+            progress: pct,
             title: `Partial semgrep progress (${pair}, ${findings} findings).`
         };
     }
 
-    function applyHistorySemgrepBadge(sessionId, stats, isThemeSession = false) {
-        const cell = document.getElementById(`history-semgrep-${sessionId}`);
-        const stateEl = document.getElementById(`history-semgrep-state-${sessionId}`);
-        const countEl = document.getElementById(`history-semgrep-count-${sessionId}`);
-        const fillEl = document.getElementById(`history-semgrep-fill-${sessionId}`);
+    function setBadge(sid, stats, theme = false) {
+        const cell = document.getElementById(`history-semgrep-${sid}`);
+        const stateEl = document.getElementById(`history-semgrep-state-${sid}`);
+        const countEl = document.getElementById(`history-semgrep-count-${sid}`);
+        const fillEl = document.getElementById(`history-semgrep-fill-${sid}`);
         if (!cell || !stateEl || !countEl || !fillEl) return;
 
-        const state = getHistorySemgrepState(stats, isThemeSession);
+        const state = semgrepState(stats, theme);
         cell.className = `history-semgrep-cell ${state.cls}`;
         cell.title = state.title;
         stateEl.textContent = state.state;
@@ -95,33 +95,33 @@
 
     window.hydrateHistorySemgrepBadges = async function(sessions) {
         const pending = (sessions || []).map(async (session) => {
-            const sessionId = parseInt(session.id, 10);
-            if (!Number.isFinite(sessionId) || sessionId <= 0) return;
+            const sid = parseInt(session.id, 10);
+            if (!Number.isFinite(sid) || sid <= 0) return;
 
-            const config = session.config || {};
-            const isThemeSession = Boolean(config.themes);
-            if (isThemeSession) {
-                applyHistorySemgrepBadge(sessionId, null, true);
+            const cfg = session.config || {};
+            const theme = Boolean(cfg.themes);
+            if (theme) {
+                setBadge(sid, null, true);
                 return;
             }
 
-            const cached = historySemgrepStatsCache.get(sessionId);
-            if (cached) {
-                applyHistorySemgrepBadge(sessionId, cached, false);
+            const hit = cache.get(sid);
+            if (hit) {
+                setBadge(sid, hit, false);
                 return;
             }
 
             try {
-                const response = await fetch(apiNoCacheUrl(`/api/semgrep/bulk/${sessionId}/stats`));
-                if (!response.ok) {
-                    applyHistorySemgrepBadge(sessionId, null, false);
+                const res = await fetch(apiNoCacheUrl(`/api/semgrep/bulk/${sid}/stats`));
+                if (!res.ok) {
+                    setBadge(sid, null, false);
                     return;
                 }
-                const stats = await response.json();
-                historySemgrepStatsCache.set(sessionId, stats);
-                applyHistorySemgrepBadge(sessionId, stats, false);
-            } catch (error) {
-                applyHistorySemgrepBadge(sessionId, null, false);
+                const stats = await res.json();
+                cache.set(sid, stats);
+                setBadge(sid, stats, false);
+            } catch (_) {
+                setBadge(sid, null, false);
             }
         });
 
@@ -130,15 +130,15 @@
 
     window.loadHistory = async function() {
         try {
-            historySemgrepStatsCache.clear();
-            const response = await fetch(apiNoCacheUrl('/api/scans'));
-            const data = await response.json();
+            cache.clear();
+            const res = await fetch(apiNoCacheUrl('/api/scans'));
+            const data = await res.json();
             const sessions = (data.sessions || []).sort((a, b) => new Date(b.created_at || b.start_time) - new Date(a.created_at || a.start_time));
             runtime.setHistorySessionsCache(sessions);
             refreshScanDashboard(sessions);
             initializeHistoryFilters();
             applyHistoryFilters();
-        } catch (error) {
+        } catch (_) {
             const list = document.getElementById('history-list');
             runtime.setHistorySessionsCache([]);
             if (list) list.innerHTML = '<tr><td colspan="8">Error loading history</td></tr>';
@@ -147,18 +147,18 @@
     };
 
     window.deleteScan = async function(id) {
-        const confirmed = await showConfirm('Are you sure you want to delete this scan session? This will remove all associated results from the database.');
-        if (!confirmed) return;
+        const ok = await showConfirm('Are you sure you want to delete this scan session? This will remove all associated results from the database.');
+        if (!ok) return;
         try {
-            const response = await fetch(`/api/scans/${id}`, { method: 'DELETE' });
-            if (response.ok) {
+            const res = await fetch(`/api/scans/${id}`, { method: 'DELETE' });
+            if (res.ok) {
                 loadHistory();
             } else {
-                const err = await response.json();
+                const err = await res.json();
                 showToast('Failed to delete scan: ' + (err.detail || 'Unknown error'), 'error');
             }
-        } catch (error) {
-            showToast('Error deleting scan: ' + error.message, 'error');
+        } catch (err) {
+            showToast('Error deleting scan: ' + err.message, 'error');
         }
     };
 })();

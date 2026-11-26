@@ -44,7 +44,7 @@ def analyze_changelog(sections: Dict[str, str]) -> tuple[list[str], list[str]]:
     return sec, feat
 
 
-def _plugin_query_params(page: int, browse: str) -> Dict[str, Any]:
+def _query_params(page: int, browse: str) -> Dict[str, Any]:
     return {
         "action": "query_plugins",
         "request[browse]": browse,
@@ -84,7 +84,7 @@ def fetch_plugins(
     retries: int = DEFAULT_FETCH_RETRIES,
 ) -> list[Dict[str, Any]]:
     session = get_session()
-    params = _plugin_query_params(page, browse)
+    params = _query_params(page, browse)
 
     for attempt in range(retries):
         try:
@@ -223,7 +223,7 @@ class PluginScanner:
             self.results.append(result)
             return True
 
-    def _passes_install_filters(self, installs: int) -> bool:
+    def _passes_installs(self, installs: int) -> bool:
         if installs < self.config.min_installs:
             return False
         if self.config.max_installs > 0 and installs > self.config.max_installs:
@@ -241,7 +241,7 @@ class PluginScanner:
 
     def process_plugin(self, plugin: Dict[str, Any]) -> Optional[PluginResult]:
         installs = int(plugin.get("active_installs", 0) or 0)
-        if not self._passes_install_filters(installs):
+        if not self._passes_installs(installs):
             return None
 
         days = days_ago(plugin.get("last_updated"))

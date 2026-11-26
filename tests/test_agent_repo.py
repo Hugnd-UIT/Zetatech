@@ -5,12 +5,12 @@ from agents.repos import AIRepository
 from database.models import init_db
 
 
-def test_init_db_migrates_unique_ai_threads_scope_without_leaving_legacy_table(tmp_path):
-    db_path = tmp_path / "ai_state.db"
+def test_migrate_threads(tmp_path):
+    db = tmp_path / "ai_state.db"
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+        cur.execute(
             """
             CREATE TABLE ai_threads (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +24,7 @@ def test_init_db_migrates_unique_ai_threads_scope_without_leaving_legacy_table(t
             )
             """
         )
-        cursor.execute(
+        cur.execute(
             """
             CREATE TABLE ai_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +36,7 @@ def test_init_db_migrates_unique_ai_threads_scope_without_leaving_legacy_table(t
             )
             """
         )
-        cursor.execute(
+        cur.execute(
             """
             CREATE TABLE ai_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,48 +50,48 @@ def test_init_db_migrates_unique_ai_threads_scope_without_leaving_legacy_table(t
             )
             """
         )
-        cursor.execute(
+        cur.execute(
             "INSERT INTO ai_threads (plugin_slug, is_theme, title) VALUES (?, ?, ?)",
             ("akismet", 0, "Akismet"),
         )
-        cursor.execute(
+        cur.execute(
             "INSERT INTO ai_messages (thread_id, role, content) VALUES (?, ?, ?)",
             (1, "user", "hello"),
         )
-        cursor.execute(
+        cur.execute(
             "INSERT INTO ai_runs (thread_id, provider, model, status) VALUES (?, ?, ?, ?)",
             (1, "anthropic", "claude-3-7-sonnet", "completed"),
         )
         conn.commit()
 
-    init_db(db_path)
+    init_db(db)
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+        cur.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_threads_legacy'"
         )
-        assert cursor.fetchone() is None
-        cursor.execute("PRAGMA index_list(ai_threads)")
-        assert all(not row[2] for row in cursor.fetchall())
-        cursor.execute("SELECT plugin_slug, is_theme, title FROM ai_threads")
-        assert cursor.fetchall() == [("akismet", 0, "Akismet")]
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_messages'")
-        assert 'ai_threads_legacy' not in (cursor.fetchone()[0] or "")
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_runs'")
-        assert 'ai_threads_legacy' not in (cursor.fetchone()[0] or "")
-        cursor.execute("SELECT thread_id, role, content FROM ai_messages")
-        assert cursor.fetchall() == [(1, "user", "hello")]
-        cursor.execute("SELECT thread_id, provider, model, status FROM ai_runs")
-        assert cursor.fetchall() == [(1, "anthropic", "claude-3-7-sonnet", "completed")]
+        assert cur.fetchone() is None
+        cur.execute("PRAGMA index_list(ai_threads)")
+        assert all(not row[2] for row in cur.fetchall())
+        cur.execute("SELECT plugin_slug, is_theme, title FROM ai_threads")
+        assert cur.fetchall() == [("akismet", 0, "Akismet")]
+        cur.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_messages'")
+        assert 'ai_threads_legacy' not in (cur.fetchone()[0] or "")
+        cur.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_runs'")
+        assert 'ai_threads_legacy' not in (cur.fetchone()[0] or "")
+        cur.execute("SELECT thread_id, role, content FROM ai_messages")
+        assert cur.fetchall() == [(1, "user", "hello")]
+        cur.execute("SELECT thread_id, provider, model, status FROM ai_runs")
+        assert cur.fetchall() == [(1, "anthropic", "claude-3-7-sonnet", "completed")]
 
 
-def test_init_db_rebuilds_run_event_tables_that_reference_ai_runs_legacy(tmp_path):
-    db_path = tmp_path / "ai_state.db"
+def test_rebuild_events(tmp_path):
+    db = tmp_path / "ai_state.db"
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+        cur.execute(
             """
             CREATE TABLE ai_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,7 +104,7 @@ def test_init_db_rebuilds_run_event_tables_that_reference_ai_runs_legacy(tmp_pat
             )
             """
         )
-        cursor.execute(
+        cur.execute(
             """
             CREATE TABLE ai_run_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,7 +118,7 @@ def test_init_db_rebuilds_run_event_tables_that_reference_ai_runs_legacy(tmp_pat
             )
             """
         )
-        cursor.execute(
+        cur.execute(
             """
             CREATE TABLE ai_run_tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,47 +136,46 @@ def test_init_db_rebuilds_run_event_tables_that_reference_ai_runs_legacy(tmp_pat
             )
             """
         )
-        cursor.execute(
+        cur.execute(
             "INSERT INTO ai_runs (id, thread_id, provider, model, status) VALUES (?, ?, ?, ?, ?)",
             (1, 1, "anthropic", "claude-3-7-sonnet", "completed"),
         )
-        cursor.execute(
+        cur.execute(
             "INSERT INTO ai_run_events (run_id, event_type) VALUES (?, ?)",
             (1, "agent_started"),
         )
-        cursor.execute(
+        cur.execute(
             "INSERT INTO ai_run_tasks (run_id, task_id, title, status) VALUES (?, ?, ?, ?)",
             (1, "task-1", "Inspect plugin", "completed"),
         )
         conn.commit()
 
-    init_db(db_path)
+    init_db(db)
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_run_events'")
-        assert 'ai_runs_legacy' not in (cursor.fetchone()[0] or "")
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_run_tasks'")
-        assert 'ai_runs_legacy' not in (cursor.fetchone()[0] or "")
-        cursor.execute("SELECT run_id, event_type FROM ai_run_events")
-        assert cursor.fetchall() == [(1, "agent_started")]
-        cursor.execute("SELECT run_id, task_id, title, status FROM ai_run_tasks")
-        assert cursor.fetchall() == [(1, "task-1", "Inspect plugin", "completed")]
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_run_events'")
+        assert 'ai_runs_legacy' not in (cur.fetchone()[0] or "")
+        cur.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_run_tasks'")
+        assert 'ai_runs_legacy' not in (cur.fetchone()[0] or "")
+        cur.execute("SELECT run_id, event_type FROM ai_run_events")
+        assert cur.fetchall() == [(1, "agent_started")]
+        cur.execute("SELECT run_id, task_id, title, status FROM ai_run_tasks")
+        assert cur.fetchall() == [(1, "task-1", "Inspect plugin", "completed")]
 
 
-def test_get_thread_pending_approval_ignores_completed_run(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
+def test_pending_approval(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
 
-    thread = repository.create_thread(plugin_slug="akismet", is_theme=False)
-    run = repository.create_run(
+    thread = repo.create_thread(plugin_slug="akismet", is_theme=False)
+    run = repo.create_run(
         thread_id=int(thread["id"]),
         provider="anthropic",
         model="claude-3-7-sonnet",
         status="running",
     )
 
-    repository.upsert_run_approval(
+    repo.upsert_run_approval(
         run_id=int(run["id"]),
         thread_id=int(thread["id"]),
         status="pending",
@@ -184,18 +183,17 @@ def test_get_thread_pending_approval_ignores_completed_run(tmp_path):
         request_payload={"nextTasks": [{"id": "task-1", "title": "Inspect files"}]},
     )
 
-    assert repository.get_thread_pending_approval(int(thread["id"])) is not None
+    assert repo.get_thread_pending_approval(int(thread["id"])) is not None
 
-    repository.finish_run(int(run["id"]), "completed")
+    repo.finish_run(int(run["id"]), "completed")
 
-    assert repository.get_thread_pending_approval(int(thread["id"])) is None
+    assert repo.get_thread_pending_approval(int(thread["id"])) is None
 
 
-def test_upsert_provider_settings_deactivates_previous_active_provider(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
+def test_deactivate_provider(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
 
-    repository.upsert_provider_settings(
+    repo.upsert_provider_settings(
         provider="claude",
         api_key="claude-key",
         model="claude-3-7-sonnet",
@@ -203,7 +201,7 @@ def test_upsert_provider_settings_deactivates_previous_active_provider(tmp_path)
         is_active=True,
     )
 
-    repository.upsert_provider_settings(
+    repo.upsert_provider_settings(
         provider="openai",
         api_key="openai-key",
         model="gpt-4.1",
@@ -211,21 +209,20 @@ def test_upsert_provider_settings_deactivates_previous_active_provider(tmp_path)
         is_active=True,
     )
 
-    active_provider = repository.get_active_provider()
-    claude_settings = repository.get_provider_by_profile_key("claude-claude-3-7-sonnet")
+    act = repo.get_active_provider()
+    old = repo.get_provider_by_profile_key("claude-claude-3-7-sonnet")
 
-    assert active_provider is not None
-    assert active_provider["provider"] == "openai"
-    assert active_provider["is_active"] == 1
-    assert claude_settings["is_active"] == 0
-    assert claude_settings["api_key"] == "claude-key"
+    assert act is not None
+    assert act["provider"] == "openai"
+    assert act["is_active"] == 1
+    assert old["is_active"] == 0
+    assert old["api_key"] == "claude-key"
 
 
-def test_upsert_provider_settings_preserves_existing_optional_fields_on_partial_update(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
+def test_preserve_provider(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
 
-    repository.upsert_provider_settings(
+    repo.upsert_provider_settings(
         provider="claude",
         api_key="test-key",
         model="claude-3-7-sonnet",
@@ -233,24 +230,24 @@ def test_upsert_provider_settings_preserves_existing_optional_fields_on_partial_
         is_active=True,
     )
 
-    updated_provider = repository.upsert_provider_settings(
+    upd = repo.upsert_provider_settings(
         provider="claude",
         profile_key="claude-claude-3-7-sonnet",
         is_active=False,
     )
 
-    assert updated_provider["provider"] == "claude"
-    assert updated_provider["api_key"] == "test-key"
-    assert updated_provider["model"] == "claude-3-7-sonnet"
-    assert updated_provider["base_url"] == "https://api.anthropic.com"
-    assert updated_provider["is_active"] == 0
-    assert updated_provider["profile_key"] == "claude-claude-3-7-sonnet"
+    assert upd["provider"] == "claude"
+    assert upd["api_key"] == "test-key"
+    assert upd["model"] == "claude-3-7-sonnet"
+    assert upd["base_url"] == "https://api.anthropic.com"
+    assert upd["is_active"] == 0
+    assert upd["profile_key"] == "claude-claude-3-7-sonnet"
 
 
-def test_ai_repository_does_not_expose_removed_alias_only_methods(tmp_path):
-    repository = AIRepository(db_path=tmp_path / "ai_state.db")
+def test_no_aliases(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
 
-    removed_aliases = [
+    aliases = [
         "upsert_thread",
         "list_scope_threads",
         "create_scope_thread",
@@ -392,14 +389,13 @@ def test_ai_repository_does_not_expose_removed_alias_only_methods(tmp_path):
         "get_message_id",
     ]
 
-    assert all(not hasattr(repository, alias_name) for alias_name in removed_aliases)
+    assert all(not hasattr(repo, name) for name in aliases)
 
 
-def test_ai_repository_persists_provider_threads_messages_and_runs(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
+def test_persist_repo(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
 
-    repository.upsert_provider_settings(
+    repo.upsert_provider_settings(
         provider="anthropic",
         api_key="test-key",
         model="claude-3-7-sonnet",
@@ -407,116 +403,112 @@ def test_ai_repository_persists_provider_threads_messages_and_runs(tmp_path):
         is_active=True,
     )
 
-    active_provider = repository.get_active_provider()
-    assert active_provider is not None
-    assert active_provider["provider"] == "anthropic"
-    assert active_provider["provider_label"] == "Anthropic"
-    assert active_provider["api_key"] == "test-key"
-    assert active_provider["model"] == "claude-3-7-sonnet"
-    assert active_provider["base_url"] == "https://api.anthropic.com"
-    assert active_provider["is_active"] == 1
+    act = repo.get_active_provider()
+    assert act is not None
+    assert act["provider"] == "anthropic"
+    assert act["provider_label"] == "Anthropic"
+    assert act["api_key"] == "test-key"
+    assert act["model"] == "claude-3-7-sonnet"
+    assert act["base_url"] == "https://api.anthropic.com"
+    assert act["is_active"] == 1
 
-    thread = repository.get_or_create_thread(
+    t1 = repo.get_or_create_thread(
         plugin_slug="akismet",
         is_theme=False,
         title="Akismet",
         last_scan_session_id=33,
     )
-    same_thread = repository.get_or_create_thread(
+    same = repo.get_or_create_thread(
         plugin_slug="akismet",
         is_theme=False,
         title="Akismet updated",
         last_scan_session_id=34,
     )
-    second_thread = repository.create_thread(
+    t2 = repo.create_thread(
         plugin_slug="akismet",
         is_theme=False,
         title="Akismet follow-up",
         last_scan_session_id=35,
     )
-    theme_thread = repository.get_or_create_thread(
+    th = repo.get_or_create_thread(
         plugin_slug="akismet",
         is_theme=True,
         title="Akismet Theme",
     )
-    fetched_thread = repository.get_thread(thread["id"])
-    scoped_threads = repository.list_threads_for_scope("akismet", False)
+    got = repo.get_thread(t1["id"])
+    rows = repo.list_threads_for_scope("akismet", False)
 
-    assert same_thread["id"] == thread["id"]
-    assert second_thread["id"] != thread["id"]
-    assert theme_thread["id"] != thread["id"]
-    assert fetched_thread is not None
-    assert fetched_thread["plugin_slug"] == "akismet"
-    assert fetched_thread["is_theme"] == 0
-    assert fetched_thread["title"] == "Akismet"
-    assert fetched_thread["last_scan_session_id"] == 33
-    assert [item["id"] for item in scoped_threads] == [second_thread["id"], thread["id"]]
-    assert scoped_threads[0]["title"] == "Akismet follow-up Chat 2"
-    latest_thread = repository.get_latest_thread_for_scope("akismet", False)
-    scoped_second_thread = repository.get_thread_for_scope(second_thread["id"], "akismet", False)
-    assert latest_thread is not None
-    assert scoped_second_thread is not None
-    assert latest_thread["id"] == second_thread["id"]
-    assert scoped_second_thread["id"] == second_thread["id"]
-    assert repository.get_thread_for_scope(second_thread["id"], "akismet", True) is None
+    assert same["id"] == t1["id"]
+    assert t2["id"] != t1["id"]
+    assert th["id"] != t1["id"]
+    assert got is not None
+    assert got["plugin_slug"] == "akismet"
+    assert got["is_theme"] == 0
+    assert got["title"] == "Akismet"
+    assert got["last_scan_session_id"] == 33
+    assert [item["id"] for item in rows] == [t2["id"], t1["id"]]
+    assert rows[0]["title"] == "Akismet follow-up Chat 2"
+    last = repo.get_latest_thread_for_scope("akismet", False)
+    s2 = repo.get_thread_for_scope(t2["id"], "akismet", False)
+    assert last is not None
+    assert s2 is not None
+    assert last["id"] == t2["id"]
+    assert s2["id"] == t2["id"]
+    assert repo.get_thread_for_scope(t2["id"], "akismet", True) is None
 
-    first_message = repository.create_message(
-        thread_id=thread["id"],
+    m1 = repo.create_message(
+        thread_id=t1["id"],
         role="user",
         content="Summarize this plugin.",
         tool_calls=[{"name": "read", "path": "source/plugin.php"}],
     )
-    second_message = repository.create_message(
-        thread_id=thread["id"],
+    m2 = repo.create_message(
+        thread_id=t1["id"],
         role="assistant",
         content="This plugin provides spam filtering.",
         tool_results=[{"name": "read", "status": "ok"}],
     )
 
-    messages = repository.list_messages(thread["id"])
-    assert [message["id"] for message in messages] == [
-        first_message["id"],
-        second_message["id"],
-    ]
-    assert [message["role"] for message in messages] == ["user", "assistant"]
-    assert json.loads(messages[0]["tool_calls_json"]) == [{"name": "read", "path": "source/plugin.php"}]
-    assert json.loads(messages[1]["tool_results_json"]) == [{"name": "read", "status": "ok"}]
-    assert messages[1]["content"] == "This plugin provides spam filtering."
+    msgs = repo.list_messages(t1["id"])
+    assert [msg["id"] for msg in msgs] == [m1["id"], m2["id"]]
+    assert [msg["role"] for msg in msgs] == ["user", "assistant"]
+    assert json.loads(msgs[0]["tool_calls_json"]) == [{"name": "read", "path": "source/plugin.php"}]
+    assert json.loads(msgs[1]["tool_results_json"]) == [{"name": "read", "status": "ok"}]
+    assert msgs[1]["content"] == "This plugin provides spam filtering."
 
-    run = repository.create_run(
-        thread_id=thread["id"],
+    run = repo.create_run(
+        thread_id=t1["id"],
         provider="anthropic",
         provider_label="Anthropic",
         model="claude-3-7-sonnet",
         status="pending",
-        message_id=first_message["id"],
+        message_id=m1["id"],
         workspace_path="/tmp/workspace/source",
     )
     assert run["status"] == "pending"
     assert run["provider_label"] == "Anthropic"
-    assert run["message_id"] == first_message["id"]
+    assert run["message_id"] == m1["id"]
     assert run["workspace_path"] == "/tmp/workspace/source"
 
-    repository.finish_run(run_id=run["id"], status="completed")
-    finished_run = repository.get_run(run["id"])
+    repo.finish_run(run_id=run["id"], status="completed")
+    done = repo.get_run(run["id"])
 
-    assert finished_run is not None
-    assert finished_run["thread_id"] == thread["id"]
-    assert finished_run["provider"] == "anthropic"
-    assert finished_run["provider_label"] == "Anthropic"
-    assert finished_run["model"] == "claude-3-7-sonnet"
-    assert finished_run["status"] == "completed"
-    assert finished_run["message_id"] == first_message["id"]
-    assert finished_run["workspace_path"] == "/tmp/workspace/source"
-    assert finished_run["completed_at"] is not None
+    assert done is not None
+    assert done["thread_id"] == t1["id"]
+    assert done["provider"] == "anthropic"
+    assert done["provider_label"] == "Anthropic"
+    assert done["model"] == "claude-3-7-sonnet"
+    assert done["status"] == "completed"
+    assert done["message_id"] == m1["id"]
+    assert done["workspace_path"] == "/tmp/workspace/source"
+    assert done["completed_at"] is not None
 
 
-def test_thread_memory_roundtrip_persists_structured_context(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+def test_thread_memory(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    repository.update_thread_memory(
+    repo.update_thread_memory(
         thread["id"],
         conversation_summary="User greeted and then requested analysis.",
         analysis_summary="The plugin registers one main entry file.",
@@ -526,34 +518,33 @@ def test_thread_memory_roundtrip_persists_structured_context(tmp_path):
         last_source_path="/tmp/workspace/source",
     )
 
-    memory = repository.get_thread_memory(thread["id"])
-    thread_row = repository.get_thread(thread["id"])
+    mem = repo.get_thread_memory(thread["id"])
+    row = repo.get_thread(thread["id"])
 
-    assert memory["conversation_summary"] == "User greeted and then requested analysis."
-    assert memory["analysis_summary"] == "The plugin registers one main entry file."
-    assert memory["important_files"] == ["plugin.php", "includes/admin.php"]
-    assert memory["findings_summary"] == "No confirmed vulnerability yet."
-    assert memory["architecture_notes"] == "Main bootstrap is plugin.php."
-    assert memory["last_source_path"] == "/tmp/workspace/source"
-    assert thread_row["important_files"] == ["plugin.php", "includes/admin.php"]
+    assert mem["conversation_summary"] == "User greeted and then requested analysis."
+    assert mem["analysis_summary"] == "The plugin registers one main entry file."
+    assert mem["important_files"] == ["plugin.php", "includes/admin.php"]
+    assert mem["findings_summary"] == "No confirmed vulnerability yet."
+    assert mem["architecture_notes"] == "Main bootstrap is plugin.php."
+    assert mem["last_source_path"] == "/tmp/workspace/source"
+    assert row["important_files"] == ["plugin.php", "includes/admin.php"]
 
 
-def test_fail_run_with_assistant_message_persists_error_and_structured_tool_audit(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    user_message = repository.create_message(thread_id=thread["id"], role="user", content="Analyze")
-    run = repository.create_run(
+def test_fail_run(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    msg = repo.create_message(thread_id=thread["id"], role="user", content="Analyze")
+    run = repo.create_run(
         thread_id=thread["id"],
         provider="anthropic",
         provider_label="Anthropic",
         model="claude-3-7-sonnet",
         status="running",
-        message_id=user_message["id"],
+        message_id=msg["id"],
         workspace_path="/tmp/workspace/source",
     )
 
-    assistant_message = repository.fail_run_with_assistant_message(
+    out = repo.fail_run_with_assistant_message(
         run_id=run["id"],
         thread_id=thread["id"],
         content="AI agent bridge failed.",
@@ -562,43 +553,42 @@ def test_fail_run_with_assistant_message_persists_error_and_structured_tool_audi
         tool_results=[{"name": "read", "status": "failed"}],
     )
 
-    assert assistant_message["role"] == "assistant"
-    assert json.loads(assistant_message["tool_calls_json"]) == [{"name": "read", "path": "source/plugin.php"}]
-    assert json.loads(assistant_message["tool_results_json"]) == [{"name": "read", "status": "failed"}]
+    assert out["role"] == "assistant"
+    assert json.loads(out["tool_calls_json"]) == [{"name": "read", "path": "source/plugin.php"}]
+    assert json.loads(out["tool_results_json"]) == [{"name": "read", "status": "failed"}]
 
-    failed_run = repository.get_run(run["id"])
-    assert failed_run is not None
-    assert failed_run["status"] == "failed"
-    assert failed_run["error_message"] == "AI agent bridge failed."
-    assert repository.list_thread_tool_audit(thread["id"]) == [
+    failed = repo.get_run(run["id"])
+    assert failed is not None
+    assert failed["status"] == "failed"
+    assert failed["error_message"] == "AI agent bridge failed."
+    assert repo.list_thread_tool_audit(thread["id"]) == [
         {"name": "read", "path": "source/plugin.php"},
         {"name": "read", "status": "failed"},
     ]
 
 
-def test_repository_persists_run_events_and_tasks(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    message = repository.create_message(thread_id=thread["id"], role="user", content="Analyze")
-    run = repository.create_run(
+def test_run_events(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    msg = repo.create_message(thread_id=thread["id"], role="user", content="Analyze")
+    run = repo.create_run(
         thread_id=thread["id"],
         provider="anthropic",
         provider_label="Anthropic",
         model="claude-3-7-sonnet",
         status="running",
-        message_id=message["id"],
+        message_id=msg["id"],
         workspace_path="/tmp/workspace/source",
     )
 
-    event = repository.create_run_event(
+    evt = repo.create_run_event(
         run_id=run["id"],
         event_type="agent_started",
         agent_name="plugin_analyst",
         task_id="task-1",
         payload={"name": "plugin_analyst", "taskId": "task-1"},
     )
-    task = repository.upsert_run_task(
+    task = repo.upsert_run_task(
         run_id=run["id"],
         task_id="task-1",
         title="Inspect plugin",
@@ -608,19 +598,18 @@ def test_repository_persists_run_events_and_tasks(tmp_path):
         result_text="done",
     )
 
-    assert event["event_type"] == "agent_started"
-    assert event["payload"] == {"name": "plugin_analyst", "taskId": "task-1"}
-    assert repository.list_run_events(run["id"])[0]["agent_name"] == "plugin_analyst"
+    assert evt["event_type"] == "agent_started"
+    assert evt["payload"] == {"name": "plugin_analyst", "taskId": "task-1"}
+    assert repo.list_run_events(run["id"])[0]["agent_name"] == "plugin_analyst"
 
     assert task["task_id"] == "task-1"
     assert task["depends_on"] == ["task-0"]
-    assert repository.list_run_tasks(run["id"])[0]["status"] == "completed"
+    assert repo.list_run_tasks(run["id"])[0]["status"] == "completed"
 
 
-def test_sanitize_provider_settings_omits_raw_api_key_and_masks_suffix(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
-    repository.upsert_provider_settings(
+def test_mask_key(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
+    repo.upsert_provider_settings(
         provider="anthropic",
         api_key="sk-ant-api-key-1234",
         model="claude-3-7-sonnet",
@@ -628,59 +617,52 @@ def test_sanitize_provider_settings_omits_raw_api_key_and_masks_suffix(tmp_path)
         is_active=True,
     )
 
-    settings = repository.get_active_provider()
-    assert settings is not None
-    sanitized = repository.sanitize_provider_settings(settings)
+    cfg = repo.get_active_provider()
+    assert cfg is not None
+    clean = repo.sanitize_provider_settings(cfg)
 
-    assert sanitized is not None
-    assert sanitized["api_key"] is None
-    assert sanitized["api_key_masked"] == "••••1234"
-    assert settings["api_key"] == "sk-ant-api-key-1234"
+    assert clean is not None
+    assert clean["api_key"] is None
+    assert clean["api_key_masked"] == "••••1234"
+    assert cfg["api_key"] == "sk-ant-api-key-1234"
 
 
-def test_get_or_create_thread_scopes_plugin_and_theme_independently(tmp_path):
-    db_path = tmp_path / "ai_state.db"
-    repository = AIRepository(db_path=db_path)
+def test_scope_threads(tmp_path):
+    repo = AIRepository(db_path=tmp_path / "ai_state.db")
 
-    plugin_thread = repository.get_or_create_thread(
+    p1 = repo.get_or_create_thread(
         plugin_slug="hello-dolly",
         is_theme=False,
         title="Plugin Thread",
         last_scan_session_id=11,
     )
-    plugin_second_thread = repository.create_thread(
+    p2 = repo.create_thread(
         plugin_slug="hello-dolly",
         is_theme=False,
         title="Plugin Thread",
         last_scan_session_id=13,
     )
-    theme_thread = repository.get_or_create_thread(
+    th = repo.get_or_create_thread(
         plugin_slug="hello-dolly",
         is_theme=True,
         title="Theme Thread",
         last_scan_session_id=12,
     )
 
-    scoped_theme_thread = repository.get_thread_for_scope(
-        theme_thread["id"], "hello-dolly", True
-    )
-    scoped_original_plugin_thread = repository.get_thread_for_scope(
-        plugin_thread["id"], "hello-dolly", False
-    )
+    got_th = repo.get_thread_for_scope(th["id"], "hello-dolly", True)
+    got_p1 = repo.get_thread_for_scope(p1["id"], "hello-dolly", False)
 
-    assert plugin_thread["id"] != theme_thread["id"]
-    assert plugin_thread["is_theme"] == 0
-    assert theme_thread["is_theme"] == 1
-    assert scoped_theme_thread is not None
-    assert scoped_theme_thread["id"] == theme_thread["id"]
-    assert [thread["id"] for thread in repository.list_threads_for_scope("hello-dolly", False)] == [plugin_second_thread["id"], plugin_thread["id"]]
-    assert repository.has_thread_scope("hello-dolly", False) is True
-    assert repository.has_thread_scope("missing", False) is False
-    assert scoped_original_plugin_thread is not None
-    assert scoped_original_plugin_thread["id"] == plugin_thread["id"]
-    scoped_latest_plugin_thread = repository.get_thread_for_scope(
-        plugin_second_thread["id"], "hello-dolly", False
-    )
-    assert scoped_latest_plugin_thread is not None
-    assert scoped_latest_plugin_thread["id"] == plugin_second_thread["id"]
-    assert repository.get_thread_for_scope(plugin_thread["id"], "hello-dolly", True) is None
+    assert p1["id"] != th["id"]
+    assert p1["is_theme"] == 0
+    assert th["is_theme"] == 1
+    assert got_th is not None
+    assert got_th["id"] == th["id"]
+    assert [t["id"] for t in repo.list_threads_for_scope("hello-dolly", False)] == [p2["id"], p1["id"]]
+    assert repo.has_thread_scope("hello-dolly", False) is True
+    assert repo.has_thread_scope("missing", False) is False
+    assert got_p1 is not None
+    assert got_p1["id"] == p1["id"]
+    got_p2 = repo.get_thread_for_scope(p2["id"], "hello-dolly", False)
+    assert got_p2 is not None
+    assert got_p2["id"] == p2["id"]
+    assert repo.get_thread_for_scope(p1["id"], "hello-dolly", True) is None

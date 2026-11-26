@@ -2,11 +2,11 @@ import json
 from typing import Any, Dict, List, Optional
 
 from agents.repos.utils import (
+    all_providers,
     decode_row,
     fetch_active_provider,
-    fetch_all_provider_profiles,
-    fetch_provider_by_profile_key,
     maybe_preserve,
+    provider_by_key,
     provider_label_for,
 )
 from database.models import get_db
@@ -47,7 +47,7 @@ class ProviderMixin:
         resolved_profile_key = self.build_profile_key(provider, resolved_model_input or 'default', profile_key)
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            existing_row = fetch_provider_by_profile_key(cursor, resolved_profile_key)
+            existing_row = provider_by_key(cursor, resolved_profile_key)
             existing = decode_row(existing_row)
 
             existing_models = []
@@ -94,7 +94,7 @@ class ProviderMixin:
                 ),
             )
             conn.commit()
-            return decode_row(fetch_provider_by_profile_key(cursor, resolved_profile_key))
+            return decode_row(provider_by_key(cursor, resolved_profile_key))
 
     def get_active_provider(self) -> Optional[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
@@ -142,10 +142,10 @@ class ProviderMixin:
     def get_provider_by_profile_key(self, profile_key: str) -> Optional[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            row = fetch_provider_by_profile_key(cursor, profile_key)
+            row = provider_by_key(cursor, profile_key)
             return decode_row(row) or None
 
     def list_providers(self) -> List[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            return [decode_row(row) for row in fetch_all_provider_profiles(cursor)]
+            return [decode_row(row) for row in all_providers(cursor)]

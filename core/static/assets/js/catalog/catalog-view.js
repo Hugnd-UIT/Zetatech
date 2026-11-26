@@ -7,7 +7,7 @@
         window.renderCatalogRows(runtime.getCatalogFilteredCache());
     };
 
-    function getCatalogFilterState() {
+    function filterState() {
         const queryEl = document.getElementById('catalog-filter-query');
         const sortEl = document.getElementById('catalog-filter-sort');
         const typeEl = document.getElementById('catalog-filter-type');
@@ -21,36 +21,36 @@
         };
     }
 
-    function getCatalogSortValue(item, sortKey) {
-        if (sortKey === 'seen_count') return parseInt(item.seen_count || 0, 10) || 0;
-        if (sortKey === 'max_score') return parseInt(item.max_score_ever || 0, 10) || 0;
-        if (sortKey === 'installs') return parseInt(item.latest_installations || 0, 10) || 0;
-        if (sortKey === 'updated_days') {
+    function sortVal(item, key) {
+        if (key === 'seen_count') return parseInt(item.seen_count || 0, 10) || 0;
+        if (key === 'max_score') return parseInt(item.max_score_ever || 0, 10) || 0;
+        if (key === 'installs') return parseInt(item.latest_installations || 0, 10) || 0;
+        if (key === 'updated_days') {
             const days = parseInt(item.latest_days_since_update, 10);
             return Number.isFinite(days) ? days : Number.POSITIVE_INFINITY;
         }
-        if (sortKey === 'slug') return String(item.slug || '').toLowerCase();
+        if (key === 'slug') return String(item.slug || '').toLowerCase();
         const ts = Date.parse(item.last_seen_at || '');
         return Number.isFinite(ts) ? ts : 0;
     }
 
-    function filterCatalogPlugins(items, filterState) {
-        const state = filterState || getCatalogFilterState();
+    function filterItems(items, state) {
+        const cfg = state || filterState();
         const filtered = (items || []).filter((item) => {
-            const itemType = item && item.is_theme ? 'theme' : 'plugin';
-            if (state.type !== 'all' && itemType !== state.type) return false;
-            if (!state.query) return true;
-            const haystack = `${String(item.slug || '').toLowerCase()} ${itemType}`;
-            return haystack.includes(state.query);
+            const kind = item && item.is_theme ? 'theme' : 'plugin';
+            if (cfg.type !== 'all' && kind !== cfg.type) return false;
+            if (!cfg.query) return true;
+            const hay = `${String(item.slug || '').toLowerCase()} ${kind}`;
+            return hay.includes(cfg.query);
         });
 
         filtered.sort((a, b) => {
-            const av = getCatalogSortValue(a, state.sort);
-            const bv = getCatalogSortValue(b, state.sort);
+            const av = sortVal(a, cfg.sort);
+            const bv = sortVal(b, cfg.sort);
             let diff = 0;
             if (typeof av === 'string' || typeof bv === 'string') diff = String(av).localeCompare(String(bv));
             else diff = Number(av) - Number(bv);
-            if (state.order === 'desc') diff *= -1;
+            if (cfg.order === 'desc') diff *= -1;
             if (diff !== 0) return diff;
             return String(a.slug || '').toLowerCase().localeCompare(String(b.slug || '').toLowerCase());
         });
@@ -247,7 +247,7 @@
 
     window.applyCatalogFilters = function() {
         runtime.setCatalogCurrentPage(1);
-        const filtered = filterCatalogPlugins(runtime.getCatalogPluginsCache(), getCatalogFilterState());
+        const filtered = filterItems(runtime.getCatalogPluginsCache(), filterState());
         window.renderCatalogDashboard(filtered);
         window.renderCatalogRows(filtered);
     };

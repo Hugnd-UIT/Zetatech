@@ -124,7 +124,7 @@ def _download_meta(cursor, slug: str, is_theme: bool, session_id: Optional[int])
     return {"download_link": None, "version": None}
 
 
-def resolve_source_download_info(
+def download_info(
     db_path: Optional[Path],
     plugin_slug: str,
     is_theme: bool,
@@ -141,14 +141,14 @@ def resolve_source_download_info(
     }
 
 
-def ensure_thread_source_dir(
+def ensure_source(
     db_path: Optional[Path],
     plugin_slug: str,
     is_theme: bool,
     last_scan_session_id: Optional[int],
     root_path: Path,
 ) -> Optional[Path]:
-    existing = resolve_existing_thread_source_path(
+    existing = existing_source(
         db_path=db_path,
         plugin_slug=plugin_slug,
         is_theme=is_theme,
@@ -158,7 +158,7 @@ def ensure_thread_source_dir(
     if existing is not None:
         return existing.resolve()
 
-    info = resolve_source_download_info(
+    info = download_info(
         db_path=db_path,
         plugin_slug=plugin_slug,
         is_theme=is_theme,
@@ -180,7 +180,7 @@ def ensure_thread_source_dir(
     return extracted.resolve()
 
 
-def resolve_thread_source_path(
+def thread_source(
     db_path: Optional[Path],
     plugin_slug: str,
     is_theme: bool,
@@ -210,11 +210,11 @@ def resolve_thread_source_path(
     return _source_str(plugin_slug, bool(row["is_theme"]))
 
 
-def resolve_local_source_path(plugin_slug: str, is_theme: bool) -> str:
+def local_source(plugin_slug: str, is_theme: bool) -> str:
     return _source_str(plugin_slug, is_theme)
 
 
-def resolve_thread_source_path_with_fallback(
+def source_fallback(
     db_path: Optional[Path],
     plugin_slug: str,
     is_theme: bool,
@@ -222,7 +222,7 @@ def resolve_thread_source_path_with_fallback(
 ) -> str:
     if last_scan_session_id is not None:
         try:
-            return resolve_thread_source_path(
+            return thread_source(
                 db_path=db_path,
                 plugin_slug=plugin_slug,
                 is_theme=is_theme,
@@ -231,17 +231,17 @@ def resolve_thread_source_path_with_fallback(
         except LookupError:
             pass
 
-    return resolve_local_source_path(plugin_slug, is_theme)
+    return local_source(plugin_slug, is_theme)
 
 
-def resolve_existing_thread_source_path(
+def existing_source(
     db_path: Optional[Path],
     plugin_slug: str,
     is_theme: bool,
     last_scan_session_id: Optional[int],
     root_path: Path,
 ) -> Optional[Path]:
-    rel = resolve_thread_source_path_with_fallback(
+    rel = source_fallback(
         db_path=db_path,
         plugin_slug=plugin_slug,
         is_theme=is_theme,
@@ -262,32 +262,32 @@ def resolve_existing_thread_source_path(
     return candidate
 
 
-def build_context_source_path(source_dir: Optional[Path]) -> str:
+def context_path(source_dir: Optional[Path]) -> str:
     return str(source_dir.resolve()) if source_dir is not None else ""
 
 
-def build_context_last_scan_session_id(last_scan_session_id: Optional[int]) -> int:
+def context_session(last_scan_session_id: Optional[int]) -> int:
     return int(last_scan_session_id or 0)
 
 
-def build_context_source_state(source_dir: Optional[Path]) -> Dict[str, Any]:
+def source_state(source_dir: Optional[Path]) -> Dict[str, Any]:
     return {
         "available": source_dir is not None,
         "mode": "source" if source_dir is not None else "metadata_only",
     }
 
 
-def build_context_semgrep_payload(
+def semgrep_payload(
     semgrep_payload: Dict[str, Any],
     source_dir: Optional[Path],
 ) -> Dict[str, Any]:
     return {
         **semgrep_payload,
-        "source": build_context_source_state(source_dir),
+        "source": source_state(source_dir),
     }
 
 
-def build_plugin_context_for_source(
+def source_context(
     db_path: Optional[Path],
     plugin_slug: str,
     is_theme: bool,
@@ -298,11 +298,11 @@ def build_plugin_context_for_source(
         db_path=db_path,
         plugin_slug=plugin_slug,
         is_theme=is_theme,
-        source_path=build_context_source_path(source_dir),
-        last_scan_session_id=build_context_last_scan_session_id(last_scan_session_id),
+        source_path=context_path(source_dir),
+        last_scan_session_id=context_session(last_scan_session_id),
     )
-    context["source"] = build_context_source_state(source_dir)
-    context["semgrep"] = build_context_semgrep_payload(context.get("semgrep") or _empty_semgrep(), source_dir)
+    context["source"] = source_state(source_dir)
+    context["semgrep"] = semgrep_payload(context.get("semgrep") or _empty_semgrep(), source_dir)
     return context
 
 

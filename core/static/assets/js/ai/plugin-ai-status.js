@@ -1,41 +1,41 @@
 (function() {
-    function setPluginAiStatus(message) {
-        const safeMessage = String(message || '');
-        const statusEl = document.getElementById('plugin-ai-status');
-        if (statusEl) statusEl.textContent = safeMessage;
+    function setStatus(msg) {
+        const text = String(msg || '');
+        const el = document.getElementById('plugin-ai-status');
+        if (el) el.textContent = text;
         const state = typeof window.getPluginAiState === 'function' ? window.getPluginAiState() : null;
         if (state && typeof state === 'object') {
-            state.statusText = safeMessage;
+            state.statusText = text;
         }
         if (typeof window.syncCurrentPluginAiThreadSnapshot === 'function') {
-            window.syncCurrentPluginAiThreadSnapshot({ statusText: safeMessage });
+            window.syncCurrentPluginAiThreadSnapshot({ statusText: text });
         }
     }
 
-    function setPluginAiBadge(message) {
-        const safeMessage = String(message || '');
-        const badgeEl = document.getElementById('plugin-ai-thread-badge');
-        if (badgeEl) badgeEl.textContent = safeMessage;
+    function setBadge(msg) {
+        const text = String(msg || '');
+        const el = document.getElementById('plugin-ai-thread-badge');
+        if (el) el.textContent = text;
         const state = typeof window.getPluginAiState === 'function' ? window.getPluginAiState() : null;
         if (state && typeof state === 'object') {
-            state.badgeText = safeMessage;
+            state.badgeText = text;
         }
         if (typeof window.syncCurrentPluginAiThreadSnapshot === 'function') {
-            window.syncCurrentPluginAiThreadSnapshot({ badgeText: safeMessage });
+            window.syncCurrentPluginAiThreadSnapshot({ badgeText: text });
         }
     }
 
-    function setPluginAiComposerEnabled(enabled) {
+    function setComposer(enabled) {
         const input = document.getElementById('plugin-ai-input');
-        const sendBtn = document.getElementById('plugin-ai-send');
-        const combinedSelect = document.getElementById('plugin-ai-profile-model-select');
+        const btn = document.getElementById('plugin-ai-send');
+        const sel = document.getElementById('plugin-ai-profile-model-select');
         if (input) input.disabled = !enabled;
-        if (sendBtn) sendBtn.disabled = !enabled;
-        if (combinedSelect) combinedSelect.disabled = !enabled;
+        if (btn) btn.disabled = !enabled;
+        if (sel) sel.disabled = !enabled;
     }
 
-    function formatPluginAiRunDuration(runStartedAt) {
-        const raw = String(runStartedAt || '').trim();
+    function fmtDuration(startedAt) {
+        const raw = String(startedAt || '').trim();
         if (!raw) return '0m 00s';
         const ms = new Date(raw).getTime();
         if (!Number.isFinite(ms)) return '0m 00s';
@@ -45,184 +45,184 @@
         return `${mins}m ${String(secs).padStart(2, '0')}s`;
     }
 
-    function buildPluginAiRunningBadgeLabel(runStartedAt) {
-        return `Running • ${formatPluginAiRunDuration(runStartedAt)}`;
+    function runBadge(startedAt) {
+        return `Running • ${fmtDuration(startedAt)}`;
     }
 
-    function buildPluginAiRunningStatusText(runStartedAt) {
-        return `AI is running • ${formatPluginAiRunDuration(runStartedAt)}`;
+    function runStatus(startedAt) {
+        return `AI is running • ${fmtDuration(startedAt)}`;
     }
 
-    function refreshPluginAiRunningIndicators() {
+    function refreshIndicators() {
         const state = typeof window.getPluginAiState === 'function' ? window.getPluginAiState() : null;
         if (!state || !state.sending || !String(state.runStartedAt || '').trim()) return;
-        const badgeEl = document.getElementById('plugin-ai-thread-badge');
-        const statusEl = document.getElementById('plugin-ai-status');
-        if (badgeEl) badgeEl.textContent = buildPluginAiRunningBadgeLabel(state.runStartedAt);
-        if (statusEl && String(state.statusText || '').includes('AI is running')) {
-            statusEl.textContent = buildPluginAiRunningStatusText(state.runStartedAt);
+        const badge = document.getElementById('plugin-ai-thread-badge');
+        const status = document.getElementById('plugin-ai-status');
+        if (badge) badge.textContent = runBadge(state.runStartedAt);
+        if (status && String(state.statusText || '').includes('AI is running')) {
+            status.textContent = runStatus(state.runStartedAt);
         }
         if (typeof window.updatePluginAiSessionUi === 'function') {
             window.updatePluginAiSessionUi();
         }
     }
 
-    function updatePluginAiComposerState(enabled) {
-        setPluginAiComposerEnabled(enabled);
+    function updateComposer(enabled) {
+        setComposer(enabled);
     }
 
-    function getMaskedApiKeyPlaceholder(config = {}) {
-        const masked = String(config.api_key_masked || '').trim();
+    function keyPlaceholder(cfg = {}) {
+        const masked = String(cfg.api_key_masked || '').trim();
         return masked || 'Enter a new API key';
     }
 
-    function shouldRequireApiKeyInput(config = {}) {
-        return !String(config.api_key_masked || '').trim();
+    function requireKey(cfg = {}) {
+        return !String(cfg.api_key_masked || '').trim();
     }
 
-    function updatePluginAiApiKeyHint(config = {}) {
-        const apiKeyInput = document.getElementById('plugin-ai-api-key');
-        if (!apiKeyInput) return;
-        apiKeyInput.placeholder = getMaskedApiKeyPlaceholder(config);
-        apiKeyInput.required = shouldRequireApiKeyInput(config);
+    function updateKeyHint(cfg = {}) {
+        const input = document.getElementById('plugin-ai-api-key');
+        if (!input) return;
+        input.placeholder = keyPlaceholder(cfg);
+        input.required = requireKey(cfg);
     }
 
-    function buildPluginAiThreadBadge() {
+    function threadBadge() {
         return 'Ready';
     }
 
-    function setPluginAiThreadLoadingBadge() {
-        setPluginAiBadge('Loading');
+    function loadingBadge() {
+        setBadge('Loading');
     }
 
-    function setPluginAiRunningBadge() {
+    function runningBadge() {
         const state = typeof window.getPluginAiState === 'function' ? window.getPluginAiState() : null;
-        setPluginAiBadge(buildPluginAiRunningBadgeLabel(state?.runStartedAt));
+        setBadge(runBadge(state?.runStartedAt));
     }
 
-    function setPluginAiErrorBadge() {
-        setPluginAiBadge('Error');
+    function errorBadge() {
+        setBadge('Error');
     }
 
-    function currentPluginAiLabel(plugin) {
+    function pluginLabel(plugin) {
         return plugin?.is_theme ? 'theme' : 'plugin';
     }
 
-    function buildPluginAiThreadStatus(plugin) {
-        return `Loading AI thread for ${currentPluginAiLabel(plugin)} ${String(plugin?.slug || '').trim()}...`;
+    function threadStatus(plugin) {
+        return `Loading AI thread for ${pluginLabel(plugin)} ${String(plugin?.slug || '').trim()}...`;
     }
 
-    function setPluginAiThreadStatusLoading(plugin) {
-        setPluginAiStatus(buildPluginAiThreadStatus(plugin));
+    function setThreadLoading(plugin) {
+        setStatus(threadStatus(plugin));
     }
 
-    function setPluginAiThreadReadyStatus() {
-        setPluginAiStatus('AI thread ready. Loading existing messages...');
+    function setThreadReady() {
+        setStatus('AI thread ready. Loading existing messages...');
     }
 
-    function setPluginAiResponseReceivedStatus() {
-        setPluginAiStatus('AI response received.');
+    function setResponseReceived() {
+        setStatus('AI response received.');
     }
 
-    function setPluginAiSettingsLoadingStatus() {
-        setPluginAiStatus('Loading AI settings...');
+    function setSettingsLoading() {
+        setStatus('Loading AI settings...');
     }
 
-    function buildPluginAiLoadedStatus(messages = []) {
-        return messages.length ? 'AI messages loaded.' : 'Thread ready.';
+    function loadedStatus(msgs = []) {
+        return msgs.length ? 'AI messages loaded.' : 'Thread ready.';
     }
 
-    function notePluginAiMessagesLoaded(messages = []) {
-        setPluginAiStatus(buildPluginAiLoadedStatus(messages));
+    function noteLoaded(msgs = []) {
+        setStatus(loadedStatus(msgs));
     }
 
-    function buildPluginAiRequestFailureStatus(error) {
-        return `AI request failed: ${error.message}`;
+    function errStatus(err) {
+        return `AI request failed: ${err.message}`;
     }
 
-    function buildPluginAiSettingsLoadedStatus(config) {
-        const label = config?.display_name || config?.model || config?.provider;
+    function settingsStatus(cfg) {
+        const label = cfg?.display_name || cfg?.model || cfg?.provider;
         return label ? `Loaded AI profile ${label}.` : 'No AI profile configured yet.';
     }
 
-    function buildPluginAiSettingsSavedStatus(provider) {
+    function savedStatus(provider) {
         return `Saved AI profile for ${provider}.`;
     }
 
-    function setPluginAiRequestFailure(error) {
-        setPluginAiStatus(buildPluginAiRequestFailureStatus(error));
+    function setFailure(err) {
+        setStatus(errStatus(err));
     }
 
-    function setPluginAiSettingsStatus(config) {
-        setPluginAiStatus(buildPluginAiSettingsLoadedStatus(config));
+    function setCfgStatus(cfg) {
+        setStatus(settingsStatus(cfg));
     }
 
-    function setPluginAiSavedStatus(provider) {
-        setPluginAiStatus(buildPluginAiSettingsSavedStatus(provider));
+    function setSaved(provider) {
+        setStatus(savedStatus(provider));
     }
 
-    function setPluginAiSettingsSavedToast() {
+    function toastSaved() {
         showToast('AI settings saved.', 'success');
     }
 
-    function setPluginAiNoMessageWarning() {
+    function toastNoMsg() {
         showToast('Enter a message for AI first.', 'warn');
     }
 
-    function buildPluginAiNoScanWarning(plugin) {
-        return `Open this ${currentPluginAiLabel(plugin)} from a scan result before starting AI chat.`;
+    function noScanMsg(plugin) {
+        return `Open this ${pluginLabel(plugin)} from a scan result before starting AI chat.`;
     }
 
-    function setPluginAiNoScanWarningForPlugin(plugin) {
-        showToast(buildPluginAiNoScanWarning(plugin), 'warn');
+    function toastNoScan(plugin) {
+        showToast(noScanMsg(plugin), 'warn');
     }
 
-    function setPluginAiSettingsErrorToast(error) {
-        showToast(`Failed to save AI settings: ${error.message}`, 'error');
+    function toastSaveErr(err) {
+        showToast(`Failed to save AI settings: ${err.message}`, 'error');
     }
 
-    function setPluginAiLoadSettingsErrorToast(error) {
-        showToast(`Failed to load AI settings: ${error.message}`, 'error');
+    function toastLoadErr(err) {
+        showToast(`Failed to load AI settings: ${err.message}`, 'error');
     }
 
-    function setPluginAiRequestErrorToast(error) {
-        showToast(buildPluginAiRequestFailureStatus(error), 'error');
+    function toastReqErr(err) {
+        showToast(errStatus(err), 'error');
     }
 
-    window.setPluginAiStatus = setPluginAiStatus;
-    window.setPluginAiBadge = setPluginAiBadge;
-    window.setPluginAiComposerEnabled = setPluginAiComposerEnabled;
-    window.updatePluginAiComposerState = updatePluginAiComposerState;
-    window.formatPluginAiRunDuration = formatPluginAiRunDuration;
-    window.buildPluginAiRunningBadgeLabel = buildPluginAiRunningBadgeLabel;
-    window.buildPluginAiRunningStatusText = buildPluginAiRunningStatusText;
-    window.refreshPluginAiRunningIndicators = refreshPluginAiRunningIndicators;
-    window.getMaskedApiKeyPlaceholder = getMaskedApiKeyPlaceholder;
-    window.shouldRequireApiKeyInput = shouldRequireApiKeyInput;
-    window.updatePluginAiApiKeyHint = updatePluginAiApiKeyHint;
-    window.buildPluginAiThreadBadge = buildPluginAiThreadBadge;
-    window.setPluginAiThreadLoadingBadge = setPluginAiThreadLoadingBadge;
-    window.setPluginAiRunningBadge = setPluginAiRunningBadge;
-    window.setPluginAiErrorBadge = setPluginAiErrorBadge;
-    window.currentPluginAiLabel = currentPluginAiLabel;
-    window.buildPluginAiThreadStatus = buildPluginAiThreadStatus;
-    window.setPluginAiThreadStatusLoading = setPluginAiThreadStatusLoading;
-    window.setPluginAiThreadReadyStatus = setPluginAiThreadReadyStatus;
-    window.setPluginAiResponseReceivedStatus = setPluginAiResponseReceivedStatus;
-    window.setPluginAiSettingsLoadingStatus = setPluginAiSettingsLoadingStatus;
-    window.buildPluginAiLoadedStatus = buildPluginAiLoadedStatus;
-    window.notePluginAiMessagesLoaded = notePluginAiMessagesLoaded;
-    window.buildPluginAiRequestFailureStatus = buildPluginAiRequestFailureStatus;
-    window.buildPluginAiSettingsLoadedStatus = buildPluginAiSettingsLoadedStatus;
-    window.buildPluginAiSettingsSavedStatus = buildPluginAiSettingsSavedStatus;
-    window.setPluginAiRequestFailure = setPluginAiRequestFailure;
-    window.setPluginAiSettingsStatus = setPluginAiSettingsStatus;
-    window.setPluginAiSavedStatus = setPluginAiSavedStatus;
-    window.setPluginAiSettingsSavedToast = setPluginAiSettingsSavedToast;
-    window.setPluginAiNoMessageWarning = setPluginAiNoMessageWarning;
-    window.buildPluginAiNoScanWarning = buildPluginAiNoScanWarning;
-    window.setPluginAiNoScanWarningForPlugin = setPluginAiNoScanWarningForPlugin;
-    window.setPluginAiSettingsErrorToast = setPluginAiSettingsErrorToast;
-    window.setPluginAiLoadSettingsErrorToast = setPluginAiLoadSettingsErrorToast;
-    window.setPluginAiRequestErrorToast = setPluginAiRequestErrorToast;
+    window.setPluginAiStatus = setStatus;
+    window.setPluginAiBadge = setBadge;
+    window.setPluginAiComposerEnabled = setComposer;
+    window.updatePluginAiComposerState = updateComposer;
+    window.formatPluginAiRunDuration = fmtDuration;
+    window.buildPluginAiRunningBadgeLabel = runBadge;
+    window.buildPluginAiRunningStatusText = runStatus;
+    window.refreshPluginAiRunningIndicators = refreshIndicators;
+    window.getMaskedApiKeyPlaceholder = keyPlaceholder;
+    window.shouldRequireApiKeyInput = requireKey;
+    window.updatePluginAiApiKeyHint = updateKeyHint;
+    window.buildPluginAiThreadBadge = threadBadge;
+    window.setPluginAiThreadLoadingBadge = loadingBadge;
+    window.setPluginAiRunningBadge = runningBadge;
+    window.setPluginAiErrorBadge = errorBadge;
+    window.currentPluginAiLabel = pluginLabel;
+    window.buildPluginAiThreadStatus = threadStatus;
+    window.setPluginAiThreadStatusLoading = setThreadLoading;
+    window.setPluginAiThreadReadyStatus = setThreadReady;
+    window.setPluginAiResponseReceivedStatus = setResponseReceived;
+    window.setPluginAiSettingsLoadingStatus = setSettingsLoading;
+    window.buildPluginAiLoadedStatus = loadedStatus;
+    window.notePluginAiMessagesLoaded = noteLoaded;
+    window.buildPluginAiRequestFailureStatus = errStatus;
+    window.buildPluginAiSettingsLoadedStatus = settingsStatus;
+    window.buildPluginAiSettingsSavedStatus = savedStatus;
+    window.setPluginAiRequestFailure = setFailure;
+    window.setPluginAiSettingsStatus = setCfgStatus;
+    window.setPluginAiSavedStatus = setSaved;
+    window.setPluginAiSettingsSavedToast = toastSaved;
+    window.setPluginAiNoMessageWarning = toastNoMsg;
+    window.buildPluginAiNoScanWarning = noScanMsg;
+    window.setPluginAiNoScanWarningForPlugin = toastNoScan;
+    window.setPluginAiSettingsErrorToast = toastSaveErr;
+    window.setPluginAiLoadSettingsErrorToast = toastLoadErr;
+    window.setPluginAiRequestErrorToast = toastReqErr;
 })();

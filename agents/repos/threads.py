@@ -4,15 +4,16 @@ from typing import Any, Dict, List, Optional
 from agents.repos.utils import (
     create_thread_record,
     decode_message_row,
+    ensure_scope_thread,
     fetch_message,
-    fetch_thread_by_id,
-    fetch_thread_by_scope,
-    fetch_thread_for_scope,
     fetch_thread_messages,
     insert_message,
     json_or_none,
     list_threads,
     sanitize_thread_row,
+    scope_latest,
+    scope_thread,
+    thread_by_id,
     touch_thread_row,
 )
 from database.models import get_db
@@ -26,11 +27,9 @@ class ThreadMixin:
         title: Optional[str] = None,
         last_scan_session_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        from agents.repos.utils import ensure_thread_for_scope
-
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            thread = ensure_thread_for_scope(cursor, plugin_slug, is_theme, title, last_scan_session_id)
+            thread = ensure_scope_thread(cursor, plugin_slug, is_theme, title, last_scan_session_id)
             conn.commit()
             return sanitize_thread_row(thread)
 
@@ -55,21 +54,21 @@ class ThreadMixin:
     def get_latest_thread_for_scope(self, plugin_slug: str, is_theme: bool) -> Optional[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            row = fetch_thread_by_scope(cursor, plugin_slug, is_theme)
+            row = scope_latest(cursor, plugin_slug, is_theme)
             thread = sanitize_thread_row(row)
             return thread or None
 
     def get_thread_for_scope(self, thread_id: int, plugin_slug: str, is_theme: bool) -> Optional[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            row = fetch_thread_for_scope(cursor, thread_id, plugin_slug, is_theme)
+            row = scope_thread(cursor, thread_id, plugin_slug, is_theme)
             thread = sanitize_thread_row(row)
             return thread or None
 
     def get_thread(self, thread_id: int) -> Optional[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            row = fetch_thread_by_id(cursor, thread_id)
+            row = thread_by_id(cursor, thread_id)
             thread = sanitize_thread_row(row)
             return thread or None
 

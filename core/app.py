@@ -15,11 +15,11 @@ from starlette.responses import PlainTextResponse, Response
 
 from main import get_runtime_metadata
 from database.models import ensure_db_dir
-from logger import build_rotating_file_handler
+from logger import file_handler
 from core import release
 from core.limiter import limiter
 from core.routers import agents, catalog, favorites, scans, semgrep, system
-from core.routers.semgrep.helper import bootstrap_default_custom_rules
+from core.routers.semgrep.helper import bootstrap_rules
 from core.websockets import manager
 
 logger = logging.getLogger("zetatech")
@@ -96,7 +96,7 @@ def _ws_auth(websocket: WebSocket) -> bool:
 
 def _setup_log() -> None:
     handlers: list[logging.Handler] = [logging.StreamHandler()]
-    file = build_rotating_file_handler()
+    file = file_handler()
     if file is not None:
         handlers.insert(0, file)
 
@@ -118,7 +118,7 @@ def create_app() -> FastAPI:
     _setup_log()
     logger.info("Starting Zetatech Server...")
     _check_runtime()
-    bootstrap_default_custom_rules()
+    bootstrap_rules()
     meta = get_runtime_metadata()
 
     app = FastAPI(

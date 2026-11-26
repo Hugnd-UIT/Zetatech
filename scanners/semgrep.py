@@ -128,7 +128,7 @@ class SemgrepScanner:
             partial=partial,
         )
 
-    def _load_disabled_rule_ids(self) -> set[str]:
+    def _disabled_rules(self) -> set[str]:
         ids: set[str] = set()
 
         legacy = self.output_dir / "disabled_rules.json"
@@ -153,7 +153,7 @@ class SemgrepScanner:
 
         return ids
 
-    def _resolve_custom_rules_file(self) -> Optional[Path]:
+    def _custom_file(self) -> Optional[Path]:
         cands = [
             self.output_dir / "custom_rules.yaml",
             CANONICAL_CUSTOM_RULES_PATH,
@@ -162,7 +162,7 @@ class SemgrepScanner:
         ]
         return next((path for path in cands if path.exists()), None)
 
-    def _validate_custom_rule(self, rule: Dict[str, Any]) -> bool:
+    def _valid_rule(self, rule: Dict[str, Any]) -> bool:
         if not self.semgrep_command:
             return True
 
@@ -190,7 +190,7 @@ class SemgrepScanner:
                 except Exception:
                     pass
 
-    def _write_filtered_custom_rules(self, rules_data: Dict[str, Any], disabled_ids: set[str]) -> Optional[str]:
+    def _write_rules(self, rules_data: Dict[str, Any], disabled_ids: set[str]) -> Optional[str]:
         rules = rules_data.get("rules", [])
         if not isinstance(rules, list):
             return None
@@ -203,7 +203,7 @@ class SemgrepScanner:
             rid = str(rule.get("id") or "")
             if not rid or rid in disabled_ids:
                 continue
-            if self._validate_custom_rule(rule):
+            if self._valid_rule(rule):
                 active.append(rule)
             else:
                 invalid.append(rid)
@@ -226,26 +226,26 @@ class SemgrepScanner:
             )
         return str(out)
 
-    def _filter_custom_rules(self) -> Optional[str]:
-        file = self._resolve_custom_rules_file()
+    def _filter_rules(self) -> Optional[str]:
+        file = self._custom_file()
         if not file:
             return None
 
-        disabled = self._load_disabled_rule_ids()
+        disabled = self._disabled_rules()
         try:
             with open(file, "r") as fh:
                 data = yaml.safe_load(fh)
             if data and "rules" in data:
-                return self._write_filtered_custom_rules(data, disabled)
+                return self._write_rules(data, disabled)
         except Exception:
             return str(file)
 
         return str(file)
 
-    def _get_config_args(self) -> List[str]:
+    def _cfg_args(self) -> List[str]:
         vals: List[str] = []
 
-        custom = self._filter_custom_rules()
+        custom = self._filter_rules()
         if custom:
             vals.append(custom)
 
@@ -267,7 +267,7 @@ class SemgrepScanner:
             cfgs.extend(["--config", val])
         return cfgs
 
-    def _validate_scan_target(self, plugin_path: str, slug: str) -> SemgrepTarget | SemgrepResult:
+    def _check_target(self, plugin_path: str, slug: str) -> SemgrepTarget | SemgrepResult:
         if not slug or not isinstance(slug, str):
             return self._result(slug or "unknown", errors=["Invalid slug"])
 
@@ -294,9 +294,9 @@ class SemgrepScanner:
             output_file=self.output_dir / f"{slug}_results.json",
         )
 
-    def _build_scan_command(self, target: SemgrepTarget) -> List[str]:
+    def _scan_cmd(self, target: SemgrepTarget) -> List[str]:
         command = list(self.semgrep_command or [])
-        command.extend(self._get_config_args())
+        command.extend(self._cfg_args())
         command.extend(
             [
                 "--json",
@@ -308,9 +308,9 @@ class SemgrepScanner:
         )
         return command
 
-    def _is_non_fatal_semgrep_error(self, message: str) -> bool:
+    def _minor_error(self, message: str) -> bool:
         normalized = str(message or "").lower()
-        non_fatal_markers = [
+        markers = [
             "syntax error",
             "parse error",
             "partial parsing",
@@ -319,9 +319,9 @@ class SemgrepScanner:
             "timeout when running",
             "timed out while running",
         ]
-        return any(marker in normalized for marker in non_fatal_markers)
+        return any(marker in normalized for marker in markers)
 
-    def _parse_output_file(self, output_file: Path, stderr: str) -> SemgrepExecutionResult:
+    def _parse_output(self, output_file: Path, stderr: str) -> SemgrepExecutionResult:
         try:
             with open(output_file, "r") as fh:
                 data = json.load(fh)
@@ -342,7 +342,7 @@ class SemgrepScanner:
         err = str(stderr or "").strip()
 
         if errors:
-            minor = [item for item in errors if self._is_non_fatal_semgrep_error(item)]
+            minor = [item for item in errors if self._minor_error(item)]
             fatal = [item for item in errors if item not in minor]
 
             if fatal or not findings:
@@ -366,7 +366,7 @@ class SemgrepScanner:
             success=True,
         )
 
-    def _parse_subprocess_result(
+    def _parse_proc(
         self,
         *,
         output_file: Path,
@@ -375,7 +375,7 @@ class SemgrepScanner:
         timed_out: bool = False,
     ) -> SemgrepExecutionResult:
         if output_file.exists() and output_file.stat().st_size > 0:
-            parsed = self._parse_output_file(output_file, stderr)
+            parsed = self._parse_output(output_file, stderr)
             if timed_out:
                 errs = ["Scan timeout"] + parsed.errors
                 if parsed.findings:
@@ -406,7 +406,7 @@ class SemgrepScanner:
             success=False,
         )
 
-    def _execute_scan(self, target: SemgrepTarget) -> SemgrepExecutionResult:
+    def _run_scan(self, target: SemgrepTarget) -> SemgrepExecutionResult:
         if not self.semgrep_command:
             return SemgrepExecutionResult(
                 findings=[],
@@ -416,46 +416,45 @@ class SemgrepScanner:
 
         target.output_file.parent.mkdir(parents=True, exist_ok=True)
 
-
         process = subprocess.Popen(
-            self._build_scan_command(target),
+            self._scan_cmd(target),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
 
-        MAX_OUTPUT_SIZE = 10 * 1024 * 1024
+        max_out = 10 * 1024 * 1024
         try:
             if SEMGREP_TIMEOUT_SECONDS is None:
                 stdout, stderr = process.communicate()
             else:
                 stdout, stderr = process.communicate(timeout=SEMGREP_TIMEOUT_SECONDS)
-            if len(stdout) > MAX_OUTPUT_SIZE:
-                stdout = stdout[:MAX_OUTPUT_SIZE]
-            if len(stderr) > MAX_OUTPUT_SIZE:
-                stderr = stderr[:MAX_OUTPUT_SIZE]
+            if len(stdout) > max_out:
+                stdout = stdout[:max_out]
+            if len(stderr) > max_out:
+                stderr = stderr[:max_out]
         except subprocess.TimeoutExpired:
             process.kill()
             stdout, stderr = process.communicate()
-            if len(stdout) > MAX_OUTPUT_SIZE:
-                stdout = stdout[:MAX_OUTPUT_SIZE]
-            if len(stderr) > MAX_OUTPUT_SIZE:
-                stderr = stderr[:MAX_OUTPUT_SIZE]
-            return self._parse_subprocess_result(
+            if len(stdout) > max_out:
+                stdout = stdout[:max_out]
+            if len(stderr) > max_out:
+                stderr = stderr[:max_out]
+            return self._parse_proc(
                 output_file=target.output_file,
                 returncode=process.returncode,
                 stderr=stderr,
                 timed_out=True,
             )
 
-        return self._parse_subprocess_result(
+        return self._parse_proc(
             output_file=target.output_file,
             returncode=process.returncode,
             stderr=stderr,
         )
 
     def scan_plugin(self, plugin_path: str, slug: str) -> SemgrepResult:
-        target = self._validate_scan_target(plugin_path, slug)
+        target = self._check_target(plugin_path, slug)
         if isinstance(target, SemgrepResult):
             return target
 
@@ -463,7 +462,7 @@ class SemgrepScanner:
             return self._result(target.slug, errors=["Stopped"])
 
         try:
-            res = self._execute_scan(target)
+            res = self._run_scan(target)
             return self._result(
                 target.slug,
                 findings=res.findings,

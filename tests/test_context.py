@@ -4,8 +4,8 @@ from pathlib import Path
 
 from agents.context import (
     build_plugin_context,
-    ensure_thread_source_dir,
-    resolve_thread_source_path,
+    ensure_source,
+    thread_source,
 )
 from agents.repos import AIRepository
 from database.models import init_db
@@ -135,68 +135,68 @@ def _insert_semgrep_finding(
     )
 
 
-def test_resolve_thread_source_path_uses_thread_scope_and_requires_matching_scan_result(monkeypatch, tmp_path):
-    runtime_root = tmp_path / ".zetatech"
-    monkeypatch.setattr("agents.context.resolve_runtime_paths", lambda: _runtime_paths(runtime_root))
-    db_path = tmp_path / "ai_context.db"
-    init_db(db_path)
+def test_source_scope(monkeypatch, tmp_path):
+    root = tmp_path / ".zetatech"
+    monkeypatch.setattr("agents.context.resolve_runtime_paths", lambda: _runtime_paths(root))
+    db = tmp_path / "ai_context.db"
+    init_db(db)
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        session_id = _insert_scan_session(cursor, "completed", 1, 0)
-        cursor.execute(
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+        sid = _insert_scan_session(cur, "completed", 1, 0)
+        cur.execute(
             """
             INSERT INTO scan_results (session_id, slug, version, is_theme)
             VALUES (?, ?, ?, ?)
             """,
-            (session_id, "hello-dolly", "1.0.0", 0),
+            (sid, "hello-dolly", "1.0.0", 0),
         )
-        cursor.execute(
+        cur.execute(
             """
             INSERT INTO scan_results (session_id, slug, version, is_theme)
             VALUES (?, ?, ?, ?)
             """,
-            (session_id, "hello-dolly", "2.0.0", 1),
+            (sid, "hello-dolly", "2.0.0", 1),
         )
         conn.commit()
 
-    assert session_id is not None
-    assert resolve_thread_source_path(
-        db_path=db_path,
+    assert sid is not None
+    assert thread_source(
+        db_path=db,
         plugin_slug="hello-dolly",
         is_theme=False,
-        last_scan_session_id=session_id,
-    ) == str(runtime_root / "plugins" / "Plugins" / "hello-dolly" / "source")
-    assert resolve_thread_source_path(
-        db_path=db_path,
+        last_scan_session_id=sid,
+    ) == str(root / "plugins" / "Plugins" / "hello-dolly" / "source")
+    assert thread_source(
+        db_path=db,
         plugin_slug="hello-dolly",
         is_theme=True,
-        last_scan_session_id=session_id,
-    ) == str(runtime_root / "plugins" / "Themes" / "hello-dolly" / "source")
+        last_scan_session_id=sid,
+    ) == str(root / "plugins" / "Themes" / "hello-dolly" / "source")
 
-    assert session_id is not None
+    assert sid is not None
 
-    missing_session_id = session_id + 1
-    repository = AIRepository(db_path=db_path)
-    plugin_thread = repository.get_or_create_thread(
+    miss = sid + 1
+    repo = AIRepository(db_path=db)
+    p_th = repo.get_or_create_thread(
         plugin_slug="hello-dolly",
         is_theme=False,
-        last_scan_session_id=missing_session_id,
+        last_scan_session_id=miss,
     )
-    theme_thread = repository.get_or_create_thread(
+    t_th = repo.get_or_create_thread(
         plugin_slug="hello-dolly",
         is_theme=True,
-        last_scan_session_id=missing_session_id,
+        last_scan_session_id=miss,
     )
 
-    assert plugin_thread["id"] != theme_thread["id"]
+    assert p_th["id"] != t_th["id"]
 
     try:
-        resolve_thread_source_path(
-            db_path=db_path,
+        thread_source(
+            db_path=db,
             plugin_slug="hello-dolly",
             is_theme=False,
-            last_scan_session_id=missing_session_id,
+            last_scan_session_id=miss,
         )
     except LookupError as exc:
         assert str(exc) == "Trusted source path requires a matching scan result for the selected thread scope."
@@ -204,11 +204,11 @@ def test_resolve_thread_source_path_uses_thread_scope_and_requires_matching_scan
         raise AssertionError("Expected plugin thread source path lookup to fail for missing scan result")
 
     try:
-        resolve_thread_source_path(
-            db_path=db_path,
+        thread_source(
+            db_path=db,
             plugin_slug="hello-dolly",
             is_theme=True,
-            last_scan_session_id=missing_session_id,
+            last_scan_session_id=miss,
         )
     except LookupError as exc:
         assert str(exc) == "Trusted source path requires a matching scan result for the selected thread scope."
@@ -216,32 +216,32 @@ def test_resolve_thread_source_path_uses_thread_scope_and_requires_matching_scan
         raise AssertionError("Expected theme thread source path lookup to fail for missing scan result")
 
 
-def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_semgrep_data(
+def test_plugin_context(
     tmp_path,
 ):
-    db_path = tmp_path / "ai_context.db"
-    init_db(db_path)
+    db = tmp_path / "ai_context.db"
+    init_db(db)
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
 
-        selected_session_id = _insert_scan_session(cursor, "completed", 5, 2)
-        other_session_id = _insert_scan_session(cursor, "completed", 1, 0)
+        sid = _insert_scan_session(cur, "completed", 5, 2)
+        other_sid = _insert_scan_session(cur, "completed", 1, 0)
 
-        target_catalog_id = _insert_plugin_catalog(
-            cursor,
+        cid = _insert_plugin_catalog(
+            cur,
             "target-plugin",
-            selected_session_id,
+            sid,
             "1.2.3",
             87,
             1000,
             12,
             2,
         )
-        other_catalog_id = _insert_plugin_catalog(
-            cursor,
+        other_cid = _insert_plugin_catalog(
+            cur,
             "other-plugin",
-            other_session_id,
+            other_sid,
             "9.9.9",
             10,
             5,
@@ -250,9 +250,9 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
         )
 
         _insert_plugin_catalog_session(
-            cursor,
-            target_catalog_id,
-            selected_session_id,
+            cur,
+            cid,
+            sid,
             87,
             "1.2.3",
             1000,
@@ -260,9 +260,9 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
             2,
         )
         _insert_plugin_catalog_session(
-            cursor,
-            other_catalog_id,
-            other_session_id,
+            cur,
+            other_cid,
+            other_sid,
             10,
             "9.9.9",
             5,
@@ -270,16 +270,16 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
             1,
         )
 
-        stale_scan_id = _insert_semgrep_scan(
-            cursor,
+        stale = _insert_semgrep_scan(
+            cur,
             "target-plugin",
             "1.0.0",
             "completed",
             {"total_findings": 1, "breakdown": {"WARNING": 1}},
         )
         _insert_semgrep_finding(
-            cursor,
-            stale_scan_id,
+            cur,
+            stale,
             "stale.rule",
             "Stale issue",
             "WARNING",
@@ -289,16 +289,16 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
             {"category": "stale"},
         )
 
-        relevant_scan_id = _insert_semgrep_scan(
-            cursor,
+        scan = _insert_semgrep_scan(
+            cur,
             "target-plugin",
             "1.2.3",
             "completed",
             {"total_findings": 2, "breakdown": {"ERROR": 1, "WARNING": 1}},
         )
         _insert_semgrep_finding(
-            cursor,
-            relevant_scan_id,
+            cur,
+            scan,
             "security.eval",
             "Use of eval detected",
             "ERROR",
@@ -308,8 +308,8 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
             {"owasp": "A03"},
         )
         _insert_semgrep_finding(
-            cursor,
-            relevant_scan_id,
+            cur,
+            scan,
             "security.input",
             "Unsanitized input",
             "WARNING",
@@ -319,16 +319,16 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
             {"source": "querystring"},
         )
 
-        unrelated_scan_id = _insert_semgrep_scan(
-            cursor,
+        other_scan = _insert_semgrep_scan(
+            cur,
             "other-plugin",
             "9.9.9",
             "completed",
             {"total_findings": 1, "breakdown": {"INFO": 1}},
         )
         _insert_semgrep_finding(
-            cursor,
-            unrelated_scan_id,
+            cur,
+            other_scan,
             "other.rule",
             "Other plugin issue",
             "INFO",
@@ -339,25 +339,25 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
         )
         conn.commit()
 
-    assert selected_session_id is not None
-    context = build_plugin_context(
-        db_path=db_path,
+    assert sid is not None
+    ctx = build_plugin_context(
+        db_path=db,
         plugin_slug="target-plugin",
         is_theme=False,
         source_path="/tmp/target-plugin",
-        last_scan_session_id=selected_session_id,
+        last_scan_session_id=sid,
     )
 
-    assert context["source_path"] == "/tmp/target-plugin"
-    assert context["plugin"]["slug"] == "target-plugin"
-    assert context["plugin"]["is_theme"] == 0
-    assert context["plugin"]["latest_version"] == "1.2.3"
-    assert context["plugin"]["last_scan_session_id"] == selected_session_id
-    assert context["plugin"]["score"] == 87
-    assert context["plugin"]["installations"] == 1000
-    assert context["plugin"]["days_since_update"] == 12
-    assert context["plugin"]["semgrep_findings"] == 2
-    assert context["plugin"]["metrics"] == {
+    assert ctx["source_path"] == "/tmp/target-plugin"
+    assert ctx["plugin"]["slug"] == "target-plugin"
+    assert ctx["plugin"]["is_theme"] == 0
+    assert ctx["plugin"]["latest_version"] == "1.2.3"
+    assert ctx["plugin"]["last_scan_session_id"] == sid
+    assert ctx["plugin"]["score"] == 87
+    assert ctx["plugin"]["installations"] == 1000
+    assert ctx["plugin"]["days_since_update"] == 12
+    assert ctx["plugin"]["semgrep_findings"] == 2
+    assert ctx["plugin"]["metrics"] == {
         "risk_score": 87,
         "installations": 1000,
         "days_since_update": 12,
@@ -365,43 +365,43 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
         "semgrep_findings": 2,
     }
 
-    assert context["semgrep"]["scan"]["id"] == relevant_scan_id
-    assert context["semgrep"]["snapshot"] == {
+    assert ctx["semgrep"]["scan"]["id"] == scan
+    assert ctx["semgrep"]["snapshot"] == {
         "findings_count": 2,
         "latest_version": "1.2.3",
         "has_completed_scan": True,
         "summary_total_findings": 2,
     }
-    assert context["semgrep"]["scan"]["version"] == "1.2.3"
-    assert context["semgrep"]["summary"] == {
+    assert ctx["semgrep"]["scan"]["version"] == "1.2.3"
+    assert ctx["semgrep"]["summary"] == {
         "total_findings": 2,
         "breakdown": {"ERROR": 1, "WARNING": 1},
     }
-    assert [finding["rule_id"] for finding in context["semgrep"]["findings"]] == [
+    assert [f["rule_id"] for f in ctx["semgrep"]["findings"]] == [
         "security.eval",
         "security.input",
     ]
 
-    serialized = json.dumps(context)
-    assert "other-plugin" not in serialized
-    assert "Other plugin issue" not in serialized
-    assert "stale.rule" not in serialized
+    raw = json.dumps(ctx)
+    assert "other-plugin" not in raw
+    assert "Other plugin issue" not in raw
+    assert "stale.rule" not in raw
 
 
-def test_build_plugin_context_does_not_return_stale_older_version_semgrep_findings(
+def test_stale_semgrep(
     tmp_path,
 ):
-    db_path = tmp_path / "ai_context.db"
-    init_db(db_path)
+    db = tmp_path / "ai_context.db"
+    init_db(db)
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
 
-        session_id = _insert_scan_session(cursor, "completed", 2, 0)
-        catalog_id = _insert_plugin_catalog(
-            cursor,
+        sid = _insert_scan_session(cur, "completed", 2, 0)
+        cid = _insert_plugin_catalog(
+            cur,
             "target-plugin",
-            session_id,
+            sid,
             "2.0.0",
             42,
             500,
@@ -409,9 +409,9 @@ def test_build_plugin_context_does_not_return_stale_older_version_semgrep_findin
             0,
         )
         _insert_plugin_catalog_session(
-            cursor,
-            catalog_id,
-            session_id,
+            cur,
+            cid,
+            sid,
             42,
             "2.0.0",
             500,
@@ -419,16 +419,16 @@ def test_build_plugin_context_does_not_return_stale_older_version_semgrep_findin
             0,
         )
 
-        old_scan_id = _insert_semgrep_scan(
-            cursor,
+        old = _insert_semgrep_scan(
+            cur,
             "target-plugin",
             "1.9.9",
             "completed",
             {"total_findings": 1, "breakdown": {"WARNING": 1}},
         )
         _insert_semgrep_finding(
-            cursor,
-            old_scan_id,
+            cur,
+            old,
             "stale.rule",
             "Older version issue",
             "WARNING",
@@ -439,24 +439,24 @@ def test_build_plugin_context_does_not_return_stale_older_version_semgrep_findin
         )
         conn.commit()
 
-    assert session_id is not None
-    context = build_plugin_context(
-        db_path=db_path,
+    assert sid is not None
+    ctx = build_plugin_context(
+        db_path=db,
         plugin_slug="target-plugin",
         is_theme=False,
         source_path="/tmp/target-plugin",
-        last_scan_session_id=session_id,
+        last_scan_session_id=sid,
     )
 
-    assert context["plugin"]["latest_version"] == "2.0.0"
-    assert context["plugin"]["metrics"] == {
+    assert ctx["plugin"]["latest_version"] == "2.0.0"
+    assert ctx["plugin"]["metrics"] == {
         "risk_score": 42,
         "installations": 500,
         "days_since_update": 5,
         "latest_version": "2.0.0",
         "semgrep_findings": 0,
     }
-    assert context["semgrep"] == {
+    assert ctx["semgrep"] == {
         "scan": None,
         "summary": {},
         "findings": [],
@@ -469,20 +469,20 @@ def test_build_plugin_context_does_not_return_stale_older_version_semgrep_findin
     }
 
 
-def test_ensure_thread_source_dir_accepts_canonical_runtime_plugin_path(monkeypatch, tmp_path):
-    runtime_root = tmp_path / ".zetatech"
-    monkeypatch.setattr("agents.context.resolve_runtime_paths", lambda: _runtime_paths(runtime_root))
+def test_source_download(monkeypatch, tmp_path):
+    root = tmp_path / ".zetatech"
+    monkeypatch.setattr("agents.context.resolve_runtime_paths", lambda: _runtime_paths(root))
 
-    downloaded_source = runtime_root / "plugins" / "Plugins" / "akismet" / "source"
-    downloaded_source.mkdir(parents=True, exist_ok=True)
-    (downloaded_source / "plugin.php").write_text("<?php // ok", encoding="utf-8")
+    src = root / "plugins" / "Plugins" / "akismet" / "source"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "plugin.php").write_text("<?php // ok", encoding="utf-8")
 
     monkeypatch.setattr(
-        "agents.context.resolve_existing_thread_source_path",
+        "agents.context.existing_source",
         lambda **__: None,
     )
     monkeypatch.setattr(
-        "agents.context.resolve_source_download_info",
+        "agents.context.download_info",
         lambda **__: {
             "download_url": "https://downloads.wordpress.org/plugin/akismet.latest.zip",
             "version": "1.0.0",
@@ -491,17 +491,17 @@ def test_ensure_thread_source_dir_accepts_canonical_runtime_plugin_path(monkeypa
 
     class _FakeDownloader:
         def __init__(self, base_dir):
-            assert Path(base_dir) == runtime_root / "plugins"
+            assert Path(base_dir) == root / "plugins"
 
         def download_and_extract(self, download_url, slug, verbose=False):
             assert download_url == "https://downloads.wordpress.org/plugin/akismet.latest.zip"
             assert slug == "akismet"
             assert verbose is False
-            return downloaded_source
+            return src
 
     monkeypatch.setattr("agents.context.PluginDownloader", _FakeDownloader)
 
-    resolved = ensure_thread_source_dir(
+    got = ensure_source(
         db_path=tmp_path / "ai_context.db",
         plugin_slug="akismet",
         is_theme=False,
@@ -509,22 +509,22 @@ def test_ensure_thread_source_dir_accepts_canonical_runtime_plugin_path(monkeypa
         root_path=tmp_path / "workspace",
     )
 
-    assert resolved == downloaded_source.resolve()
+    assert got == src.resolve()
 
 
-def test_build_plugin_context_returns_empty_payload_when_plugin_is_missing(tmp_path):
-    db_path = tmp_path / "ai_context.db"
-    init_db(db_path)
+def test_missing_context(tmp_path):
+    db = tmp_path / "ai_context.db"
+    init_db(db)
 
-    context = build_plugin_context(
-        db_path=db_path,
+    ctx = build_plugin_context(
+        db_path=db,
         plugin_slug="missing-plugin",
         is_theme=False,
         source_path="/tmp/missing-plugin",
         last_scan_session_id=999,
     )
 
-    assert context == {
+    assert ctx == {
         "source_path": "/tmp/missing-plugin",
         "plugin": None,
         "semgrep": {"scan": None, "summary": {}, "findings": []},

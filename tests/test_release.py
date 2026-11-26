@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from database.models import _resolve_db_path
+from database.models import _db_path
 from paths import resolve_runtime_paths
 from core.release import UpdateManager
 
@@ -16,57 +16,57 @@ class _TestUpdateManager(UpdateManager):
         super().__init__()
 
 
-def test_status_reads_runtime_metadata_from_env(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_status_env(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_BUILD", "build-123")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": None, "update_available": False}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["current_version"] == "0.1.3"
-    assert status["current_tag"] == "v0.1.3"
-    assert status["build_id"] == "build-123"
-    assert status["runtime_status"] == "ready"
-    assert status["status"] == "up_to_date"
+    assert res["current_version"] == "0.1.3"
+    assert res["current_tag"] == "v0.1.3"
+    assert res["build_id"] == "build-123"
+    assert res["runtime_status"] == "ready"
+    assert res["status"] == "up_to_date"
 
 
-def test_status_returns_up_to_date_without_helper_command(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_status_current(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.1.3", "update_available": False}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["status"] == "up_to_date"
-    assert status["update_available"] is False
-    assert status["update_command"] is None
-    assert status["manual_update_required"] is False
+    assert res["status"] == "up_to_date"
+    assert res["update_available"] is False
+    assert res["update_command"] is None
+    assert res["manual_update_required"] is False
 
 
-def test_resolve_db_path_raises_when_default_runtime_root_is_unwritable(monkeypatch, tmp_path):
-    blocked_db_path = tmp_path / "blocked-home" / ".zetatech" / "zetatech.db"
+def test_unwritable_root(monkeypatch, tmp_path):
+    blocked = tmp_path / "blocked-home" / ".zetatech" / "zetatech.db"
     monkeypatch.delenv("ZETATECH_DB", raising=False)
-    monkeypatch.setattr("database.models.DEFAULT_DB_PATH", blocked_db_path)
-    monkeypatch.setattr("database.models._is_directory_writable", lambda path: path != blocked_db_path.parent)
+    monkeypatch.setattr("database.models.DEFAULT_DB_PATH", blocked)
+    monkeypatch.setattr("database.models._dir_writable", lambda p: p != blocked.parent)
 
-    with pytest.raises(PermissionError, match=str(blocked_db_path.parent)):
-        _resolve_db_path(None)
+    with pytest.raises(PermissionError, match=str(blocked.parent)):
+        _db_path(None)
 
 
-def test_runtime_paths_define_canonical_durable_root_and_children():
+def test_runtime_roots():
     paths = resolve_runtime_paths()
 
     assert paths.root == Path("/home/appuser/.zetatech")
@@ -78,41 +78,41 @@ def test_runtime_paths_define_canonical_durable_root_and_children():
     assert paths.approvals_dir == paths.root / "approvals"
 
 
-def test_runtime_paths_are_stable_within_one_process():
-    first = resolve_runtime_paths()
-    second = resolve_runtime_paths()
+def test_runtime_stable():
+    p1 = resolve_runtime_paths()
+    p2 = resolve_runtime_paths()
 
-    assert first is second
-    assert first == second
+    assert p1 is p2
+    assert p1 == p2
 
 
-def test_resolve_db_path_raises_for_explicit_unwritable_path(monkeypatch, tmp_path):
-    explicit_db_path = tmp_path / "blocked" / "zetatech.db"
-    monkeypatch.setattr("database.models._is_directory_writable", lambda path: False)
+def test_unwritable_db(monkeypatch, tmp_path):
+    db = tmp_path / "blocked" / "zetatech.db"
+    monkeypatch.setattr("database.models._dir_writable", lambda p: False)
 
     try:
-        _resolve_db_path(explicit_db_path)
+        _db_path(db)
         assert False, "Expected PermissionError"
     except PermissionError as exc:
-        assert str(explicit_db_path.parent) in str(exc)
+        assert str(db.parent) in str(exc)
 
 
-def test_resolve_db_path_keeps_explicit_env_path_when_set(monkeypatch, tmp_path):
-    explicit_db_path = tmp_path / "state" / "zetatech.db"
-    monkeypatch.setenv("ZETATECH_DB", str(explicit_db_path))
+def test_env_db(monkeypatch, tmp_path):
+    db = tmp_path / "state" / "zetatech.db"
+    monkeypatch.setenv("ZETATECH_DB", str(db))
 
-    resolved = _resolve_db_path(None)
+    got = _db_path(None)
 
-    assert resolved == explicit_db_path
-    assert explicit_db_path.parent.exists()
+    assert got == db
+    assert db.parent.exists()
 
 
-def test_status_returns_helper_command_when_new_release_exists(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_status_update(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {
             "tag_name": "v0.2.0",
@@ -123,80 +123,80 @@ def test_status_returns_helper_command_when_new_release_exists(monkeypatch, tmp_
             "update_available": True,
         }
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["status"] == "update_available"
-    assert status["update_available"] is True
-    assert status["manual_update_required"] is True
-    assert "docker pull Hugnd-UIT/Zetatech:latest" in status["update_command"]
-    assert "-v zetatech-data:/home/appuser/.zetatech" in status["update_command"]
-    assert "zetatech-plugins" not in status["update_command"]
-    assert "zetatech-semgrep" not in status["update_command"]
-    assert "/app/Plugins" not in status["update_command"]
-    assert "/app/semgrep_results" not in status["update_command"]
+    assert res["status"] == "update_available"
+    assert res["update_available"] is True
+    assert res["manual_update_required"] is True
+    assert "docker pull Hugnd-UIT/Zetatech:latest" in res["update_command"]
+    assert "-v zetatech-data:/home/appuser/.zetatech" in res["update_command"]
+    assert "zetatech-plugins" not in res["update_command"]
+    assert "zetatech-semgrep" not in res["update_command"]
+    assert "/app/Plugins" not in res["update_command"]
+    assert "/app/semgrep_results" not in res["update_command"]
 
 
-def test_status_degrades_when_release_lookup_fails(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_status_degraded(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
-    monkeypatch.setattr(manager, "_fetch_release", lambda *_: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(mgr, "_fetch_release", lambda *_: (_ for _ in ()).throw(RuntimeError("boom")))
 
-    status = manager.get_status(force=True)
+    res = mgr.get_status(force=True)
 
-    assert status["status"] == "degraded"
-    assert status["update_available"] is False
-    assert status["update_command"] is None
-    assert status["last_error"] == "RuntimeError: boom"
-    assert "temporarily unavailable" in status["message"]
+    assert res["status"] == "degraded"
+    assert res["update_available"] is False
+    assert res["update_command"] is None
+    assert res["last_error"] == "RuntimeError: boom"
+    assert "temporarily unavailable" in res["message"]
 
 
-def test_status_degrades_when_runtime_metadata_malformed(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_status_malformed(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.delenv("ZETATECH_IMAGE_TAG", raising=False)
     monkeypatch.delenv("ZETATECH_IMAGE_BUILD", raising=False)
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": None, "update_available": False}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["current_version"] == "unknown"
-    assert status["current_tag"] == "unknown"
-    assert status["runtime_status"] == "degraded"
-    assert status["status"] == "degraded"
-    assert "Runtime version metadata is incomplete" in status["message"]
+    assert res["current_version"] == "unknown"
+    assert res["current_tag"] == "unknown"
+    assert res["runtime_status"] == "degraded"
+    assert res["status"] == "degraded"
+    assert "Runtime version metadata is incomplete" in res["message"]
 
 
-def test_get_status_does_not_write_host_update_request_file(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_no_update_file(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "update_available": True}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status(force=True)
+    res = mgr.get_status(force=True)
 
-    assert status["update_available"] is True
+    assert res["update_available"] is True
     assert not (tmp_path / ".zetatech" / "update_state.json").exists()
 
 
-def test_manual_update_payload_is_notify_only(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_manual_notify(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def get_status(*args, **kwargs):
+    def status(*args, **kwargs):
         del args, kwargs
         return {
             "status": "update_available",
@@ -208,11 +208,11 @@ def test_manual_update_payload_is_notify_only(monkeypatch, tmp_path):
             "manual_update_required": True,
         }
 
-    monkeypatch.setattr(manager, "get_status", get_status)
+    monkeypatch.setattr(mgr, "get_status", status)
 
-    payload = manager.get_manual_update_payload()
+    res = mgr.manual_payload()
 
-    assert payload == {
+    assert res == {
         "status": "update_available",
         "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
         "current_version": "0.1.3",
@@ -226,10 +226,10 @@ def test_manual_update_payload_is_notify_only(monkeypatch, tmp_path):
     }
 
 
-def test_manual_update_payload_is_deprecated_even_when_release_lookup_degraded(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_manual_degraded(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    def get_status(*args, **kwargs):
+    def status(*args, **kwargs):
         del args, kwargs
         return {
             "status": "degraded",
@@ -241,89 +241,89 @@ def test_manual_update_payload_is_deprecated_even_when_release_lookup_degraded(m
             "manual_update_required": False,
         }
 
-    monkeypatch.setattr(manager, "get_status", get_status)
+    monkeypatch.setattr(mgr, "get_status", status)
 
-    payload = manager.get_manual_update_payload()
+    res = mgr.manual_payload()
 
-    assert payload["status"] == "degraded"
-    assert payload["deprecated"] is True
-    assert payload["manual_update_only"] is True
-    assert payload["update_command"] is None
-    assert payload["latest_version"] is None
-    assert payload["current_tag"] == "v0.1.3"
+    assert res["status"] == "degraded"
+    assert res["deprecated"] is True
+    assert res["manual_update_only"] is True
+    assert res["update_command"] is None
+    assert res["latest_version"] is None
+    assert res["current_tag"] == "v0.1.3"
 
 
-def test_legacy_host_update_scripts_are_removed_from_supported_runtime_path():
+def test_legacy_removed():
     assert not (ROOT / "run.sh").exists()
     assert not (ROOT / "infrastructure" / "host_update_watcher.sh").exists()
     assert not (ROOT / "infrastructure" / "update_docker_install.sh").exists()
 
 
-def test_readme_uses_image_first_install_flow_without_legacy_scripts():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+def test_readme_install():
+    txt = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "docker pull Hugnd-UIT/Zetatech:latest" in readme
-    assert "docker run -d --name zetatech -p 8080:8080" in readme
-    assert "-v zetatech-data:/home/appuser/.zetatech" in readme
-    assert "This is a hard cutover to the canonical runtime root." in readme
-    assert "only `zetatech-data` mounted at `/home/appuser/.zetatech`" in readme
-    assert "three named Docker volumes" not in readme
-    assert "-v zetatech-plugins:/app/Plugins" not in readme
-    assert "-v zetatech-semgrep:/app/semgrep_results" not in readme
-    assert "./run.sh" not in readme
-    assert "host-side update watcher" not in readme
-    assert "rebuild and restart everything" not in readme
-    assert "git clone https://github.com/Hugnd-UIT/Zetatech.git" not in readme
-
-
-def test_manual_update_command_does_not_reference_legacy_scripts(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    command = manager._build_manual_update_command()
-
-    assert command.count("-v ") == 1
-    assert "docker pull Hugnd-UIT/Zetatech:latest" in command
-    assert "-v zetatech-data:/home/appuser/.zetatech" in command
-    assert "zetatech-plugins" not in command
-    assert "zetatech-semgrep" not in command
-    assert "/app/Plugins" not in command
-    assert "/app/semgrep_results" not in command
-    assert "run.sh" not in command
-    assert "update_docker_install.sh" not in command
-    assert "host_update_watcher.sh" not in command
-    assert "docker build" not in command
-    assert "git pull" not in command
-    assert "update_state.json" not in command
-    assert "update-runtime.json" not in command
+    assert "docker pull Hugnd-UIT/Zetatech:latest" in txt
+    assert "docker run -d --name zetatech -p 8080:8080" in txt
+    assert "-v zetatech-data:/home/appuser/.zetatech" in txt
+    assert "This is a hard cutover to the canonical runtime root." in txt
+    assert "only `zetatech-data` mounted at `/home/appuser/.zetatech`" in txt
+    assert "three named Docker volumes" not in txt
+    assert "-v zetatech-plugins:/app/Plugins" not in txt
+    assert "-v zetatech-semgrep:/app/semgrep_results" not in txt
+    assert "./run.sh" not in txt
+    assert "host-side update watcher" not in txt
+    assert "rebuild and restart everything" not in txt
+    assert "git clone https://github.com/Hugnd-UIT/Zetatech.git" not in txt
 
 
-def test_runtime_metadata_falls_back_without_wrapper_runtime_file(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_manual_cmd(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    cmd = mgr._update_cmd()
+
+    assert cmd.count("-v ") == 1
+    assert "docker pull Hugnd-UIT/Zetatech:latest" in cmd
+    assert "-v zetatech-data:/home/appuser/.zetatech" in cmd
+    assert "zetatech-plugins" not in cmd
+    assert "zetatech-semgrep" not in cmd
+    assert "/app/Plugins" not in cmd
+    assert "/app/semgrep_results" not in cmd
+    assert "run.sh" not in cmd
+    assert "update_docker_install.sh" not in cmd
+    assert "host_update_watcher.sh" not in cmd
+    assert "docker build" not in cmd
+    assert "git pull" not in cmd
+    assert "update_state.json" not in cmd
+    assert "update-runtime.json" not in cmd
+
+
+def test_metadata_fallback(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.delenv("ZETATECH_IMAGE_VERSION", raising=False)
     monkeypatch.delenv("ZETATECH_IMAGE_TAG", raising=False)
     monkeypatch.delenv("ZETATECH_IMAGE_BUILD", raising=False)
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": None, "update_available": False}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["current_version"] == "0.2.0"
-    assert status["current_tag"] == "0.2.0"
-    assert status["runtime_status"] == "fallback"
-    assert status["status"] == "up_to_date"
+    assert res["current_version"] == "0.2.0"
+    assert res["current_tag"] == "0.2.0"
+    assert res["runtime_status"] == "fallback"
+    assert res["status"] == "up_to_date"
     assert not (tmp_path / ".zetatech" / "update-runtime.json").exists()
 
 
-def test_status_uses_runtime_version_for_release_comparison(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_status_compare(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.2")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.2")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {
             "tag_name": "v0.1.3",
@@ -333,23 +333,23 @@ def test_status_uses_runtime_version_for_release_comparison(monkeypatch, tmp_pat
             "published_at": "2026-04-16T00:00:00Z",
         }
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["current_version"] == "0.1.2"
-    assert status["current_tag"] == "v0.1.2"
-    assert status["latest_version"] == "v0.1.3"
-    assert status["release_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3"
-    assert status["update_available"] is True
-    assert status["status"] == "update_available"
+    assert res["current_version"] == "0.1.2"
+    assert res["current_tag"] == "v0.1.2"
+    assert res["latest_version"] == "v0.1.3"
+    assert res["release_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3"
+    assert res["update_available"] is True
+    assert res["status"] == "update_available"
 
 
-def test_release_payload_rejects_unsupported_html_host(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_reject_html_host(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
     with pytest.raises(ValueError, match="Unsupported release URL host"):
-        manager._release_metadata.build_release_payload(
+        mgr._release_metadata.release_payload(
             {
                 "tag_name": "v0.1.3",
                 "name": "v0.1.3",
@@ -360,18 +360,18 @@ def test_release_payload_rejects_unsupported_html_host(tmp_path):
         )
 
 
-def test_release_payload_rejects_unsupported_api_host(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-    manager._release_metadata.release_api_url = "https://example.com/tags"
+def test_reject_api_host(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+    mgr._release_metadata.release_api_url = "https://example.com/tags"
 
     with pytest.raises(ValueError, match="Unsupported release API host"):
-        manager._release_metadata.fetch_release()
+        mgr._release_metadata.fetch_release()
 
 
-def test_tag_picker_chooses_highest_semver_tag(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_pick_semver(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    picked = manager._release_metadata._pick_latest_tag(
+    tag = mgr._release_metadata._pick_tag(
         [
             {"name": "v0.1.9"},
             {"name": "v0.2.0"},
@@ -380,13 +380,13 @@ def test_tag_picker_chooses_highest_semver_tag(tmp_path):
         ]
     )
 
-    assert picked == "v0.10.0"
+    assert tag == "v0.10.0"
 
 
-def test_tag_picker_ignores_non_semver_tags(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_ignore_non_semver(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    picked = manager._release_metadata._pick_latest_tag(
+    tag = mgr._release_metadata._pick_tag(
         [
             {"name": "latest"},
             {"name": "main"},
@@ -394,24 +394,24 @@ def test_tag_picker_ignores_non_semver_tags(tmp_path):
         ]
     )
 
-    assert picked is None
+    assert tag is None
 
 
-def test_fetch_release_builds_tag_payload_from_tags_api(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_fetch_tags(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "main"}, {"name": "v0.2.0"}, {"name": "v0.1.3"}]
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload == {
+    assert res == {
         "tag_name": "v0.2.0",
         "name": "v0.2.0",
         "body": "",
@@ -420,43 +420,43 @@ def test_fetch_release_builds_tag_payload_from_tags_api(monkeypatch, tmp_path):
     }
 
 
-def test_fetch_release_returns_empty_payload_when_no_semver_tags_exist(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_fetch_empty(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "main"}, {"name": "latest"}]
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload == manager._release_metadata.empty_release_payload()
-
-
-def test_tag_url_uses_stable_github_tree_page(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    assert manager._release_metadata.tag_url("v0.2.0") == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0"
-    assert manager._release_metadata.tag_url("release/test") == "https://github.com/Hugnd-UIT/Zetatech/tree/release/test"
+    assert res == mgr._release_metadata.empty_payload()
 
 
-def test_update_manager_uses_tags_api_endpoint(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_tag_url(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    assert manager.RELEASE_API_URL.endswith("/tags")
-    assert manager._release_metadata.release_api_url.endswith("/tags")
+    assert mgr._release_metadata.tag_url("v0.2.0") == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0"
+    assert mgr._release_metadata.tag_url("release/test") == "https://github.com/Hugnd-UIT/Zetatech/tree/release/test"
 
 
-def test_up_to_date_status_uses_tag_tree_url(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_tags_api(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    assert mgr.RELEASE_API_URL.endswith("/tags")
+    assert mgr._release_metadata.release_api_url.endswith("/tags")
+
+
+def test_current_url(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {
             "tag_name": "v0.1.3",
@@ -467,22 +467,22 @@ def test_up_to_date_status_uses_tag_tree_url(monkeypatch, tmp_path):
             "update_available": False,
         }
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["release_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3"
-    assert status["release_notes"] == ""
-    assert status["release_published_at"] is None
-    assert status["status"] == "up_to_date"
+    assert res["release_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3"
+    assert res["release_notes"] == ""
+    assert res["release_published_at"] is None
+    assert res["status"] == "up_to_date"
 
 
-def test_update_available_status_uses_tag_tree_url(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_update_url(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.2")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.2")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {
             "tag_name": "v0.1.3",
@@ -492,94 +492,97 @@ def test_update_available_status_uses_tag_tree_url(monkeypatch, tmp_path):
             "published_at": None,
         }
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["release_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3"
-    assert status["update_available"] is True
-    assert status["status"] == "update_available"
+    assert res["release_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3"
+    assert res["update_available"] is True
+    assert res["status"] == "update_available"
 
 
-def test_degraded_status_keeps_stable_keys_when_tag_lookup_fails(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_degraded_keys(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
-    monkeypatch.setattr(manager, "_fetch_release", lambda *_: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(mgr, "_fetch_release", lambda *_: (_ for _ in ()).throw(RuntimeError("boom")))
 
-    status = manager.get_status(force=True)
+    res = mgr.get_status(force=True)
 
-    assert status["status"] == "degraded"
-    assert status["latest_version"] is None
-    assert status["release_name"] is None
-    assert status["release_notes"] == ""
-    assert status["release_url"] is None
-    assert status["release_published_at"] is None
-    assert status["last_error"] == "RuntimeError: boom"
-
-
-def test_release_metadata_service_reuses_release_headers_for_tags(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    assert manager._release_metadata.tag_headers() == manager._release_metadata.release_headers()
+    assert res["status"] == "degraded"
+    assert res["latest_version"] is None
+    assert res["release_name"] is None
+    assert res["release_notes"] == ""
+    assert res["release_url"] is None
+    assert res["release_published_at"] is None
+    assert res["last_error"] == "RuntimeError: boom"
 
 
-def test_status_prefers_current_tag_for_comparison_when_present(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_tag_headers(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    assert mgr._release_metadata.tag_headers() == mgr._release_metadata.release_headers()
+
+
+def test_prefer_tag(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.2")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.2")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "name": "v0.2.0", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["latest_version"] == "v0.2.0"
-    assert status["update_available"] is True
+    assert res["latest_version"] == "v0.2.0"
+    assert res["update_available"] is True
 
 
-def test_status_uses_runtime_version_when_current_tag_unknown(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_unknown_tag(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.2")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "unknown")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "name": "v0.2.0", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["update_available"] is True
-    assert status["latest_version"] == "v0.2.0"
+    assert res["update_available"] is True
+    assert res["latest_version"] == "v0.2.0"
 
 
-def test_status_handles_empty_tag_payload_as_up_to_date(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_empty_tag(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
-        return manager._release_metadata.empty_release_payload()
+        return manager_empty(mgr)
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    def manager_empty(m):
+        return m._release_metadata.empty_payload()
 
-    status = manager.get_status()
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    assert status["latest_version"] is None
-    assert status["update_available"] is False
-    assert status["status"] == "up_to_date"
+    res = mgr.get_status()
+
+    assert res["latest_version"] is None
+    assert res["update_available"] is False
+    assert res["status"] == "up_to_date"
 
 
-def test_release_payload_accepts_stable_tag_tree_url(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_tree_url(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    payload = manager._release_metadata.build_release_payload(
+    res = mgr._release_metadata.release_payload(
         {
             "tag_name": "v0.1.3",
             "name": "v0.1.3",
@@ -589,40 +592,40 @@ def test_release_payload_accepts_stable_tag_tree_url(tmp_path):
         }
     )
 
-    assert payload["html_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3"
+    assert res["html_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3"
 
 
-def test_pick_latest_tag_handles_longer_version_tuples(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_longer_semver(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    picked = manager._release_metadata._pick_latest_tag(
+    tag = mgr._release_metadata._pick_tag(
         [{"name": "v0.2"}, {"name": "v0.2.1"}, {"name": "v0.2.0"}]
     )
 
-    assert picked == "v0.2.1"
+    assert tag == "v0.2.1"
 
 
-def test_tag_picker_allows_uppercase_v_prefix(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_upper_v(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    picked = manager._release_metadata._pick_latest_tag([{"name": "V0.2.0"}, {"name": "v0.1.0"}])
+    tag = mgr._release_metadata._pick_tag([{"name": "V0.2.0"}, {"name": "v0.1.0"}])
 
-    assert picked == "V0.2.0"
-
-
-def test_tag_picker_rejects_prerelease_style_tags(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    picked = manager._release_metadata._pick_latest_tag([{"name": "v0.2.0-rc1"}, {"name": "v0.1.9"}])
-
-    assert picked == "v0.1.9"
+    assert tag == "V0.2.0"
 
 
-def test_tag_url_rejects_unsupported_host_via_release_payload(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_skip_rc(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    tag = mgr._release_metadata._pick_tag([{"name": "v0.2.0-rc1"}, {"name": "v0.1.9"}])
+
+    assert tag == "v0.1.9"
+
+
+def test_reject_tree_host(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
     with pytest.raises(ValueError, match="Unsupported release URL host"):
-        manager._release_metadata.build_release_payload(
+        mgr._release_metadata.release_payload(
             {
                 "tag_name": "v0.2.0",
                 "name": "v0.2.0",
@@ -633,141 +636,141 @@ def test_tag_url_rejects_unsupported_host_via_release_payload(tmp_path):
         )
 
 
-def test_fetch_release_rejects_non_list_tags_response(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_reject_shape(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return {"unexpected": True}
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
 
     with pytest.raises(ValueError, match="Unexpected tags API response shape"):
-        manager._release_metadata.fetch_release()
+        mgr._release_metadata.fetch_release()
 
 
-def test_fetch_release_calls_github_tags_endpoint(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_tags_request(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     seen = {}
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "v0.2.0"}]
 
-    def fake_get(url, headers, timeout):
+    def get(url, headers, timeout):
         seen["url"] = url
         seen["headers"] = headers
         seen["timeout"] = timeout
-        return _FakeResponse()
+        return _Resp()
 
-    monkeypatch.setattr("core.release.requests.get", fake_get)
+    monkeypatch.setattr("core.release.requests.get", get)
 
-    manager._release_metadata.fetch_release()
+    mgr._release_metadata.fetch_release()
 
     assert seen["url"].endswith("/tags")
     assert seen["headers"]["User-Agent"] == "Zetatech Update Agent"
     assert seen["timeout"] == 15
 
 
-def test_fetch_release_handles_slash_in_tag_name_for_url_encoding(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_slash_tag(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    assert manager._release_metadata.tag_url("release/test") == "https://github.com/Hugnd-UIT/Zetatech/tree/release/test"
+    assert mgr._release_metadata.tag_url("release/test") == "https://github.com/Hugnd-UIT/Zetatech/tree/release/test"
 
 
-def test_status_preserves_manual_update_message_under_tag_model(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_manual_msg(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "name": "v0.2.0", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["manual_update_required"] is True
-    assert status["manual_update_message"] == manager.MESSAGE_MANUAL_UPDATE_ONLY
+    assert res["manual_update_required"] is True
+    assert res["manual_update_message"] == mgr.MESSAGE_MANUAL_UPDATE_ONLY
 
 
-def test_status_uses_empty_string_release_notes_when_tag_metadata_has_none(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_empty_notes(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.1.3", "name": "v0.1.3", "body": None, "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["release_notes"] == ""
+    assert res["release_notes"] == ""
 
 
-def test_status_uses_tag_name_when_release_name_missing(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_fallback_name(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "name": None, "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["release_name"] == "v0.2.0"
+    assert res["release_name"] == "v0.2.0"
 
 
-def test_status_handles_tag_payload_without_url(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_missing_url(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "name": "v0.2.0", "body": "", "html_url": None, "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["release_url"] is None
+    assert res["release_url"] is None
 
 
-def test_status_handles_tag_payload_without_tag_name(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_missing_tag(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": None, "name": None, "body": "", "html_url": None, "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["latest_version"] is None
-    assert status["update_available"] is False
-    assert status["status"] == "up_to_date"
+    assert res["latest_version"] is None
+    assert res["update_available"] is False
+    assert res["status"] == "up_to_date"
 
 
-def test_status_uses_tree_url_in_helper_payload(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_helper_url(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    def get_status(*args, **kwargs):
+    def status(*args, **kwargs):
         del args, kwargs
         return {
             "status": "update_available",
@@ -780,270 +783,270 @@ def test_status_uses_tree_url_in_helper_payload(monkeypatch, tmp_path):
             "manual_update_required": True,
         }
 
-    monkeypatch.setattr(manager, "get_status", get_status)
+    monkeypatch.setattr(mgr, "get_status", status)
 
-    payload = manager.get_manual_update_payload()
+    res = mgr.manual_payload()
 
-    assert payload["latest_version"] == "v0.2.0"
-    assert payload["update_command"] == "docker pull Hugnd-UIT/Zetatech:latest"
+    assert res["latest_version"] == "v0.2.0"
+    assert res["update_command"] == "docker pull Hugnd-UIT/Zetatech:latest"
 
 
-def test_release_payload_normalizes_empty_body_to_empty_string(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_empty_body(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    payload = manager._release_metadata.build_release_payload(
+    res = mgr._release_metadata.release_payload(
         {"tag_name": "v0.2.0", "name": "v0.2.0", "body": None, "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
     )
 
-    assert payload["body"] == ""
+    assert res["body"] == ""
 
 
-def test_release_payload_uses_tag_name_when_name_missing(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_payload_name(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    payload = manager._release_metadata.build_release_payload(
+    res = mgr._release_metadata.release_payload(
         {"tag_name": "v0.2.0", "name": None, "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
     )
 
-    assert payload["name"] == "v0.2.0"
+    assert res["name"] == "v0.2.0"
 
 
-def test_fetch_release_returns_empty_payload_for_empty_list(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_empty_list(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return []
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload == manager._release_metadata.empty_release_payload()
-
-
-def test_normalized_version_compares_tag_values_consistently(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    assert manager._release_metadata.normalized_version("v0.2.0") > manager._release_metadata.normalized_version("v0.1.9")
+    assert res == mgr._release_metadata.empty_payload()
 
 
-def test_tag_picker_ignores_blank_names(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_version_order(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    picked = manager._release_metadata._pick_latest_tag([{"name": ""}, {"name": "v0.1.0"}])
-
-    assert picked == "v0.1.0"
+    assert mgr._release_metadata.normalized_version("v0.2.0") > mgr._release_metadata.normalized_version("v0.1.9")
 
 
-def test_release_payload_rejects_unsupported_tag_tree_host(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_blank_tags(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    tag = mgr._release_metadata._pick_tag([{"name": ""}, {"name": "v0.1.0"}])
+
+    assert tag == "v0.1.0"
+
+
+def test_reject_bad_host(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
     with pytest.raises(ValueError, match="Unsupported release URL host"):
-        manager._release_metadata.build_release_payload(
+        mgr._release_metadata.release_payload(
             {"tag_name": "v0.1.3", "name": "v0.1.3", "body": "", "html_url": "https://bad.example/tree/v0.1.3", "published_at": None}
         )
 
 
-def test_fetch_release_preserves_selected_tag_as_release_name(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_preserve_name(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "v0.2.0"}]
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload["name"] == "v0.2.0"
+    assert res["name"] == "v0.2.0"
 
 
-def test_fetch_release_sets_no_published_timestamp_for_tags(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_no_published_at(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "v0.2.0"}]
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload["published_at"] is None
+    assert res["published_at"] is None
 
 
-def test_fetch_release_sets_empty_body_for_tags(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_empty_tag_body(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "v0.2.0"}]
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload["body"] == ""
-
-
-def test_tag_picker_prefers_higher_semver_over_lexical_order(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    picked = manager._release_metadata._pick_latest_tag([{"name": "v0.9.0"}, {"name": "v0.10.0"}])
-
-    assert picked == "v0.10.0"
+    assert res["body"] == ""
 
 
-def test_status_update_available_message_stays_manual_docker_focused(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_semver_over_lexical(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    tag = mgr._release_metadata._pick_tag([{"name": "v0.9.0"}, {"name": "v0.10.0"}])
+
+    assert tag == "v0.10.0"
+
+
+def test_docker_msg(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "name": "v0.2.0", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert "Pull the latest image" in status["message"] or status["status"] == "update_available"
+    assert "Pull the latest image" in res["message"] or res["status"] == "update_available"
 
 
-def test_status_up_to_date_message_remains_defined(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_current_msg(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.1.3", "name": "v0.1.3", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.3", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["message"] == manager.MESSAGE_UP_TO_DATE
-
-
-def test_tag_picker_handles_patchless_versions(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    picked = manager._release_metadata._pick_latest_tag([{"name": "v1.2"}, {"name": "v1.2.1"}])
-
-    assert picked == "v1.2.1"
+    assert res["message"] == mgr.MESSAGE_UP_TO_DATE
 
 
-def test_status_returns_stable_release_fields_when_up_to_date(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_patchless_semver(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    tag = mgr._release_metadata._pick_tag([{"name": "v1.2"}, {"name": "v1.2.1"}])
+
+    assert tag == "v1.2.1"
+
+
+def test_stable_fields(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.2.0")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.2.0")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "name": "v0.2.0", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["release_name"] == "v0.2.0"
-    assert status["release_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0"
-    assert status["release_notes"] == ""
-    assert status["release_published_at"] is None
+    assert res["release_name"] == "v0.2.0"
+    assert res["release_url"] == "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0"
+    assert res["release_notes"] == ""
+    assert res["release_published_at"] is None
 
 
-def test_status_current_tag_unknown_uses_current_version_string(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_unknown_version(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.2.0")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "unknown")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.1", "name": "v0.2.1", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.1", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["update_available"] is True
-
-
-def test_pick_latest_tag_returns_none_for_empty_input(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    assert manager._release_metadata._pick_latest_tag([]) is None
+    assert res["update_available"] is True
 
 
-def test_fetch_release_uses_pick_latest_tag_result(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_empty_pick(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    assert mgr._release_metadata._pick_tag([]) is None
+
+
+def test_pick_called(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "v0.1.0"}, {"name": "v0.2.0"}]
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
-    monkeypatch.setattr(manager._release_metadata, "_pick_latest_tag", lambda tags: "v0.2.0")
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
+    monkeypatch.setattr(mgr._release_metadata, "_pick_tag", lambda tags: "v0.2.0")
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload["tag_name"] == "v0.2.0"
+    assert res["tag_name"] == "v0.2.0"
 
 
-def test_release_payload_accepts_empty_html_url(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_empty_url(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    payload = manager._release_metadata.build_release_payload(
+    res = mgr._release_metadata.release_payload(
         {"tag_name": "v0.2.0", "name": "v0.2.0", "body": "", "html_url": None, "published_at": None}
     )
 
-    assert payload["html_url"] is None
+    assert res["html_url"] is None
 
 
-def test_tag_picker_handles_extra_numeric_segments(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_extra_segments(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    picked = manager._release_metadata._pick_latest_tag([{"name": "v1.2.3.4"}, {"name": "v1.2.3"}])
+    tag = mgr._release_metadata._pick_tag([{"name": "v1.2.3.4"}, {"name": "v1.2.3"}])
 
-    assert picked == "v1.2.3.4"
+    assert tag == "v1.2.3.4"
 
 
-def test_update_available_status_exposes_tag_name_as_release_name(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_release_name(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.0")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.0")
 
-    def resolve_release(*args, **kwargs):
+    def resolve(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "name": "v0.2.0", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.2.0", "published_at": None}
 
-    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+    monkeypatch.setattr(mgr, "_resolve_release", resolve)
 
-    status = manager.get_status()
+    res = mgr.get_status()
 
-    assert status["release_name"] == "v0.2.0"
+    assert res["release_name"] == "v0.2.0"
 
 
-def test_manual_update_payload_still_deprecated_under_tag_model(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_manual_deprecated(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    def get_status(*args, **kwargs):
+    def status(*args, **kwargs):
         del args, kwargs
         return {
             "status": "update_available",
@@ -1055,62 +1058,62 @@ def test_manual_update_payload_still_deprecated_under_tag_model(monkeypatch, tmp
             "manual_update_required": True,
         }
 
-    monkeypatch.setattr(manager, "get_status", get_status)
+    monkeypatch.setattr(mgr, "get_status", status)
 
-    payload = manager.get_manual_update_payload()
+    res = mgr.manual_payload()
 
-    assert payload["deprecated"] is True
-    assert payload["manual_update_only"] is True
+    assert res["deprecated"] is True
+    assert res["manual_update_only"] is True
 
 
-def test_fetch_release_ignores_non_matching_tag_case_when_needed(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_tag_case(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "release"}, {"name": "V0.2.0"}]
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload["tag_name"] == "V0.2.0"
-
-
-def test_tag_picker_ignores_missing_name_entries(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
-
-    picked = manager._release_metadata._pick_latest_tag([{}, {"name": "v0.1.0"}])
-
-    assert picked == "v0.1.0"
+    assert res["tag_name"] == "V0.2.0"
 
 
-def test_fetch_release_returns_empty_payload_when_pick_latest_tag_returns_none(monkeypatch, tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_missing_name(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    class _FakeResponse:
+    tag = mgr._release_metadata._pick_tag([{}, {"name": "v0.1.0"}])
+
+    assert tag == "v0.1.0"
+
+
+def test_none_pick(monkeypatch, tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
+
+    class _Resp:
         def raise_for_status(self):
             return None
 
         def json(self):
             return [{"name": "main"}]
 
-    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _FakeResponse())
-    monkeypatch.setattr(manager._release_metadata, "_pick_latest_tag", lambda tags: None)
+    monkeypatch.setattr("core.release.requests.get", lambda *args, **kwargs: _Resp())
+    monkeypatch.setattr(mgr._release_metadata, "_pick_tag", lambda tags: None)
 
-    payload = manager._release_metadata.fetch_release()
+    res = mgr._release_metadata.fetch_release()
 
-    assert payload == manager._release_metadata.empty_release_payload()
+    assert res == mgr._release_metadata.empty_payload()
 
 
-def test_release_payload_html_url_host_validation_allows_github(tmp_path):
-    manager = _TestUpdateManager(tmp_path / ".zetatech")
+def test_allow_github(tmp_path):
+    mgr = _TestUpdateManager(tmp_path / ".zetatech")
 
-    payload = manager._release_metadata.build_release_payload(
+    res = mgr._release_metadata.release_payload(
         {"tag_name": "v0.1.0", "name": "v0.1.0", "body": "", "html_url": "https://github.com/Hugnd-UIT/Zetatech/tree/v0.1.0", "published_at": None}
     )
 
-    assert payload["tag_name"] == "v0.1.0"
+    assert res["tag_name"] == "v0.1.0"

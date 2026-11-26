@@ -6,64 +6,64 @@ from agents.tools import build_tool_policy
 from agents.workspace import ensure_within_workspace
 
 
-def test_ensure_within_workspace_accepts_relative_candidate_paths_from_workspace_root(tmp_path):
-    workspace_root = tmp_path / "workspace"
-    workspace_root.mkdir()
+def test_inside_relative(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
 
-    inside_path = workspace_root / "source" / "plugin.php"
-    inside_path.parent.mkdir()
-    inside_path.write_text("<?php\n", encoding="utf-8")
+    inside = root / "source" / "plugin.php"
+    inside.parent.mkdir()
+    inside.write_text("<?php\n", encoding="utf-8")
 
-    assert ensure_within_workspace(workspace_root, inside_path) == inside_path.resolve()
-    assert ensure_within_workspace(workspace_root, Path("source/plugin.php")) == inside_path.resolve()
-
-
-def test_ensure_within_workspace_rejects_paths_outside_workspace(tmp_path):
-    workspace_root = tmp_path / "workspace"
-    workspace_root.mkdir()
-
-    outside_path = tmp_path / "outside.php"
-    outside_path.write_text("<?php\n", encoding="utf-8")
-
-    with pytest.raises(ValueError, match="outside workspace"):
-        ensure_within_workspace(workspace_root, outside_path)
+    assert ensure_within_workspace(root, inside) == inside.resolve()
+    assert ensure_within_workspace(root, Path("source/plugin.php")) == inside.resolve()
 
 
-def test_ensure_within_workspace_rejects_symlink_escape_attempts(tmp_path):
-    workspace_root = tmp_path / "workspace"
-    workspace_root.mkdir()
+def test_reject_outside(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
 
-    outside_dir = tmp_path / "outside"
-    outside_dir.mkdir()
-    outside_path = outside_dir / "secret.php"
-    outside_path.write_text("<?php\n", encoding="utf-8")
-
-    linked_dir = workspace_root / "source" / "linked"
-    linked_dir.parent.mkdir()
-    linked_dir.symlink_to(outside_dir, target_is_directory=True)
+    out = tmp_path / "outside.php"
+    out.write_text("<?php\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="outside workspace"):
-        ensure_within_workspace(workspace_root, linked_dir / "secret.php")
+        ensure_within_workspace(root, out)
 
 
-def test_ensure_within_workspace_rejects_nonexistent_relative_paths_with_parent_escape(tmp_path):
-    workspace_root = tmp_path / "workspace"
-    workspace_root.mkdir()
+def test_reject_symlink(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+
+    out_dir = tmp_path / "outside"
+    out_dir.mkdir()
+    out_file = out_dir / "secret.php"
+    out_file.write_text("<?php\n", encoding="utf-8")
+
+    link = root / "source" / "linked"
+    link.parent.mkdir()
+    link.symlink_to(out_dir, target_is_directory=True)
 
     with pytest.raises(ValueError, match="outside workspace"):
-        ensure_within_workspace(workspace_root, Path("../outside/missing.php"))
+        ensure_within_workspace(root, link / "secret.php")
+
+
+def test_reject_traversal(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
 
     with pytest.raises(ValueError, match="outside workspace"):
-        ensure_within_workspace(workspace_root, Path("source/../../outside/missing.php"))
+        ensure_within_workspace(root, Path("../outside/missing.php"))
+
+    with pytest.raises(ValueError, match="outside workspace"):
+        ensure_within_workspace(root, Path("source/../../outside/missing.php"))
 
 
-def test_build_tool_policy_returns_bridge_metadata(tmp_path):
-    workspace_root = tmp_path / "workspace"
-    workspace_root.mkdir()
+def test_tool_policy(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
 
-    policy = build_tool_policy(workspace_root)
+    pol = build_tool_policy(root)
 
-    assert policy == {
-        "workspace_root": str(workspace_root.resolve()),
+    assert pol == {
+        "workspace_root": str(root.resolve()),
         "enforcement": "handled_by_open_multi_agent",
     }

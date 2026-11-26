@@ -1,22 +1,22 @@
 (function() {
-    function mergeAiSettingsConfig(previousConfig = {}, nextConfig = {}) {
+    function mergeCfg(prev = {}, next = {}) {
         return {
-            ...previousConfig,
-            ...nextConfig,
+            ...prev,
+            ...next,
             api_key: null,
         };
     }
 
-    function syncPluginAiSettingsState(config = {}) {
-        window.currentAiConfig = mergeAiSettingsConfig(window.currentAiConfig || {}, config || {});
+    function syncCfg(cfg = {}) {
+        window.currentAiConfig = mergeCfg(window.currentAiConfig || {}, cfg || {});
         return window.currentAiConfig;
     }
 
-    async function fetchCurrentAiSettings() {
-        const response = await fetch('/api/ai/settings');
-        const data = await response.json().catch(() => null);
-        if (!response.ok) {
-            throw new Error((data && data.detail) || `HTTP ${response.status}`);
+    async function fetchCfg() {
+        const res = await fetch('/api/ai/settings');
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+            throw new Error((data && data.detail) || `HTTP ${res.status}`);
         }
         window.currentAiConfig = data?.active_profile || null;
         if (typeof window.updatePluginAiComposerSelections === 'function') {
@@ -29,7 +29,7 @@
         return data;
     }
 
-    window.mergeAiSettingsConfig = mergeAiSettingsConfig;
-    window.syncPluginAiSettingsState = syncPluginAiSettingsState;
-    window.fetchCurrentAiSettings = fetchCurrentAiSettings;
+    window.mergeAiSettingsConfig = mergeCfg;
+    window.syncPluginAiSettingsState = syncCfg;
+    window.fetchCurrentAiSettings = fetchCfg;
 })();

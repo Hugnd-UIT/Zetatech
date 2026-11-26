@@ -58,7 +58,7 @@ class _RepoStub:
         self.merged_sessions.append(session_id)
 
 
-def _build_config(themes=False):
+def _build_cfg(themes=False):
     return ScanConfig(
         pages=1,
         limit=1,
@@ -75,32 +75,32 @@ def _build_config(themes=False):
     )
 
 
-async def _capture_event(session_id, payload, sink):
-    sink.append((session_id, payload))
+async def _capture(sid, payload, sink):
+    sink.append((sid, payload))
 
 
-def test_finalize_scan_completion_marks_cancelled(monkeypatch):
+def test_cancel_scan(monkeypatch):
     repo = _RepoStub()
     repo.session_state = {"status": ScanStatus.CANCELLED.value}
-    events = []
+    evts = []
 
     monkeypatch.setattr(
         scans_service,
-        "_send_session_event",
-        lambda session_id, payload: _capture_event(session_id, payload, events),
+        "_send_event",
+        lambda sid, payload: _capture(sid, payload, evts),
     )
 
-    completed = asyncio.run(
-        scans_service._finalize_scan_completion(
+    done = asyncio.run(
+        scans_service._finalize_scan(
             session_id=100,
-            config=_build_config(),
+            config=_build_cfg(),
             repo=repo,
             found_count=3,
             high_risk_count=1,
         )
     )
 
-    assert completed is False
+    assert done is False
     assert repo.updated == [
         {
             "session_id": 100,
@@ -110,7 +110,7 @@ def test_finalize_scan_completion_marks_cancelled(monkeypatch):
             "error_message": None,
         }
     ]
-    assert events == [
+    assert evts == [
         (
             100,
             {
@@ -123,30 +123,30 @@ def test_finalize_scan_completion_marks_cancelled(monkeypatch):
     ]
 
 
-def test_finalize_scan_completion_deduplicates_identical_results(monkeypatch):
+def test_dedup_scan(monkeypatch):
     repo = _RepoStub()
     repo.latest_session_id = 99
     repo.current_slugs = ["akismet", "seo-pack"]
     repo.previous_slugs = ["seo-pack", "akismet"]
-    events = []
+    evts = []
 
     monkeypatch.setattr(
         scans_service,
-        "_send_session_event",
-        lambda session_id, payload: _capture_event(session_id, payload, events),
+        "_send_event",
+        lambda sid, payload: _capture(sid, payload, evts),
     )
 
-    completed = asyncio.run(
-        scans_service._finalize_scan_completion(
+    done = asyncio.run(
+        scans_service._finalize_scan(
             session_id=100,
-            config=_build_config(),
+            config=_build_cfg(),
             repo=repo,
             found_count=2,
             high_risk_count=1,
         )
     )
 
-    assert completed is False
+    assert done is False
     assert repo.updated == [
         {
             "session_id": 100,
@@ -158,7 +158,7 @@ def test_finalize_scan_completion_deduplicates_identical_results(monkeypatch):
     ]
     assert repo.deleted_sessions == [100]
     assert repo.merged_sessions == [99]
-    assert events[-1] == (
+    assert evts[-1] == (
         100,
         {
             "type": "deduplicated",
@@ -168,27 +168,27 @@ def test_finalize_scan_completion_deduplicates_identical_results(monkeypatch):
     )
 
 
-def test_finalize_scan_completion_emits_complete_when_not_cancelled_or_dedup(monkeypatch):
+def test_emit_complete(monkeypatch):
     repo = _RepoStub()
-    events = []
+    evts = []
 
     monkeypatch.setattr(
         scans_service,
-        "_send_session_event",
-        lambda session_id, payload: _capture_event(session_id, payload, events),
+        "_send_event",
+        lambda sid, payload: _capture(sid, payload, evts),
     )
 
-    completed = asyncio.run(
-        scans_service._finalize_scan_completion(
+    done = asyncio.run(
+        scans_service._finalize_scan(
             session_id=100,
-            config=_build_config(),
+            config=_build_cfg(),
             repo=repo,
             found_count=5,
             high_risk_count=2,
         )
     )
 
-    assert completed is True
+    assert done is True
     assert repo.updated == [
         {
             "session_id": 100,
@@ -198,7 +198,7 @@ def test_finalize_scan_completion_emits_complete_when_not_cancelled_or_dedup(mon
             "error_message": None,
         }
     ]
-    assert events == [
+    assert evts == [
         (
             100,
             {
@@ -211,22 +211,22 @@ def test_finalize_scan_completion_emits_complete_when_not_cancelled_or_dedup(mon
     ]
 
 
-def test_run_scan_task_marks_failed_on_exception(monkeypatch):
+def test_fail_task(monkeypatch):
     repo = _RepoStub()
-    events = []
+    evts = []
 
     async def _boom(**kwargs):
         del kwargs
         raise RuntimeError("scanner exploded")
 
-    monkeypatch.setattr(scans_service, "_run_scan_mode", _boom)
+    monkeypatch.setattr(scans_service, "_scan_mode", _boom)
     monkeypatch.setattr(
         scans_service,
-        "_send_session_event",
-        lambda session_id, payload: _capture_event(session_id, payload, events),
+        "_send_event",
+        lambda sid, payload: _capture(sid, payload, evts),
     )
 
-    asyncio.run(scans_service.run_scan_task(123, _build_config(), repo))
+    asyncio.run(scans_service.run_scan_task(123, _build_cfg(), repo))
 
     assert repo.updated[0]["status"] == ScanStatus.RUNNING.value
     assert repo.updated[1] == {
@@ -236,13 +236,13 @@ def test_run_scan_task_marks_failed_on_exception(monkeypatch):
         "high_risk_count": None,
         "error_message": "scanner exploded",
     }
-    assert events[0] == (123, {"type": "start", "session_id": 123})
-    assert events[1] == (123, {"type": "error", "message": "scanner exploded"})
+    assert evts[0] == (123, {"type": "start", "session_id": 123})
+    assert evts[1] == (123, {"type": "error", "message": "scanner exploded"})
     assert 123 not in scans_service.active_scans
 
 
-def test_create_scan_session_enqueues_background_task():
-    class _BackgroundStub:
+def test_enqueue_scan():
+    class _BgStub:
         def __init__(self):
             self.calls = []
 
@@ -254,8 +254,8 @@ def test_create_scan_session_enqueues_background_task():
             assert isinstance(config, ScanConfig)
             return 321
 
-    background = _BackgroundStub()
-    request = SimpleNamespace(
+    bg = _BgStub()
+    req = SimpleNamespace(
         pages=5,
         limit=25,
         min_installs=100,
@@ -271,21 +271,21 @@ def test_create_scan_session_enqueues_background_task():
     )
 
     repo = _CreateRepo()
-    response = scans_service.create_scan_session(
+    res = scans_service.create_scan_session(
         repo=repo,
-        scan_request=request,
-        background_tasks=background,
+        scan_request=req,
+        background_tasks=bg,
     )
 
-    assert response == {
+    assert res == {
         "session_id": 321,
         "status": "started",
         "websocket_url": "/ws/scans/321",
     }
 
-    assert len(background.calls) == 1
-    func, args = background.calls[0]
+    assert len(bg.calls) == 1
+    func, args = bg.calls[0]
     assert func is scans_service.run_scan_task
     assert args[0] == 321
-    assert args[1] == scans_service.build_scan_config(request)
+    assert args[1] == scans_service.build_scan_config(req)
     assert args[2] is repo

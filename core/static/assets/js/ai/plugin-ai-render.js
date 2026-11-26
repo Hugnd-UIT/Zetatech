@@ -1,89 +1,89 @@
 (function() {
-    function normalizePluginAiInput(promptOverride = '', input = '') {
-        return sanitizePluginAiMessageInput(promptOverride || input);
+    function normInput(prompt = '', input = '') {
+        return cleanInput(prompt || input);
     }
 
-    function sanitizePluginAiMessageInput(text) {
+    function cleanInput(text) {
         return String(text || '').trim();
     }
 
-    function normalizePluginAiMessagesPayload(data = {}) {
+    function normMsgs(data = {}) {
         return Array.isArray(data.messages) ? data.messages : [];
     }
 
-    function extractToolEventsFromMessages(messages = []) {
-        return messages.flatMap((message) => {
+    function toolEvents(msgs = []) {
+        return msgs.flatMap((msg) => {
             const events = [];
-            const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
-            const toolResults = Array.isArray(message.tool_results) ? message.tool_results : [];
-            toolCalls.forEach((item) => events.push({ type: 'tool_call', data: item }));
-            toolResults.forEach((item) => events.push({ type: 'tool_result', data: item }));
+            const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+            const results = Array.isArray(msg.tool_results) ? msg.tool_results : [];
+            calls.forEach((item) => events.push({ type: 'tool_call', data: item }));
+            results.forEach((item) => events.push({ type: 'tool_result', data: item }));
             return events;
         });
     }
 
-    function shortenPluginAiPath(value = '', options = {}) {
-        const raw = String(value || '').trim();
+    function shortPath(val = '', opts = {}) {
+        const raw = String(val || '').trim();
         if (!raw) return '';
-        const workspaceRoot = String(options.workspaceRoot || '').trim().replace(/\\/g, '/');
-        const normalized = raw.replace(/\\/g, '/');
-        let compact = normalized;
+        const root = String(opts.workspaceRoot || '').trim().replace(/\\/g, '/');
+        const norm = raw.replace(/\\/g, '/');
+        let out = norm;
 
-        if (workspaceRoot && normalized.startsWith(workspaceRoot)) {
-            compact = normalized.slice(workspaceRoot.length).replace(/^\/+/, '');
+        if (root && norm.startsWith(root)) {
+            out = norm.slice(root.length).replace(/^\/+/, '');
         }
 
-        compact = compact
+        out = out
             .replace(/^\/app\/(Plugins|Themes)\/[^/]+\/source\/?/i, '')
             .replace(/^\/Users\/[^/]+\/Desktop\/Zetatech\/(Plugins|Themes)\/[^/]+\/source\/?/i, '')
             .replace(/^\.\//, '');
 
-        if (!compact) return '.';
-        const segments = compact.split('/').filter(Boolean);
-        if (segments.length <= 4) return compact;
-        return `…/${segments.slice(-4).join('/')}`;
+        if (!out) return '.';
+        const parts = out.split('/').filter(Boolean);
+        if (parts.length <= 4) return out;
+        return `…/${parts.slice(-4).join('/')}`;
     }
 
-    function truncatePluginAiText(value = '', maxLength = 110) {
-        const text = String(value || '').replace(/\s+/g, ' ').trim();
+    function cutText(val = '', maxLen = 110) {
+        const text = String(val || '').replace(/\s+/g, ' ').trim();
         if (!text) return '';
-        if (text.length <= maxLength) return text;
-        return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+        if (text.length <= maxLen) return text;
+        return `${text.slice(0, Math.max(0, maxLen - 1)).trimEnd()}…`;
     }
 
-    function shortenPluginAiPattern(value = '') {
-        return truncatePluginAiText(String(value || '').trim(), 44);
+    function shortPat(val = '') {
+        return cutText(String(val || '').trim(), 44);
     }
 
-    function groupPluginAiActivityEntries(entries = []) {
-        const grouped = [];
+    function groupItems(entries = []) {
+        const list = [];
         (Array.isArray(entries) ? entries : []).forEach((entry) => {
             if (!entry) return;
-            const previous = grouped[grouped.length - 1];
-            const canGroup = previous
-                && previous.type === entry.type
-                && previous.label === entry.label
-                && previous.category === entry.category
-                && previous.detail === entry.detail
-                && previous.state === entry.state;
+            const prev = list[list.length - 1];
+            const same = prev
+                && prev.type === entry.type
+                && prev.label === entry.label
+                && prev.category === entry.category
+                && prev.detail === entry.detail
+                && prev.state === entry.state;
 
-            if (canGroup) {
-                previous.count = (previous.count || 1) + 1;
-                previous.id = `${previous.id}-${previous.count}`;
+            if (same) {
+                prev.count = (prev.count || 1) + 1;
+                prev.id = `${prev.id}-${prev.count}`;
                 return;
             }
 
-            grouped.push({ ...entry, count: entry.count || 1 });
+            list.push({ ...entry, count: entry.count || 1 });
         });
-        return grouped;
+        return list;
     }
 
-    function buildPluginAiActivityEntries(events = [], options = {}) {
-        const opts = options && typeof options === 'object' ? options : {};
-        const root = String(opts.workspaceRoot || '').trim();
-        const items = (Array.isArray(events) ? events : []).map((event, idx) => {
-            const type = String(event?.type || 'event');
-            const data = event?.data && typeof event.data === 'object' ? event.data : {};
+    function buildActivity(events = [], opts = {}) {
+        const cfg = opts && typeof opts === 'object' ? opts : {};
+        const root = String(cfg.workspaceRoot || '').trim();
+        const items = (Array.isArray(events) ? events : []).map((evt, idx) => {
+            const type = String(evt?.type || 'event');
+            const data = evt?.data && typeof evt.data === 'object' ? evt.data : {};
             const tool = String(data.name || data.toolName || data.tool || '').trim();
             const input = data.input && typeof data.input === 'object' ? data.input : data;
             let label = 'Activity';
@@ -100,33 +100,33 @@
                 state = 'active';
                 if (tool === 'read' || tool === 'file_read') {
                     label = 'File read';
-                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
+                    detail = shortPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
                     icon = '📄';
                 } else if (tool === 'grep') {
                     label = 'Code search';
-                    const pat = shortenPluginAiPattern(input.pattern || '');
-                    const path = shortenPluginAiPath(String(input.path || ''), { workspaceRoot: root });
+                    const pat = shortPat(input.pattern || '');
+                    const path = shortPath(String(input.path || ''), { workspaceRoot: root });
                     detail = [pat ? `pattern: ${pat}` : '', path ? `path: ${path}` : ''].filter(Boolean).join(' • ');
                     icon = '⌕';
                 } else if (tool === 'bash') {
                     label = 'Bash';
-                    detail = truncatePluginAiText(String(input.command || data.command || '(no command)'), 96);
+                    detail = cutText(String(input.command || data.command || '(no command)'), 96);
                     icon = '⌘';
                 } else if (tool === 'edit' || tool === 'file_edit') {
                     label = 'File edited';
-                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
+                    detail = shortPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
                     icon = '✎';
                 } else if (tool === 'write' || tool === 'file_write') {
                     label = 'File written';
-                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
+                    detail = shortPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
                     icon = '✚';
                 } else if (tool === 'run_semgrep') {
                     label = 'Semgrep';
-                    detail = truncatePluginAiText(String(input.config || data.config || 'auto'), 72);
+                    detail = cutText(String(input.config || data.config || 'auto'), 72);
                     icon = 'S';
                 } else {
                     label = 'Tool';
-                    detail = truncatePluginAiText([tool || 'tool', shortenPluginAiPath(String(input.path || input.command || data.path || data.command || '').trim(), { workspaceRoot: root })].filter(Boolean).join(' • '), 96);
+                    detail = cutText([tool || 'tool', shortPath(String(input.path || input.command || data.path || data.command || '').trim(), { workspaceRoot: root })].filter(Boolean).join(' • '), 96);
                     icon = '⋯';
                 }
             } else {
@@ -144,12 +144,12 @@
                 state,
                 hidden: hide,
                 toolName: tool,
-                toolTone: pluginAiToolBadgeTone(tool),
+                toolTone: toolTone(tool),
                 bashCommand: tool === 'bash' ? String(input.command || data.command || '').trim() : '',
             };
         }).filter((entry) => !entry.hidden);
 
-        const grouped = groupPluginAiActivityEntries(items);
+        const grouped = groupItems(items);
         const last = [...grouped].map((entry, idx) => ({ entry, idx })).reverse().find((item) => item.entry.state === 'active')?.idx;
         return grouped.map((entry, idx) => ({
             ...entry,
@@ -157,14 +157,14 @@
         }));
     }
 
-    function describeAiActivityEvent(event = {}) {
-        const entry = buildPluginAiActivityEntries([event])[0];
+    function describeEvt(evt = {}) {
+        const entry = buildActivity([evt])[0];
         return entry ? `${entry.label}${entry.detail ? `: ${entry.detail}` : ''}` : 'Activity';
     }
 
-    function formatPluginAiActivity(event = {}) {
-        const type = String(event?.type || '');
-        const data = event?.data && typeof event.data === 'object' ? event.data : event;
+    function fmtActivity(evt = {}) {
+        const type = String(evt?.type || '');
+        const data = evt?.data && typeof evt.data === 'object' ? evt.data : evt;
 
         if (type === 'agent_started') {
             return `Agent started: ${String(data?.name || 'unknown')}`;
@@ -185,59 +185,59 @@
             return `Team started: ${String(data?.name || 'team')}`;
         }
 
-        return describeAiActivityEvent(event);
+        return describeEvt(evt);
     }
 
-    function extractPluginAiMessages(data = {}) {
-        return normalizePluginAiMessagesPayload(data);
+    function extractMsgs(data = {}) {
+        return normMsgs(data);
     }
 
-    function mergePluginAiMessages(existing = [], incoming = []) {
-        const merged = [];
+    function mergeMsgs(cur = [], next = []) {
+        const out = [];
         const seen = new Set();
-        [...(Array.isArray(existing) ? existing : []), ...(Array.isArray(incoming) ? incoming : [])].forEach((message) => {
-            if (!message || typeof message !== 'object') return;
-            const id = message.id != null ? `id:${String(message.id)}` : null;
-            const fallback = `tmp:${String(message.role || '')}:${String(message.created_at || '')}:${String(message.content || '')}`;
-            const key = id || fallback;
+        [...(Array.isArray(cur) ? cur : []), ...(Array.isArray(next) ? next : [])].forEach((msg) => {
+            if (!msg || typeof msg !== 'object') return;
+            const id = msg.id != null ? `id:${String(msg.id)}` : null;
+            const fb = `tmp:${String(msg.role || '')}:${String(msg.created_at || '')}:${String(msg.content || '')}`;
+            const key = id || fb;
             if (seen.has(key)) return;
             seen.add(key);
-            merged.push(message);
+            out.push(msg);
         });
-        return merged;
+        return out;
     }
 
-    function capturePluginAiMessages(messages = []) {
+    function saveMsgs(msgs = []) {
         const state = window.getPluginAiState();
-        state.messages = Array.isArray(messages) ? messages : [];
+        state.messages = Array.isArray(msgs) ? msgs : [];
         if (typeof window.syncCurrentPluginAiThreadSnapshot === 'function') {
             window.syncCurrentPluginAiThreadSnapshot({ messages: state.messages });
         }
     }
 
-    function pushPluginAiMessage(message = {}) {
+    function pushMsg(msg = {}) {
         const state = window.getPluginAiState();
-        state.messages = mergePluginAiMessages(state.messages || [], [message]);
+        state.messages = mergeMsgs(state.messages || [], [msg]);
         if (typeof window.syncCurrentPluginAiThreadSnapshot === 'function') {
             window.syncCurrentPluginAiThreadSnapshot({ messages: state.messages });
         }
         return state.messages;
     }
 
-    function replacePendingAssistantMessage(message = {}) {
+    function replaceBot(msg = {}) {
         const state = window.getPluginAiState();
-        const messages = Array.isArray(state.messages) ? [...state.messages] : [];
-        const pendingIndex = messages.findIndex((item) => item && item.is_pending_assistant);
-        if (pendingIndex >= 0) {
-            messages[pendingIndex] = message;
+        const msgs = Array.isArray(state.messages) ? [...state.messages] : [];
+        const idx = msgs.findIndex((item) => item && item.is_pending_assistant);
+        if (idx >= 0) {
+            msgs[idx] = msg;
         } else {
-            messages.push(message);
+            msgs.push(msg);
         }
-        state.messages = mergePluginAiMessages([], messages);
+        state.messages = mergeMsgs([], msgs);
         return state.messages;
     }
 
-    function removePendingAssistantMessage() {
+    function dropBot() {
         const state = window.getPluginAiState();
         state.messages = (Array.isArray(state.messages) ? state.messages : []).filter((item) => !item?.is_pending_assistant);
         if (typeof window.syncCurrentPluginAiThreadSnapshot === 'function') {
@@ -246,15 +246,15 @@
         return state.messages;
     }
 
-    function capturePluginAiToolAudit(messages = []) {
+    function saveAudit(msgs = []) {
         const state = window.getPluginAiState();
-        state.events = extractToolEventsFromMessages(messages);
+        state.events = toolEvents(msgs);
     }
 
-    function appendPluginAiLiveActivity(events = []) {
+    function addActivity(events = []) {
         const state = window.getPluginAiState();
-        const nextEvents = Array.isArray(events) ? events.filter(Boolean) : [];
-        state.liveActivity = [...(Array.isArray(state.liveActivity) ? state.liveActivity : []), ...nextEvents].slice(-100);
+        const next = Array.isArray(events) ? events.filter(Boolean) : [];
+        state.liveActivity = [...(Array.isArray(state.liveActivity) ? state.liveActivity : []), ...next].slice(-100);
         if (typeof window.rememberPluginAiEventsSnapshot === 'function') {
             window.rememberPluginAiEventsSnapshot({
                 plugin: state.plugin,
@@ -270,31 +270,31 @@
         return state.liveActivity;
     }
 
-    function applyPluginAiStreamChunk(chunk = {}) {
+    function applyChunk(chunk = {}) {
         const state = window.getPluginAiState();
         const type = String(chunk?.type || '').trim();
         const data = chunk?.data;
 
         if (type === 'runtime_event' && data) {
-            appendPluginAiLiveActivity([data]);
+            addActivity([data]);
         } else if (type === 'bridge_event' && data) {
-            appendPluginAiLiveActivity([data]);
+            addActivity([data]);
         } else if (type === 'pending_approval' && data && typeof data === 'object') {
             state.pendingApproval = data;
             if (typeof window.syncCurrentPluginAiThreadSnapshot === 'function') {
                 window.syncCurrentPluginAiThreadSnapshot({ pendingApproval: state.pendingApproval, sending: true });
             }
         } else if (type === 'user_message' && data) {
-            const currentMessages = Array.isArray(state.messages) ? state.messages : [];
-            const stableMessages = currentMessages.filter((item) => !String(item?.id || '').startsWith('tmp-user-') && !item?.is_pending_assistant);
-            const pendingMessages = currentMessages.filter((item) => item?.is_pending_assistant);
-            state.messages = mergePluginAiMessages(stableMessages, [data, ...pendingMessages]);
+            const cur = Array.isArray(state.messages) ? state.messages : [];
+            const stable = cur.filter((item) => !String(item?.id || '').startsWith('tmp-user-') && !item?.is_pending_assistant);
+            const pending = cur.filter((item) => item?.is_pending_assistant);
+            state.messages = mergeMsgs(stable, [data, ...pending]);
         } else if (type === 'final' && data && typeof data === 'object') {
-            const messages = [];
-            if (data.user_message) messages.push(data.user_message);
-            if (data.assistant_message) messages.push(data.assistant_message);
-            const withoutPending = (state.messages || []).filter((item) => !item?.is_pending_assistant);
-            state.messages = mergePluginAiMessages(withoutPending, messages);
+            const msgs = [];
+            if (data.user_message) msgs.push(data.user_message);
+            if (data.assistant_message) msgs.push(data.assistant_message);
+            const done = (state.messages || []).filter((item) => !item?.is_pending_assistant);
+            state.messages = mergeMsgs(done, msgs);
             state.events = Array.isArray(data.team_events) ? data.team_events : [];
             state.liveActivity = state.events.length ? state.events : (state.liveActivity || []);
             state.pendingApproval = data.pending_approval && typeof data.pending_approval === 'object'
@@ -327,87 +327,87 @@
         return state;
     }
 
-    function buildPluginAiSessionLabel(thread = {}, index = 0) {
+    function chatLabel(thread = {}, idx = 0) {
         const title = String(thread.title || '').trim();
-        const pluginSlug = String(thread.plugin_slug || '').trim();
+        const slug = String(thread.plugin_slug || '').trim();
         if (title) {
-            if (pluginSlug && title === pluginSlug) {
+            if (slug && title === slug) {
                 return 'Chat 1';
             }
-            if (pluginSlug) {
-                const escapedSlug = pluginSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const match = title.match(new RegExp(`^${escapedSlug} Chat (\\d+)$`, 'i'));
+            if (slug) {
+                const esc = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const match = title.match(new RegExp(`^${esc} Chat (\\d+)$`, 'i'));
                 if (match) {
                     return `Chat ${match[1]}`;
                 }
             }
             return title;
         }
-        const position = Number(index || 0) + 1;
-        return `Chat ${position}`;
+        const pos = Number(idx || 0) + 1;
+        return `Chat ${pos}`;
     }
 
-    function buildPluginAiSessionMeta(thread = {}) {
-        const updatedAt = String(thread.updated_at || thread.created_at || '').trim();
-        return updatedAt || 'No activity yet';
+    function chatMeta(thread = {}) {
+        const updated = String(thread.updated_at || thread.created_at || '').trim();
+        return updated || 'No activity yet';
     }
 
-    function getActivePluginAiThread() {
+    function activeThread() {
         const state = window.getPluginAiState();
         return Array.isArray(state.threads)
             ? state.threads.find((item) => Number(item?.id || 0) === Number(state.threadId || 0)) || null
             : null;
     }
 
-    function getPluginAiSourceStatus() {
+    function srcStatus() {
         const state = window.getPluginAiState();
-        const activeThread = getActivePluginAiThread();
-        const fallback = state.sourceStatus && typeof state.sourceStatus === 'object' ? state.sourceStatus : {};
-        const sourceAvailable = !!(activeThread?.source_available ?? fallback.source_available);
-        const contextMode = String(activeThread?.source_context_mode || fallback.source_context_mode || 'metadata_only');
-        const sourcePath = String(activeThread?.source_path || fallback.source_path || '');
-        const workspacePath = String(activeThread?.workspace_path || fallback.workspace_path || sourcePath || '');
+        const thread = activeThread();
+        const fb = state.sourceStatus && typeof state.sourceStatus === 'object' ? state.sourceStatus : {};
+        const avail = !!(thread?.source_available ?? fb.source_available);
+        const mode = String(thread?.source_context_mode || fb.source_context_mode || 'metadata_only');
+        const path = String(thread?.source_path || fb.source_path || '');
+        const work = String(thread?.workspace_path || fb.workspace_path || path || '');
         return {
-            source_available: sourceAvailable,
-            source_context_mode: contextMode,
-            source_path: sourcePath,
-            workspace_path: workspacePath,
+            source_available: avail,
+            source_context_mode: mode,
+            source_path: path,
+            workspace_path: work,
         };
     }
 
-    function renderPluginAiSourceStatusCard() {
+    function renderSrcCard() {
         const state = window.getPluginAiState();
-        const source = getPluginAiSourceStatus();
-        const sourceCard = document.getElementById('plugin-ai-source-card');
-        const sourceAvailability = document.getElementById('plugin-ai-source-availability');
-        const sourceContext = document.getElementById('plugin-ai-source-context');
-        const sourcePath = document.getElementById('plugin-ai-source-path');
-        const sourceButton = document.getElementById('plugin-ai-source-download-btn');
-        if (!sourceCard || !sourceAvailability || !sourceContext || !sourcePath || !sourceButton) return;
+        const src = srcStatus();
+        const card = document.getElementById('plugin-ai-source-card');
+        const avail = document.getElementById('plugin-ai-source-availability');
+        const ctx = document.getElementById('plugin-ai-source-context');
+        const path = document.getElementById('plugin-ai-source-path');
+        const btn = document.getElementById('plugin-ai-source-download-btn');
+        if (!card || !avail || !ctx || !path || !btn) return;
 
-        const hasAssistantHistory = Array.isArray(state.messages)
+        const hasBot = Array.isArray(state.messages)
             && state.messages.some((item) => String(item?.role || '') === 'assistant' && !item?.is_pending_assistant);
-        sourceCard.classList.toggle('is-hidden', hasAssistantHistory && !state.sourcePreparing);
+        card.classList.toggle('is-hidden', hasBot && !state.sourcePreparing);
 
-        sourceAvailability.textContent = source.source_available ? 'Ready' : 'Not downloaded';
-        sourceContext.textContent = source.source_context_mode === 'attached'
+        avail.textContent = src.source_available ? 'Ready' : 'Not downloaded';
+        ctx.textContent = src.source_context_mode === 'attached'
             ? 'Attached'
-            : (source.source_context_mode === 'available' ? 'Available' : 'Metadata-only');
-        sourcePath.textContent = shortenPluginAiPath(source.source_path || '', { workspaceRoot: source.workspace_path || '' }) || '—';
-        sourceButton.textContent = state.sourcePreparing
+            : (src.source_context_mode === 'available' ? 'Available' : 'Metadata-only');
+        path.textContent = shortPath(src.source_path || '', { workspaceRoot: src.workspace_path || '' }) || '—';
+        btn.textContent = state.sourcePreparing
             ? 'Preparing...'
-            : (source.source_available ? 'Re-download' : 'Download');
-        sourceButton.disabled = !!state.sourcePreparing;
+            : (src.source_available ? 'Re-download' : 'Download');
+        btn.disabled = !!state.sourcePreparing;
     }
 
-    function renderInlineMarkdown(text = '') {
+    function inlineMd(text = '') {
         const tokens = [];
         let html = escapeHtml(String(text || ''));
 
         html = html.replace(/`([^`]+)`/g, (_, code) => {
-            const token = `@@INLINE_CODE_${tokens.length}@@`;
+            const tok = `@@INLINE_CODE_${tokens.length}@@`;
             tokens.push(`<code>${escapeHtml(code)}</code>`);
-            return token;
+            return tok;
         });
 
         html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
@@ -417,151 +417,134 @@
         html = html.replace(/(^|\W)\*([^*]+)\*(?=\W|$)/g, '$1<em>$2</em>');
         html = html.replace(/(^|\W)_([^_]+)_(?=\W|$)/g, '$1<em>$2</em>');
 
-        tokens.forEach((value, index) => {
-            html = html.replace(`@@INLINE_CODE_${index}@@`, value);
+        tokens.forEach((val, idx) => {
+            html = html.replace(`@@INLINE_CODE_${idx}@@`, val);
         });
         return html;
     }
 
-    function renderMarkdownTableRow(line = '') {
-        const trimmed = String(line || '').trim().replace(/^\|/, '').replace(/\|$/, '');
-        return trimmed.split('|').map((cell) => renderInlineMarkdown(cell.trim()));
+    function tableRow(line = '') {
+        const raw = String(line || '').trim().replace(/^\|/, '').replace(/\|$/, '');
+        return raw.split('|').map((cell) => inlineMd(cell.trim()));
     }
 
-    function isMarkdownTableSeparator(line = '') {
-        const trimmed = String(line || '').trim();
-        return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(trimmed);
+    function isTableSep(line = '') {
+        const raw = String(line || '').trim();
+        return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(raw);
     }
 
-    function normalizeMarkdownParagraphLines(lines = []) {
+    function normPara(lines = []) {
         const parts = [];
         (Array.isArray(lines) ? lines : []).forEach((line) => {
-            const value = String(line || '').trim();
-            if (!value) return;
+            const val = String(line || '').trim();
+            if (!val) return;
             if (!parts.length) {
-                parts.push(value);
+                parts.push(val);
                 return;
             }
-            if (/^[,.;:!?%)\]\}]+$/.test(value)) {
-                parts[parts.length - 1] += value;
+            if (/^[,.;:!?%)\]\}]+$/.test(val)) {
+                parts[parts.length - 1] += val;
                 return;
             }
-            if (/^[,.;:!?%)\]\}]/.test(value)) {
-                parts[parts.length - 1] += value;
+            if (/^[,.;:!?%)\]\}]/.test(val)) {
+                parts[parts.length - 1] += val;
                 return;
             }
-            if (/^["'”’]/.test(value)) {
-                parts[parts.length - 1] += ` ${value}`;
+            if (/^["'”’]/.test(val)) {
+                parts[parts.length - 1] += ` ${val}`;
                 return;
             }
-            parts.push(value);
+            parts.push(val);
         });
 
-        return parts.reduce((output, part) => {
-            if (!output) return part;
-            if (/[\s([{-]$/.test(output)) return `${output}${part}`;
-            if (/^[,.;:!?%)\]\}]/.test(part)) return `${output}${part}`;
-            return `${output} ${part}`;
+        return parts.reduce((out, part) => {
+            if (!out) return part;
+            if (/[\s([{-]$/.test(out)) return `${out}${part}`;
+            if (/^[,.;:!?%)\]\}]/.test(part)) return `${out}${part}`;
+            return `${out} ${part}`;
         }, '');
     }
 
-    function renderParagraphBlock(lines = []) {
-        const text = normalizeMarkdownParagraphLines(lines);
-        return text ? `<p>${renderInlineMarkdown(text)}</p>` : '';
+    function paraHtml(lines = []) {
+        const text = normPara(lines);
+        return text ? `<p>${inlineMd(text)}</p>` : '';
     }
 
-    function shouldMergeParagraphBreak(_paragraphLines = [], _nextLine = '') {
+    function mergeBreak(_lines = [], _next = '') {
         return false;
     }
 
-    function renderListBlock(lines = [], type = 'ul') {
+    function listHtml(lines = [], type = 'ul') {
         const tag = type === 'ol' ? 'ol' : 'ul';
         const items = lines
             .map((line) => String(line || '').trim())
             .map((line) => line.replace(type === 'ol' ? /^\d+\.\s+/ : /^[-*+]\s+/, ''))
-            .map((line) => `<li>${renderInlineMarkdown(normalizeMarkdownParagraphLines([line]))}</li>`)
+            .map((line) => `<li>${inlineMd(normPara([line]))}</li>`)
             .join('');
         return items ? `<${tag}>${items}</${tag}>` : '';
     }
 
-    function renderBlockquoteBlock(lines = []) {
-        const content = renderParagraphBlock(lines.map((line) => String(line || '').replace(/^>\s?/, '')));
-        return content ? `<blockquote>${content}</blockquote>` : '';
+    function quoteHtml(lines = []) {
+        const body = paraHtml(lines.map((line) => String(line || '').replace(/^>\s?/, '')));
+        return body ? `<blockquote>${body}</blockquote>` : '';
     }
 
-    function renderTableBlock(lines = []) {
-        if (lines.length < 2) return renderParagraphBlock(lines);
-        const header = renderMarkdownTableRow(lines[0]);
-        const rows = lines.slice(2).map((line) => renderMarkdownTableRow(line));
+    function tableHtml(lines = []) {
+        if (lines.length < 2) return paraHtml(lines);
+        const head = tableRow(lines[0]);
+        const rows = lines.slice(2).map((line) => tableRow(line));
         return `
             <div class="plugin-ai-table-wrap">
                 <table>
-                    <thead><tr>${header.map((cell) => `<th>${cell}</th>`).join('')}</tr></thead>
+                    <thead><tr>${head.map((cell) => `<th>${cell}</th>`).join('')}</tr></thead>
                     <tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody>
                 </table>
             </div>
         `;
     }
 
-    function normalizeFindingFieldKey(value = '') {
-        return String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+    function fieldKey(val = '') {
+        return String(val || '').trim().toLowerCase().replace(/\s+/g, '_');
     }
 
-    function findingSeverityTone(value = '') {
-        const severity = String(value || '').trim().toLowerCase();
-        if (severity === 'critical') return 'critical';
-        if (severity === 'high') return 'high';
-        if (severity === 'medium') return 'medium';
-        if (severity === 'low') return 'low';
+    function sevTone(val = '') {
+        const sev = String(val || '').trim().toLowerCase();
+        if (sev === 'critical') return 'critical';
+        if (sev === 'high') return 'high';
+        if (sev === 'medium') return 'medium';
+        if (sev === 'low') return 'low';
         return 'info';
     }
 
-    function escapeFindingAttr(value = '') {
-        return escapeHtml(String(value || '').trim().toLowerCase());
+    function escAttr(val = '') {
+        return escapeHtml(String(val || '').trim().toLowerCase());
     }
 
-    function parsePluginAiFindingBlocks(source = '') {
-        const raw = String(source || '').replace(/\r\n/g, '\n');
+    function parseFindings(src = '') {
+        const raw = String(src || '').replace(/\r\n/g, '\n');
         if (!raw.trim()) return [];
 
         const lines = raw.split('\n');
-        const findings = [];
-        let current = null;
-        let currentListField = '';
+        const list = [];
+        let cur = null;
+        let field = '';
 
-        const ensureCurrent = (title = '') => {
-            if (!current) {
-                current = {
-                    title: String(title || '').trim(),
-                    severity: '',
-                    confidence: '',
-                    impact: '',
-                    exploitability: '',
-                    evidence: [],
-                    affected_files: [],
-                    recommended_fix: [],
-                    notes: [],
-                };
-            }
-            return current;
-        };
-
-        const pushCurrent = () => {
-            if (!current || !String(current.title || '').trim()) return;
-            findings.push({ ...current });
-            current = null;
-            currentListField = '';
+        const pushCur = () => {
+            if (!cur || !String(cur.title || '').trim()) return;
+            list.push({ ...cur });
+            cur = null;
+            field = '';
         };
 
         lines.forEach((rawLine) => {
             const line = String(rawLine || '');
             const trimmed = line.trim();
 
-            const findingMatch = trimmed.match(/^##\s+Finding:\s*(.+)$/i);
-            if (findingMatch) {
-                pushCurrent();
-                current = {
-                    title: findingMatch[1].trim(),
+            const match = trimmed.match(/^##\s+Finding:\s*(.+)$/i);
+            if (match) {
+                pushCur();
+                cur = {
+                    title: match[1].trim(),
                     severity: '',
                     confidence: '',
                     impact: '',
@@ -571,83 +554,82 @@
                     recommended_fix: [],
                     notes: [],
                 };
-                currentListField = '';
+                field = '';
                 return;
             }
 
-            if (!current) return;
-            if (!trimmed) return;
+            if (!cur || !trimmed) return;
 
-            const fieldMatch = trimmed.match(/^[-*]\s+([^:]+):\s*(.*)$/);
-            if (fieldMatch) {
-                const key = normalizeFindingFieldKey(fieldMatch[1]);
-                const value = String(fieldMatch[2] || '').trim();
-                currentListField = '';
+            const fMatch = trimmed.match(/^[-*]\s+([^:]+):\s*(.*)$/);
+            if (fMatch) {
+                const key = fieldKey(fMatch[1]);
+                const val = String(fMatch[2] || '').trim();
+                field = '';
 
                 if (key === 'severity' || key === 'confidence' || key === 'impact' || key === 'exploitability') {
-                    current[key] = value;
+                    cur[key] = val;
                     return;
                 }
 
                 if (key === 'evidence' || key === 'affected_files' || key === 'recommended_fix' || key === 'notes') {
-                    currentListField = key;
-                    if (value) current[key].push(value);
+                    field = key;
+                    if (val) cur[key].push(val);
                     return;
                 }
             }
 
-            const nestedBulletMatch = trimmed.match(/^[-*]\s+(.+)$/);
-            if (nestedBulletMatch && currentListField && Array.isArray(current[currentListField])) {
-                current[currentListField].push(nestedBulletMatch[1].trim());
+            const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+            if (bullet && field && Array.isArray(cur[field])) {
+                cur[field].push(bullet[1].trim());
                 return;
             }
 
-            if (currentListField && Array.isArray(current[currentListField])) {
-                current[currentListField].push(trimmed);
+            if (field && Array.isArray(cur[field])) {
+                cur[field].push(trimmed);
                 return;
             }
 
-            current.notes.push(trimmed);
+            cur.notes.push(trimmed);
         });
 
-        pushCurrent();
-        return findings.filter((item) => String(item.title || '').trim());
+        pushCur();
+        return list.filter((item) => String(item.title || '').trim());
     }
 
-    function renderPluginAiFindingCards(source = '') {
-        const findings = parsePluginAiFindingBlocks(source);
-        if (!findings.length) return '';
+    function renderFindings(src = '') {
+        const list = parseFindings(src);
+        if (!list.length) return '';
 
-        const cards = findings.map((finding) => {
-            const severity = String(finding.severity || 'Info').trim() || 'Info';
-            const confidence = String(finding.confidence || 'Unknown').trim() || 'Unknown';
-            const impact = String(finding.impact || '').trim();
-            const exploitability = String(finding.exploitability || '').trim();
-            const evidence = Array.isArray(finding.evidence) ? finding.evidence.filter(Boolean) : [];
-            const affectedFiles = Array.isArray(finding.affected_files) ? finding.affected_files.filter(Boolean) : [];
-            const fixes = Array.isArray(finding.recommended_fix) ? finding.recommended_fix.filter(Boolean) : [];
-            const notes = Array.isArray(finding.notes) ? finding.notes.filter(Boolean) : [];
-            const tone = findingSeverityTone(severity);
+        const cards = list.map((item) => {
+            const sev = String(item.severity || 'Info').trim() || 'Info';
+            const conf = String(item.confidence || 'Unknown').trim() || 'Unknown';
+            const imp = String(item.impact || '').trim();
+            const exp = String(item.exploitability || '').trim();
+            const ev = Array.isArray(item.evidence) ? item.evidence.filter(Boolean) : [];
+            const files = Array.isArray(item.affected_files) ? item.affected_files.filter(Boolean) : [];
+            const fixes = Array.isArray(item.recommended_fix) ? item.recommended_fix.filter(Boolean) : [];
+            const notes = Array.isArray(item.notes) ? item.notes.filter(Boolean) : [];
+            const tone = sevTone(sev);
 
             return `
-                <article class="plugin-ai-finding-card" data-severity="${escapeFindingAttr(tone)}">
+                <article class="plugin-ai-finding-card" data-severity="${escAttr(tone)}">
                     <div class="plugin-ai-finding-card-head">
                         <div>
                             <div class="plugin-ai-finding-kicker">Security finding</div>
-                            <h3>${renderInlineMarkdown(finding.title)}</h3>
+                            <h3>${inlineMd(item.title)}</h3>
                         </div>
                         <div class="plugin-ai-finding-badges">
-                            <span class="plugin-ai-finding-badge severity-${escapeFindingAttr(tone)}">${escapeHtml(severity)}</span>
-                            <span class="plugin-ai-finding-badge confidence">${escapeHtml(confidence)} confidence</span>
+                            <span class="plugin-ai-finding-badge severity-${escAttr(tone)}">${escapeHtml(sev)}</span>
+                            <span class="plugin-ai-finding-badge confidence">${escapeHtml(conf)} confidence</span>
                         </div>
                     </div>
                     <div class="plugin-ai-finding-grid">
-                        ${impact ? `<section><strong>Impact</strong><p>${renderInlineMarkdown(impact)}</p></section>` : ''}
-                        ${exploitability ? `<section><strong>Exploitability</strong><p>${renderInlineMarkdown(exploitability)}</p></section>` : ''}
-                        ${evidence.length ? `<section><strong>Evidence</strong><ul>${evidence.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul></section>` : ''}
-                        ${affectedFiles.length ? `<section><strong>Affected files</strong><ul>${affectedFiles.map((item) => `<li><code>${escapeHtml(item)}</code></li>`).join('')}</ul></section>` : ''}
-                        ${fixes.length ? `<section><strong>Recommended fix</strong><ul>${fixes.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul></section>` : ''}
-                        ${notes.length ? `<section><strong>Notes</strong><ul>${notes.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul></section>` : ''}
+                        ${imp ? `<section><strong>Impact</strong><p>${inlineMd(imp)}</p></section>` : ''}
+                        ${exp ? `<section><strong>Exploitability</strong><p>${inlineMd(exp)}</p></section>` : ''}
+                        ${ev.length ? `<section><strong>Evidence</strong><ul>${ev.map((row) => `<li>${inlineMd(row)}</li>`).join('')}</ul></section>` : ''}
+                        ${files.length ? `<section><strong>Affected files</strong><ul>${files.map((row) => `<li><code>${escapeHtml(row)}</code></li>`).join('')}</ul></section>` : ''}
+                        ${fixes.length ? `<section><strong>Recommended fix</strong><ul>${fixes.map((row) => `<li>${inlineMd(row)}</li>`).join('')}</ul></section>` : ''}
+                        ${notes.length ? `<section><strong>Notes</strong><ul>${notes.map((row) => `<li>${inlineMd(row)}</li>`).join('')}</ul></section>` : ''}
                     </div>
                 </article>
             `;
@@ -656,163 +638,163 @@
         return `<div class="plugin-ai-findings">${cards}</div>`;
     }
 
-    function renderPluginAiMarkdown(source = '') {
-        const raw = String(source || '').replace(/\r\n/g, '\n');
+    function renderMd(src = '') {
+        const raw = String(src || '').replace(/\r\n/g, '\n');
         if (!raw.trim()) return '';
 
-        const findingCardsHtml = renderPluginAiFindingCards(raw);
-        const codeBlocks = [];
-        const withPlaceholders = raw.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, language, code) => {
-            const index = codeBlocks.length;
-            codeBlocks.push({ language: String(language || '').trim(), code: String(code || '').replace(/\n$/, '') });
-            return `\n@@CODEBLOCK_${index}@@\n`;
+        const cards = renderFindings(raw);
+        const blocks = [];
+        const body = raw.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+            const idx = blocks.length;
+            blocks.push({ lang: String(lang || '').trim(), code: String(code || '').replace(/\n$/, '') });
+            return `\n@@CODEBLOCK_${idx}@@\n`;
         });
 
-        const lines = withPlaceholders.split('\n');
+        const lines = body.split('\n');
         const html = [];
-        let index = 0;
+        let idx = 0;
 
-        while (index < lines.length) {
-            const line = String(lines[index] || '');
+        while (idx < lines.length) {
+            const line = String(lines[idx] || '');
             const trimmed = line.trim();
 
             if (!trimmed) {
-                index += 1;
+                idx += 1;
                 continue;
             }
 
-            const codeMatch = trimmed.match(/^@@CODEBLOCK_(\d+)@@$/);
-            if (codeMatch) {
-                const block = codeBlocks[Number(codeMatch[1])] || { language: '', code: '' };
-                const languageAttr = block.language ? ` data-language="${escapeHtml(block.language)}"` : '';
-                const languageBadge = block.language ? `<span class="plugin-ai-code-lang">${escapeHtml(block.language)}</span>` : '';
-                html.push(`<pre class="plugin-ai-code-block"${languageAttr}>${languageBadge}<code>${escapeHtml(block.code)}</code></pre>`);
-                index += 1;
+            const cMatch = trimmed.match(/^@@CODEBLOCK_(\d+)@@$/);
+            if (cMatch) {
+                const block = blocks[Number(cMatch[1])] || { lang: '', code: '' };
+                const attr = block.lang ? ` data-language="${escapeHtml(block.lang)}"` : '';
+                const badge = block.lang ? `<span class="plugin-ai-code-lang">${escapeHtml(block.lang)}</span>` : '';
+                html.push(`<pre class="plugin-ai-code-block"${attr}>${badge}<code>${escapeHtml(block.code)}</code></pre>`);
+                idx += 1;
                 continue;
             }
 
             if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
                 html.push('<hr>');
-                index += 1;
+                idx += 1;
                 continue;
             }
 
-            const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
-            if (headingMatch) {
-                const level = Math.min(6, headingMatch[1].length);
-                html.push(`<h${level}>${renderInlineMarkdown(headingMatch[2].trim())}</h${level}>`);
-                index += 1;
+            const hMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+            if (hMatch) {
+                const lvl = Math.min(6, hMatch[1].length);
+                html.push(`<h${lvl}>${inlineMd(hMatch[2].trim())}</h${lvl}>`);
+                idx += 1;
                 continue;
             }
 
             if (trimmed.startsWith('>')) {
-                const quoteLines = [];
-                while (index < lines.length && String(lines[index] || '').trim().startsWith('>')) {
-                    quoteLines.push(String(lines[index] || '').trim());
-                    index += 1;
+                const qLines = [];
+                while (idx < lines.length && String(lines[idx] || '').trim().startsWith('>')) {
+                    qLines.push(String(lines[idx] || '').trim());
+                    idx += 1;
                 }
-                html.push(renderBlockquoteBlock(quoteLines));
+                html.push(quoteHtml(qLines));
                 continue;
             }
 
-            if (trimmed.includes('|') && index + 1 < lines.length && isMarkdownTableSeparator(lines[index + 1])) {
-                const tableLines = [trimmed, String(lines[index + 1] || '').trim()];
-                index += 2;
-                while (index < lines.length) {
-                    const row = String(lines[index] || '').trim();
+            if (trimmed.includes('|') && idx + 1 < lines.length && isTableSep(lines[idx + 1])) {
+                const tLines = [trimmed, String(lines[idx + 1] || '').trim()];
+                idx += 2;
+                while (idx < lines.length) {
+                    const row = String(lines[idx] || '').trim();
                     if (!row || !row.includes('|')) break;
-                    tableLines.push(row);
-                    index += 1;
+                    tLines.push(row);
+                    idx += 1;
                 }
-                html.push(renderTableBlock(tableLines));
+                html.push(tableHtml(tLines));
                 continue;
             }
 
             if (/^\d+\.\s+/.test(trimmed)) {
-                const listLines = [];
-                while (index < lines.length && /^\d+\.\s+/.test(String(lines[index] || '').trim())) {
-                    listLines.push(String(lines[index] || '').trim());
-                    index += 1;
+                const lLines = [];
+                while (idx < lines.length && /^\d+\.\s+/.test(String(lines[idx] || '').trim())) {
+                    lLines.push(String(lines[idx] || '').trim());
+                    idx += 1;
                 }
-                html.push(renderListBlock(listLines, 'ol'));
+                html.push(listHtml(lLines, 'ol'));
                 continue;
             }
 
             if (/^[-*+]\s+/.test(trimmed)) {
-                const listLines = [];
-                while (index < lines.length && /^[-*+]\s+/.test(String(lines[index] || '').trim())) {
-                    listLines.push(String(lines[index] || '').trim());
-                    index += 1;
+                const lLines = [];
+                while (idx < lines.length && /^[-*+]\s+/.test(String(lines[idx] || '').trim())) {
+                    lLines.push(String(lines[idx] || '').trim());
+                    idx += 1;
                 }
-                html.push(renderListBlock(listLines, 'ul'));
+                html.push(listHtml(lLines, 'ul'));
                 continue;
             }
 
-            const paragraphLines = [];
-            while (index < lines.length) {
-                const current = String(lines[index] || '');
-                const currentTrimmed = current.trim();
+            const pLines = [];
+            while (idx < lines.length) {
+                const cur = String(lines[idx] || '');
+                const curTrim = cur.trim();
 
-                if (!currentTrimmed) {
-                    let lookahead = index + 1;
-                    while (lookahead < lines.length && !String(lines[lookahead] || '').trim()) {
-                        lookahead += 1;
+                if (!curTrim) {
+                    let nextIdx = idx + 1;
+                    while (nextIdx < lines.length && !String(lines[nextIdx] || '').trim()) {
+                        nextIdx += 1;
                     }
-                    const nextTrimmed = lookahead < lines.length ? String(lines[lookahead] || '').trim() : '';
-                    if (shouldMergeParagraphBreak(paragraphLines, nextTrimmed)) {
-                        index = lookahead;
+                    const nextTrim = nextIdx < lines.length ? String(lines[nextIdx] || '').trim() : '';
+                    if (mergeBreak(pLines, nextTrim)) {
+                        idx = nextIdx;
                         continue;
                     }
                     break;
                 }
 
-                if (/^@@CODEBLOCK_\d+@@$/.test(currentTrimmed)) break;
-                if (/^(#{1,6})\s+/.test(currentTrimmed)) break;
-                if (/^(-{3,}|\*{3,}|_{3,})$/.test(currentTrimmed)) break;
-                if (currentTrimmed.startsWith('>')) break;
-                if (/^\d+\.\s+/.test(currentTrimmed)) break;
-                if (/^[-*+]\s+/.test(currentTrimmed)) break;
-                if (currentTrimmed.includes('|') && index + 1 < lines.length && isMarkdownTableSeparator(lines[index + 1])) break;
-                paragraphLines.push(currentTrimmed);
-                index += 1;
+                if (/^@@CODEBLOCK_\d+@@$/.test(curTrim)) break;
+                if (/^(#{1,6})\s+/.test(curTrim)) break;
+                if (/^(-{3,}|\*{3,}|_{3,})$/.test(curTrim)) break;
+                if (curTrim.startsWith('>')) break;
+                if (/^\d+\.\s+/.test(curTrim)) break;
+                if (/^[-*+]\s+/.test(curTrim)) break;
+                if (curTrim.includes('|') && idx + 1 < lines.length && isTableSep(lines[idx + 1])) break;
+                pLines.push(curTrim);
+                idx += 1;
             }
-            html.push(renderParagraphBlock(paragraphLines));
+            html.push(paraHtml(pLines));
         }
 
-        const markdownHtml = html.filter(Boolean).join('');
-        return `${findingCardsHtml || ''}${markdownHtml}`;
+        const mdHtml = html.filter(Boolean).join('');
+        return `${cards || ''}${mdHtml}`;
     }
 
-    function renderPluginAiSessions(threads = [], activeThreadId = null) {
-        const container = document.getElementById('plugin-ai-sessions');
-        if (!container) return;
+    function renderChats(threads = [], activeId = null) {
+        const box = document.getElementById('plugin-ai-sessions');
+        if (!box) return;
 
         if (!Array.isArray(threads) || threads.length === 0) {
-            container.innerHTML = '<div class="plugin-ai-session-empty">No chats yet.</div>';
+            box.innerHTML = '<div class="plugin-ai-session-empty">No chats yet.</div>';
             return;
         }
 
-        container.innerHTML = threads
-            .map((thread, index) => {
+        box.innerHTML = threads
+            .map((thread, idx) => {
                 const id = Number(thread.id || 0);
-                const activeClass = id === Number(activeThreadId || 0) ? ' is-active' : '';
+                const cls = id === Number(activeId || 0) ? ' is-active' : '';
                 const state = typeof window.getPluginAiState === 'function' ? window.getPluginAiState() : {};
-                const snapshot = typeof window.getPluginAiThreadUiSnapshot === 'function'
+                const snap = typeof window.getPluginAiThreadUiSnapshot === 'function'
                     ? window.getPluginAiThreadUiSnapshot(String(thread.plugin_slug || state.plugin || '').trim(), id, !!thread.is_theme)
                     : null;
-                const isRunning = !!snapshot?.sending;
-                const runDuration = isRunning && typeof window.formatPluginAiRunDuration === 'function'
-                    ? window.formatPluginAiRunDuration(snapshot?.runStartedAt)
+                const running = !!snap?.sending;
+                const dur = running && typeof window.formatPluginAiRunDuration === 'function'
+                    ? window.formatPluginAiRunDuration(snap?.runStartedAt)
                     : '';
-                const runningMeta = isRunning
-                    ? `<span class="plugin-ai-session-running"><span class="plugin-ai-session-running-dot"></span>Running${runDuration ? ` • ${escapeHtml(runDuration)}` : ''}</span>`
+                const meta = running
+                    ? `<span class="plugin-ai-session-running"><span class="plugin-ai-session-running-dot"></span>Running${dur ? ` • ${escapeHtml(dur)}` : ''}</span>`
                     : '';
                 return `
-                    <div class="plugin-ai-session-item${activeClass}${isRunning ? ' is-running' : ''}" data-thread-id="${id}">
+                    <div class="plugin-ai-session-item${cls}${running ? ' is-running' : ''}" data-thread-id="${id}">
                         <button type="button" class="plugin-ai-session-main" data-thread-id="${id}">
-                            <strong>${escapeHtml(buildPluginAiSessionLabel(thread, index))}</strong>
-                            <span>${escapeHtml(buildPluginAiSessionMeta(thread))}</span>
-                            ${runningMeta}
+                            <strong>${escapeHtml(chatLabel(thread, idx))}</strong>
+                            <span>${escapeHtml(chatMeta(thread))}</span>
+                            ${meta}
                         </button>
                         <div class="plugin-ai-session-actions">
                             <button type="button" class="plugin-ai-session-icon" data-thread-rename="${id}" title="Rename chat" aria-label="Rename chat">
@@ -828,35 +810,35 @@
             .join('');
     }
 
-    function updatePluginAiSessionUi() {
+    function updateChatUi() {
         const state = window.getPluginAiState();
-        renderPluginAiSessions(state.threads || [], state.threadId);
+        renderChats(state.threads || [], state.threadId);
     }
 
-    function setPluginAiMessagesEmptyView() {
-        renderPluginAiMessages([]);
+    function emptyMsgs() {
+        renderMsgs([]);
     }
 
-    function setPluginAiActivityEmptyView() {
-        renderPluginAiActivity([]);
+    function emptyActivity() {
+        renderActivity([]);
     }
 
-    function getPluginAiVisibleActivityEntries(entries = [], expanded = false) {
-        const safeEntries = Array.isArray(entries) ? entries : [];
-        if (expanded) return safeEntries;
-        return safeEntries.slice(-3);
+    function visibleItems(entries = [], expanded = false) {
+        const list = Array.isArray(entries) ? entries : [];
+        if (expanded) return list;
+        return list.slice(-3);
     }
 
-    function escapePluginAiAttr(value = '') {
-        return String(value ?? '')
+    function escHtmlAttr(val = '') {
+        return String(val ?? '')
             .replace(/&/g, '&amp;')
             .replace(/"/g, '&quot;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
     }
 
-    function pluginAiToolBadgeTone(toolName = '') {
-        const tool = String(toolName || '').trim().toLowerCase();
+    function toolTone(name = '') {
+        const tool = String(name || '').trim().toLowerCase();
         if (tool === 'bash') return 'bash';
         if (tool === 'read' || tool === 'file_read') return 'read';
         if (tool === 'grep') return 'grep';
@@ -865,12 +847,12 @@
         return 'neutral';
     }
 
-    function extractPluginAiDecisionTrace(events = []) {
-        const safeEvents = Array.isArray(events) ? events : [];
-        for (let index = safeEvents.length - 1; index >= 0; index -= 1) {
-            const event = safeEvents[index];
-            const type = String(event?.type || '');
-            const data = event?.data && typeof event.data === 'object' ? event.data : {};
+    function pickTrace(events = []) {
+        const list = Array.isArray(events) ? events : [];
+        for (let idx = list.length - 1; idx >= 0; idx -= 1) {
+            const evt = list[idx];
+            const type = String(evt?.type || '');
+            const data = evt?.data && typeof evt.data === 'object' ? evt.data : {};
             if (type === 'decision_trace') {
                 return data;
             }
@@ -881,87 +863,87 @@
         return {};
     }
 
-    function buildPluginAiTraceSummary(events = []) {
-        const trace = extractPluginAiDecisionTrace(events);
-        const normalized = trace.normalized_decision && typeof trace.normalized_decision === 'object'
+    function traceInfo(events = []) {
+        const trace = pickTrace(events);
+        const norm = trace.normalized_decision && typeof trace.normalized_decision === 'object'
             ? trace.normalized_decision
             : trace;
         return {
             trace,
-            normalized,
-            reason: String(normalized.reason || trace.reason || ''),
-            strategy: String(normalized.strategy || trace.strategy || ''),
-            executionMode: String(normalized.execution_mode || trace.execution_mode || ''),
-            teamMode: String(normalized.team_mode || trace.team_mode || ''),
-            compositionSource: String(trace.composition_source || normalized.composition_source || ''),
-            needsTools: normalized.needs_tools ?? trace.needs_tools,
-            securityFocus: normalized.security_focus ?? trace.security_focus,
+            normalized: norm,
+            reason: String(norm.reason || trace.reason || ''),
+            strategy: String(norm.strategy || trace.strategy || ''),
+            executionMode: String(norm.execution_mode || trace.execution_mode || ''),
+            teamMode: String(norm.team_mode || trace.team_mode || ''),
+            compositionSource: String(trace.composition_source || norm.composition_source || ''),
+            needsTools: norm.needs_tools ?? trace.needs_tools,
+            securityFocus: norm.security_focus ?? trace.security_focus,
         };
     }
 
-    function buildPluginAiExecutionDetailItems(events = []) {
-        const safeEvents = Array.isArray(events) ? events : [];
+    function execItems(events = []) {
+        const list = Array.isArray(events) ? events : [];
         const state = window.getPluginAiState ? window.getPluginAiState() : {};
-        const workspaceRoot = String(state?.liveActivityOptions?.workspaceRoot || '').trim();
+        const root = String(state?.liveActivityOptions?.workspaceRoot || '').trim();
         const items = [];
 
-        safeEvents.forEach((event) => {
-            const type = String(event?.type || '').trim();
+        list.forEach((evt) => {
+            const type = String(evt?.type || '').trim();
             if (type !== 'tool_call') return;
 
-            const data = event?.data && typeof event.data === 'object' ? event.data : {};
+            const data = evt?.data && typeof evt.data === 'object' ? evt.data : {};
             const tool = String(data.name || data.toolName || data.tool || '').trim();
             const input = data.input && typeof data.input === 'object' ? data.input : data;
 
             if (tool === 'bash') {
-                const commandRaw = String(input.command || data.command || '').trim();
-                const command = truncatePluginAiText(commandRaw, 140);
+                const rawCmd = String(input.command || data.command || '').trim();
+                const cmd = cutText(rawCmd, 140);
                 items.push({
                     label: 'Tool call • bash',
-                    value: command || '(no command)',
-                    copyText: commandRaw || undefined,
+                    value: cmd || '(no command)',
+                    copyText: rawCmd || undefined,
                 });
                 return;
             }
 
             if (tool === 'read' || tool === 'file_read') {
-                const path = shortenPluginAiPath(String(input.path || data.path || '').trim(), { workspaceRoot });
+                const path = shortPath(String(input.path || data.path || '').trim(), { workspaceRoot: root });
                 items.push({ label: `Tool call • ${tool || 'read'}`, value: path || '(no path)' });
                 return;
             }
 
             if (tool === 'grep') {
-                const pattern = shortenPluginAiPattern(String(input.pattern || '').trim());
-                const path = shortenPluginAiPath(String(input.path || data.path || '').trim(), { workspaceRoot }) || '.';
+                const pat = shortPat(String(input.pattern || '').trim());
+                const path = shortPath(String(input.path || data.path || '').trim(), { workspaceRoot: root }) || '.';
                 items.push({
                     label: 'Tool call • grep',
-                    value: [pattern ? `pattern: ${pattern}` : '', `path: ${path}`].filter(Boolean).join(' • ') || '(no input)',
+                    value: [pat ? `pattern: ${pat}` : '', `path: ${path}`].filter(Boolean).join(' • ') || '(no input)',
                 });
                 return;
             }
 
             if (tool === 'write' || tool === 'file_write' || tool === 'edit' || tool === 'file_edit') {
-                const path = shortenPluginAiPath(String(input.path || data.path || '').trim(), { workspaceRoot });
+                const path = shortPath(String(input.path || data.path || '').trim(), { workspaceRoot: root });
                 items.push({ label: `Tool call • ${tool}`, value: path || '(no path)' });
                 return;
             }
 
-            const fallbackValue = truncatePluginAiText(JSON.stringify(input), 180);
-            items.push({ label: `Tool call${tool ? ` • ${tool}` : ''}`, value: fallbackValue || '(no input)' });
+            const fb = cutText(JSON.stringify(input), 180);
+            items.push({ label: `Tool call${tool ? ` • ${tool}` : ''}`, value: fb || '(no input)' });
         });
 
         return items;
     }
 
-    function buildPluginAiExecutionSummary(events = []) {
-        const safeEvents = Array.isArray(events) ? events : [];
+    function execSummary(events = []) {
+        const list = Array.isArray(events) ? events : [];
         const agents = new Set();
         const tools = new Set();
         let bashCount = 0;
 
-        safeEvents.forEach((event) => {
-            const type = String(event?.type || '');
-            const data = event?.data && typeof event.data === 'object' ? event.data : {};
+        list.forEach((evt) => {
+            const type = String(evt?.type || '');
+            const data = evt?.data && typeof evt.data === 'object' ? evt.data : {};
             if (type === 'agent_started' || type === 'agent_completed') {
                 const name = String(data.name || '').trim();
                 if (name) agents.add(name);
@@ -973,7 +955,7 @@
             }
         });
 
-        const details = buildPluginAiExecutionDetailItems(safeEvents);
+        const details = execItems(list);
         return {
             totalEvents: details.length,
             agents: [...agents],
@@ -983,11 +965,11 @@
         };
     }
 
-    function renderPluginAiActivityRail(entries = [], options = {}) {
-        const expanded = !!options.expanded;
-        const visibleEntries = getPluginAiVisibleActivityEntries(entries, expanded);
+    function renderRail(entries = [], opts = {}) {
+        const expanded = !!opts.expanded;
+        const visible = visibleItems(entries, expanded);
         const toggleLabel = expanded ? 'Show less' : `Show all activity (${entries.length})`;
-        const subtitle = expanded
+        const sub = expanded
             ? `${entries.length} events visible`
             : `${Math.min(entries.length, 3)} of ${entries.length} events visible`;
 
@@ -1000,16 +982,16 @@
                     </div>
                     ${entries.length > 3 ? `<button type="button" class="plugin-ai-inline-toggle" data-plugin-ai-toggle="activityExpanded">${escapeHtml(toggleLabel)}</button>` : ''}
                 </div>
-                <div class="plugin-ai-live-activity-subhead">${escapeHtml(subtitle)}</div>
+                <div class="plugin-ai-live-activity-subhead">${escapeHtml(sub)}</div>
                 <div class="plugin-ai-live-activity-rail${expanded ? ' is-expanded' : ''}">
-                    ${visibleEntries
-                        .map((entry, index) => `
-                            <div class="plugin-ai-live-activity-item${entry.isCurrent ? ' is-current' : ''}${index === visibleEntries.length - 1 ? ' is-latest' : ' is-history'}" data-activity-type="${escapeHtml(entry.type)}" data-tone="${escapeHtml(entry.tone || 'neutral')}" data-category="${escapeHtml(entry.category || 'activity')}">
+                    ${visible
+                        .map((entry, idx) => `
+                            <div class="plugin-ai-live-activity-item${entry.isCurrent ? ' is-current' : ''}${idx === visible.length - 1 ? ' is-latest' : ' is-history'}" data-activity-type="${escapeHtml(entry.type)}" data-tone="${escapeHtml(entry.tone || 'neutral')}" data-category="${escapeHtml(entry.category || 'activity')}">
                                 <div class="plugin-ai-activity-row-head">
                                     <em class="plugin-ai-activity-icon" aria-hidden="true">${escapeHtml(entry.icon || '•')}</em>
                                     <strong>${escapeHtml(entry.label)}</strong>
                                     ${entry.count > 1 ? `<small>×${escapeHtml(String(entry.count))}</small>` : ''}
-                                    ${entry.bashCommand ? `<button type="button" class="plugin-ai-copy-btn plugin-ai-copy-btn--icon" data-copy-label="⧉" data-copy-text="${escapePluginAiAttr(entry.bashCommand)}" aria-label="Copy command" title="Copy command">⧉</button>` : ''}
+                                    ${entry.bashCommand ? `<button type="button" class="plugin-ai-copy-btn plugin-ai-copy-btn--icon" data-copy-label="⧉" data-copy-text="${escHtmlAttr(entry.bashCommand)}" aria-label="Copy command" title="Copy command">⧉</button>` : ''}
                                     ${entry.isCurrent ? '<mark>Now</mark>' : '<mark class="is-history">Past</mark>'}
                                 </div>
                                 ${entry.detail ? `<span>${escapeHtml(entry.detail)}</span>` : ''}
@@ -1021,17 +1003,16 @@
         `;
     }
 
-    function renderPluginAiDecisionTracePanel(events = []) {
-        const summary = buildPluginAiTraceSummary(events);
-
-        const normalizedTeam = String(summary.teamMode || '').trim().toLowerCase();
-        const compactLine = [
-            summary.strategy ? `Strategy: ${summary.strategy}` : '',
-            (summary.teamMode && normalizedTeam !== 'single_agent') ? `Team: ${summary.teamMode}` : '',
-            typeof summary.needsTools === 'boolean' ? `Tools: ${summary.needsTools ? 'on' : 'off'}` : '',
+    function renderTrace(events = []) {
+        const info = traceInfo(events);
+        const team = String(info.teamMode || '').trim().toLowerCase();
+        const line = [
+            info.strategy ? `Strategy: ${info.strategy}` : '',
+            (info.teamMode && team !== 'single_agent') ? `Team: ${info.teamMode}` : '',
+            typeof info.needsTools === 'boolean' ? `Tools: ${info.needsTools ? 'on' : 'off'}` : '',
         ].filter(Boolean).join(' • ');
 
-        if (!compactLine) {
+        if (!line) {
             return '';
         }
 
@@ -1040,93 +1021,84 @@
                 <div class="plugin-ai-execution-summary-head">
                     <div>
                         <strong>Run info</strong>
-                        <p>${escapeHtml(compactLine)}</p>
+                        <p>${escapeHtml(line)}</p>
                     </div>
                 </div>
             </section>
         `;
     }
 
-    function formatPluginAiApprovalModeLabel(mode = '') {
-        const normalized = String(mode || '').trim().toLowerCase();
-        if (normalized === 'manual') return 'Manual approval';
-        if (normalized === 'auto_approve') return 'Auto approve';
-        if (normalized === 'off') return 'Approval off (YOLO • Dangerous)';
-        return normalized || 'Unknown';
+    function modeLabel(mode = '') {
+        const norm = String(mode || '').trim().toLowerCase();
+        if (norm === 'manual') return 'Manual approval';
+        if (norm === 'auto_approve') return 'Auto approve';
+        if (norm === 'off') return 'Approval off (YOLO • Dangerous)';
+        return norm || 'Unknown';
     }
 
-    function formatPluginAiApprovalTaskLabel(task = {}, fallbackIndex = 0) {
-        if (!task || typeof task !== 'object') return `Task ${fallbackIndex + 1}`;
-        return String(task.title || task.id || `Task ${fallbackIndex + 1}`).trim() || `Task ${fallbackIndex + 1}`;
+    function taskLabel(task = {}, idx = 0) {
+        if (!task || typeof task !== 'object') return `Task ${idx + 1}`;
+        return String(task.title || task.id || `Task ${idx + 1}`).trim() || `Task ${idx + 1}`;
     }
 
-    function formatPluginAiApprovalTaskMeta(task = {}) {
+    function taskMeta(task = {}) {
         if (!task || typeof task !== 'object') return '';
         const status = String(task.status || '').trim();
-        const assignee = String(task.assignee || '').trim();
+        const who = String(task.assignee || '').trim();
         const id = String(task.id || '').trim();
         return [
             status ? `status: ${status}` : '',
-            assignee ? `assignee: ${assignee}` : '',
+            who ? `assignee: ${who}` : '',
             id ? `id: ${id}` : '',
         ].filter(Boolean).join(' • ');
     }
 
-    function buildPluginAiApprovalScopeSummary(events = [], requestPayload = {}) {
-        const safeEvents = Array.isArray(events) ? events : [];
-        const toolCalls = [];
+    function scopeInfo(events = [], req = {}) {
+        const list = Array.isArray(events) ? events : [];
+        const calls = [];
 
-        safeEvents.forEach((event) => {
-            const type = String(event?.type || '').trim();
+        list.forEach((evt) => {
+            const type = String(evt?.type || '').trim();
             if (type !== 'tool_call') return;
-            const data = event?.data && typeof event.data === 'object' ? event.data : {};
+            const data = evt?.data && typeof evt.data === 'object' ? evt.data : {};
             const input = data.input && typeof data.input === 'object' ? data.input : data;
             const name = String(data.name || data.toolName || data.tool || '').trim();
             if (!name) return;
-            toolCalls.push({ name, input });
+            calls.push({ name, input });
         });
 
-        const uniqueTools = [...new Set(toolCalls.map((call) => call.name))];
-        const bashCommands = toolCalls
+        const tools = [...new Set(calls.map((call) => call.name))];
+        const cmds = calls
             .filter((call) => call.name === 'bash')
             .map((call) => String(call.input?.command || '').trim())
             .filter(Boolean);
-        const readTargets = toolCalls
+        const reads = calls
             .filter((call) => call.name === 'read' || call.name === 'file_read')
             .map((call) => String(call.input?.path || '').trim())
             .filter(Boolean);
 
-        const completedTasks = Array.isArray(requestPayload.completedTasks) ? requestPayload.completedTasks : [];
-        const nextTasks = Array.isArray(requestPayload.nextTasks) ? requestPayload.nextTasks : [];
-
-        const scope = String(requestPayload.scope || '').trim();
-        const toolName = String(requestPayload.toolName || '').trim();
-        const toolInput = requestPayload.toolInput && typeof requestPayload.toolInput === 'object'
-            ? requestPayload.toolInput
-            : null;
-        const riskLevel = String(requestPayload.riskLevel || '').trim();
-        const riskReason = String(requestPayload.riskReason || '').trim();
-        const summary = String(requestPayload.summary || '').trim();
+        const done = Array.isArray(req.completedTasks) ? req.completedTasks : [];
+        const next = Array.isArray(req.nextTasks) ? req.nextTasks : [];
 
         return {
-            toolCallCount: toolCalls.length,
-            uniqueTools,
-            bashCommands,
-            readTargets,
-            completedTasks,
-            nextTasks,
-            scope,
-            toolName,
-            toolInput,
-            riskLevel,
-            riskReason,
-            summary,
+            toolCallCount: calls.length,
+            uniqueTools: tools,
+            bashCommands: cmds,
+            readTargets: reads,
+            completedTasks: done,
+            nextTasks: next,
+            scope: String(req.scope || '').trim(),
+            toolName: String(req.toolName || '').trim(),
+            toolInput: req.toolInput && typeof req.toolInput === 'object' ? req.toolInput : null,
+            riskLevel: String(req.riskLevel || '').trim(),
+            riskReason: String(req.riskReason || '').trim(),
+            summary: String(req.summary || '').trim(),
         };
     }
 
-    function renderPluginAiStructuredOutput(message = {}) {
-        const structured = message && typeof message.structured === 'object' ? message.structured : null;
-        if (!structured) return '';
+    function renderStruct(msg = {}) {
+        const struct = msg && typeof msg.structured === 'object' ? msg.structured : null;
+        if (!struct) return '';
         return `
             <section class="plugin-ai-execution-summary is-expanded">
                 <div class="plugin-ai-execution-summary-head">
@@ -1138,115 +1110,115 @@
                 <div class="plugin-ai-execution-summary-details">
                     <div class="plugin-ai-execution-detail-row">
                         <strong>JSON</strong>
-                        <span>${escapeHtml(JSON.stringify(structured, null, 2))}</span>
+                        <span>${escapeHtml(JSON.stringify(struct, null, 2))}</span>
                     </div>
                 </div>
             </section>
         `;
     }
 
-    function renderPluginAiApprovalCard(pendingApproval = null, events = []) {
-        if (!pendingApproval || typeof pendingApproval !== 'object' || String(pendingApproval.status || '') !== 'pending') {
+    function renderApproval(pending = null, events = []) {
+        if (!pending || typeof pending !== 'object' || String(pending.status || '') !== 'pending') {
             return '';
         }
 
-        const requestPayload = pendingApproval.request_payload && typeof pendingApproval.request_payload === 'object'
-            ? pendingApproval.request_payload
+        const req = pending.request_payload && typeof pending.request_payload === 'object'
+            ? pending.request_payload
             : {};
-        const scopeSummary = buildPluginAiApprovalScopeSummary(events, requestPayload);
-        const nextTasks = scopeSummary.nextTasks;
-        const completedTasks = scopeSummary.completedTasks;
-        const modeLabel = formatPluginAiApprovalModeLabel(pendingApproval.mode || requestPayload.mode || 'manual');
+        const info = scopeInfo(events, req);
+        const next = info.nextTasks;
+        const done = info.completedTasks;
+        const modeTxt = modeLabel(pending.mode || req.mode || 'manual');
 
-        const toolsLine = scopeSummary.uniqueTools.length ? scopeSummary.uniqueTools.join(', ') : 'No tool metadata available';
-        const latestBash = scopeSummary.bashCommands.length ? scopeSummary.bashCommands[scopeSummary.bashCommands.length - 1] : '';
-        const latestRead = scopeSummary.readTargets.length ? scopeSummary.readTargets[scopeSummary.readTargets.length - 1] : '';
+        const toolsLine = info.uniqueTools.length ? info.uniqueTools.join(', ') : 'No tool metadata available';
+        const lastBash = info.bashCommands.length ? info.bashCommands[info.bashCommands.length - 1] : '';
+        const lastRead = info.readTargets.length ? info.readTargets[info.readTargets.length - 1] : '';
 
-        const scope = String(scopeSummary.scope || '').trim();
-        const toolName = String(scopeSummary.toolName || '').trim();
-        const riskLevel = String(scopeSummary.riskLevel || '').trim();
-        const riskReason = String(scopeSummary.riskReason || '').trim();
-        const summaryText = String(scopeSummary.summary || '').trim();
-        const toolInput = scopeSummary.toolInput && typeof scopeSummary.toolInput === 'object' ? scopeSummary.toolInput : null;
-        const pendingCommand = toolName === 'bash' ? String(toolInput?.command || '').trim() : '';
-        const pendingPath = toolInput && typeof toolInput.path === 'string' ? String(toolInput.path).trim() : '';
+        const scope = String(info.scope || '').trim();
+        const tool = String(info.toolName || '').trim();
+        const risk = String(info.riskLevel || '').trim();
+        const reason = String(info.riskReason || '').trim();
+        const sumTxt = String(info.summary || '').trim();
+        const input = info.toolInput && typeof info.toolInput === 'object' ? info.toolInput : null;
+        const cmd = tool === 'bash' ? String(input?.command || '').trim() : '';
+        const path = input && typeof input.path === 'string' ? String(input.path).trim() : '';
 
-        const nextTaskRows = nextTasks.length
-            ? nextTasks
+        const rows = next.length
+            ? next
                 .slice(0, 4)
-                .map((task, index) => {
-                    const label = formatPluginAiApprovalTaskLabel(task, index);
-                    const meta = formatPluginAiApprovalTaskMeta(task);
+                .map((task, idx) => {
+                    const label = taskLabel(task, idx);
+                    const meta = taskMeta(task);
                     return `<li><strong>${escapeHtml(label)}</strong>${meta ? `<span>${escapeHtml(meta)}</span>` : ''}</li>`;
                 })
                 .join('')
             : '<li><strong>No next task details supplied.</strong><span>The runtime requested approval without detailed task metadata.</span></li>';
 
-        const isToolScope = scope === 'tool_call';
-        const headingText = isToolScope ? 'Tool approval required' : 'Manual approval required';
-        const subtitleText = isToolScope
+        const isTool = scope === 'tool_call';
+        const head = isTool ? 'Tool approval required' : 'Manual approval required';
+        const sub = isTool
             ? 'Review the requested command before continuing.'
             : 'This run is paused before continuing the pipeline.';
 
-        const toolToneClass = toolName ? `tone-${String(toolName).toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}` : '';
-        const conciseActionText = (() => {
-            if (toolName === 'write' && pendingPath) return `write ${shortenPluginAiPath(pendingPath)}`;
-            if (toolName === 'edit' && pendingPath) return `edit ${shortenPluginAiPath(pendingPath)}`;
-            if (toolName === 'read' && pendingPath) return `read ${shortenPluginAiPath(pendingPath)}`;
-            if (toolName === 'bash' && pendingCommand) return pendingCommand;
-            if (pendingPath) return `${toolName || 'tool'} ${shortenPluginAiPath(pendingPath)}`;
-            if (summaryText) return summaryText;
-            return toolName || 'Tool call';
+        const toneCls = tool ? `tone-${String(tool).toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}` : '';
+        const actionTxt = (() => {
+            if (tool === 'write' && path) return `write ${shortPath(path)}`;
+            if (tool === 'edit' && path) return `edit ${shortPath(path)}`;
+            if (tool === 'read' && path) return `read ${shortPath(path)}`;
+            if (tool === 'bash' && cmd) return cmd;
+            if (path) return `${tool || 'tool'} ${shortPath(path)}`;
+            if (sumTxt) return sumTxt;
+            return tool || 'Tool call';
         })();
-        const toolScopeCard = isToolScope
+        const toolCard = isTool
             ? `
                 <div class="plugin-ai-approval-card">
                     <div class="plugin-ai-approval-card__top">
                         <div>
                             <div class="plugin-ai-approval-card__eyebrow">Pending action</div>
-                            <div class="plugin-ai-approval-card__title">${escapeHtml(summaryText || 'A tool call needs your approval.')}</div>
+                            <div class="plugin-ai-approval-card__title">${escapeHtml(sumTxt || 'A tool call needs your approval.')}</div>
                         </div>
-                        <span class="plugin-ai-tool-badge ${escapeHtml(toolToneClass)}">${escapeHtml(toolName || 'tool')}</span>
+                        <span class="plugin-ai-tool-badge ${escapeHtml(toneCls)}">${escapeHtml(tool || 'tool')}</span>
                     </div>
-                    <div class="plugin-ai-approval-command">${escapeHtml(conciseActionText)}</div>
-                    ${pendingPath && toolName !== 'bash' ? `<div class="plugin-ai-approval-meta"><span>Target</span><code>${escapeHtml(shortenPluginAiPath(pendingPath))}</code></div>` : ''}
-                    ${riskLevel ? `<div class="plugin-ai-approval-meta"><span>Risk</span><strong>${escapeHtml(riskLevel)}${riskReason ? ` • ${escapeHtml(riskReason)}` : ''}</strong></div>` : ''}
+                    <div class="plugin-ai-approval-command">${escapeHtml(actionTxt)}</div>
+                    ${path && tool !== 'bash' ? `<div class="plugin-ai-approval-meta"><span>Target</span><code>${escapeHtml(shortPath(path))}</code></div>` : ''}
+                    ${risk ? `<div class="plugin-ai-approval-meta"><span>Risk</span><strong>${escapeHtml(risk)}${reason ? ` • ${escapeHtml(reason)}` : ''}</strong></div>` : ''}
                 </div>
               `
             : '';
 
-        const primaryRows = isToolScope
-            ? toolScopeCard
+        const mainRows = isTool
+            ? toolCard
             : `
                     <div class="plugin-ai-execution-detail-row"><strong>Approve will</strong><span>Continue pending tasks with the same tools for this run.</span></div>
                     <div class="plugin-ai-execution-detail-row"><strong>Reject will</strong><span>Stop the run and mark it as failed.</span></div>
                     <div class="plugin-ai-execution-detail-row"><strong>Tools used so far</strong><span>${escapeHtml(toolsLine)}</span></div>
-                    ${latestBash ? `<div class="plugin-ai-execution-detail-row has-copy"><strong>Latest bash command</strong><span>${escapeHtml(truncatePluginAiText(latestBash, 220))}</span><button type="button" class="plugin-ai-copy-btn plugin-ai-copy-btn--inline" data-copy-text="${escapePluginAiAttr(latestBash)}">Copy</button></div>` : ''}
-                    ${latestRead ? `<div class="plugin-ai-execution-detail-row"><strong>Latest read target</strong><span>${escapeHtml(shortenPluginAiPath(latestRead))}</span></div>` : ''}
+                    ${lastBash ? `<div class="plugin-ai-execution-detail-row has-copy"><strong>Latest bash command</strong><span>${escapeHtml(cutText(lastBash, 220))}</span><button type="button" class="plugin-ai-copy-btn plugin-ai-copy-btn--inline" data-copy-text="${escHtmlAttr(lastBash)}">Copy</button></div>` : ''}
+                    ${lastRead ? `<div class="plugin-ai-execution-detail-row"><strong>Latest read target</strong><span>${escapeHtml(shortPath(lastRead))}</span></div>` : ''}
                     <div class="plugin-ai-execution-detail-row"><strong>Upcoming tasks</strong><span>Review the next queued tasks below before you approve.</span></div>
               `;
 
         return `
-            <section class="plugin-ai-execution-summary is-expanded${isToolScope ? ' is-tool-approval' : ''}">
+            <section class="plugin-ai-execution-summary is-expanded${isTool ? ' is-tool-approval' : ''}">
                 <div class="plugin-ai-execution-summary-head">
                     <div>
-                        <strong>${escapeHtml(headingText)}</strong>
-                        ${subtitleText ? `<p>${escapeHtml(subtitleText)}</p>` : ''}
+                        <strong>${escapeHtml(head)}</strong>
+                        ${sub ? `<p>${escapeHtml(sub)}</p>` : ''}
                     </div>
                 </div>
-                ${isToolScope ? '' : `<div class="plugin-ai-summary-chips">
-                    <span class="plugin-ai-summary-chip">mode: ${escapeHtml(modeLabel)}</span>
-                    <span class="plugin-ai-summary-chip">tool calls: ${escapeHtml(String(scopeSummary.toolCallCount))}</span>
-                    <span class="plugin-ai-summary-chip">completed: ${escapeHtml(String(completedTasks.length))}</span>
-                    <span class="plugin-ai-summary-chip">next: ${escapeHtml(String(nextTasks.length))}</span>
+                ${isTool ? '' : `<div class="plugin-ai-summary-chips">
+                    <span class="plugin-ai-summary-chip">mode: ${escapeHtml(modeTxt)}</span>
+                    <span class="plugin-ai-summary-chip">tool calls: ${escapeHtml(String(info.toolCallCount))}</span>
+                    <span class="plugin-ai-summary-chip">completed: ${escapeHtml(String(done.length))}</span>
+                    <span class="plugin-ai-summary-chip">next: ${escapeHtml(String(next.length))}</span>
                 </div>`}
-                <div class="plugin-ai-execution-summary-details${isToolScope ? ' is-tool-approval' : ''}">
-                    ${primaryRows}
+                <div class="plugin-ai-execution-summary-details${isTool ? ' is-tool-approval' : ''}">
+                    ${mainRows}
                 </div>
-                ${isToolScope ? '' : `<div class="plugin-ai-approval-task-block">
-                    <ul class="plugin-ai-approval-task-list">${nextTaskRows}</ul>
+                ${isTool ? '' : `<div class="plugin-ai-approval-task-block">
+                    <ul class="plugin-ai-approval-task-list">${rows}</ul>
                 </div>`}
-                <div class="plugin-ai-approval-actions${isToolScope ? ' is-tool-approval' : ''}">
+                <div class="plugin-ai-approval-actions${isTool ? ' is-tool-approval' : ''}">
                     <button type="button" class="secondary-btn plugin-ai-approval-btn plugin-ai-approval-btn--approve" id="plugin-ai-approve-run">Approve</button>
                     <button type="button" class="danger-btn plugin-ai-approval-btn plugin-ai-approval-btn--reject" id="plugin-ai-reject-run">Reject</button>
                 </div>
@@ -1254,17 +1226,17 @@
         `;
     }
 
-    function renderPluginAiExecutionSummary(events = [], options = {}) {
-        const expanded = !!options.expanded;
-        const summary = buildPluginAiExecutionSummary(events);
-        if (!summary.totalEvents) return '';
+    function renderSummary(events = [], opts = {}) {
+        const expanded = !!opts.expanded;
+        const sum = execSummary(events);
+        if (!sum.totalEvents) return '';
 
-        const detailRows = summary.details.length
-            ? summary.details.map((item) => `
+        const rows = sum.details.length
+            ? sum.details.map((item) => `
                 <div class="plugin-ai-execution-detail-row${item.copyText ? ' has-copy' : ''}">
                     <strong>${escapeHtml(item.label)}</strong>
                     <span>${escapeHtml(item.value)}</span>
-                    ${item.copyText ? `<button type="button" class="plugin-ai-copy-btn plugin-ai-copy-btn--inline" data-copy-text="${escapePluginAiAttr(item.copyText)}">Copy</button>` : ''}
+                    ${item.copyText ? `<button type="button" class="plugin-ai-copy-btn plugin-ai-copy-btn--inline" data-copy-text="${escHtmlAttr(item.copyText)}">Copy</button>` : ''}
                 </div>
             `)
             : [`<div class="plugin-ai-execution-detail-row"><strong>Execution details</strong><span>No execution events were captured for this run.</span></div>`];
@@ -1274,101 +1246,101 @@
                 <div class="plugin-ai-execution-summary-head">
                     <div>
                         <strong>Execution summary</strong>
-                        <p>${escapeHtml(summary.agents.length)} agent • ${escapeHtml(summary.tools.length)} tool • ${escapeHtml(String(summary.bashCount))} bash</p>
+                        <p>${escapeHtml(sum.agents.length)} agent • ${escapeHtml(sum.tools.length)} tool • ${escapeHtml(String(sum.bashCount))} bash</p>
                     </div>
                     <button type="button" class="plugin-ai-inline-toggle" data-plugin-ai-toggle="summaryExpanded">${expanded ? 'Hide details' : 'View details'}</button>
                 </div>
                 <div class="plugin-ai-summary-chips">
-                    <span class="plugin-ai-summary-chip">${escapeHtml(String(summary.totalEvents))} events</span>
-                    ${summary.agents.length > 1 ? summary.agents.slice(0, 3).map((agent) => `<span class="plugin-ai-summary-chip">${escapeHtml(agent)}</span>`).join('') : ''}
-                    ${summary.tools.slice(0, 3).map((tool) => `<span class="plugin-ai-summary-chip">${escapeHtml(tool)}</span>`).join('')}
+                    <span class="plugin-ai-summary-chip">${escapeHtml(String(sum.totalEvents))} events</span>
+                    ${sum.agents.length > 1 ? sum.agents.slice(0, 3).map((agent) => `<span class="plugin-ai-summary-chip">${escapeHtml(agent)}</span>`).join('') : ''}
+                    ${sum.tools.slice(0, 3).map((tool) => `<span class="plugin-ai-summary-chip">${escapeHtml(tool)}</span>`).join('')}
                 </div>
-                ${expanded ? `<div class="plugin-ai-execution-summary-details">${detailRows.join('')}</div>` : ''}
-                ${renderPluginAiDecisionTracePanel(events)}
+                ${expanded ? `<div class="plugin-ai-execution-summary-details">${rows.join('')}</div>` : ''}
+                ${renderTrace(events)}
             </section>
         `;
     }
 
-    function bindPluginAiInlineToggles(container) {
-        if (!container || container.dataset.inlineTogglesBound === '1') return;
-        container.addEventListener('click', async (event) => {
-            const copyButton = event.target.closest('[data-copy-text]');
-            if (copyButton) {
-                const text = String(copyButton.getAttribute('data-copy-text') || '').trim();
-                const defaultLabelAttr = String(copyButton.getAttribute('data-copy-label') || '').trim();
-                if (!copyButton.dataset.copyDefaultLabel) {
-                    copyButton.dataset.copyDefaultLabel = defaultLabelAttr || String(copyButton.textContent || '').trim() || 'Copy';
+    function bindToggles(box) {
+        if (!box || box.dataset.inlineTogglesBound === '1') return;
+        box.addEventListener('click', async (event) => {
+            const copyBtn = event.target.closest('[data-copy-text]');
+            if (copyBtn) {
+                const text = String(copyBtn.getAttribute('data-copy-text') || '').trim();
+                const defAttr = String(copyBtn.getAttribute('data-copy-label') || '').trim();
+                if (!copyBtn.dataset.copyDefaultLabel) {
+                    copyBtn.dataset.copyDefaultLabel = defAttr || String(copyBtn.textContent || '').trim() || 'Copy';
                 }
-                const fallbackLabel = String(copyButton.dataset.copyDefaultLabel || 'Copy').trim() || 'Copy';
+                const fb = String(copyBtn.dataset.copyDefaultLabel || 'Copy').trim() || 'Copy';
                 if (text) {
                     try {
                         if (navigator?.clipboard?.writeText) {
                             await navigator.clipboard.writeText(text);
                         }
-                        copyButton.textContent = defaultLabelAttr ? '✓' : 'Copied';
+                        copyBtn.textContent = defAttr ? '✓' : 'Copied';
                         window.setTimeout(() => {
-                            copyButton.textContent = fallbackLabel;
+                            copyBtn.textContent = fb;
                         }, 1200);
-                    } catch (_error) {
-                        copyButton.textContent = defaultLabelAttr ? '⚠' : 'Copy failed';
+                    } catch (_) {
+                        copyBtn.textContent = defAttr ? '⚠' : 'Copy failed';
                         window.setTimeout(() => {
-                            copyButton.textContent = fallbackLabel;
+                            copyBtn.textContent = fb;
                         }, 1400);
                     }
                 }
                 return;
             }
 
-            const button = event.target.closest('[data-plugin-ai-toggle]');
-            if (!button) return;
-            const key = String(button.getAttribute('data-plugin-ai-toggle') || '').trim();
+            const btn = event.target.closest('[data-plugin-ai-toggle]');
+            if (!btn) return;
+            const key = String(btn.getAttribute('data-plugin-ai-toggle') || '').trim();
             if (!key || typeof window.togglePluginAiUiFlag !== 'function') return;
             window.togglePluginAiUiFlag(key);
-            refreshPluginAiRenderedState();
+            refreshUi();
         });
-        container.dataset.inlineTogglesBound = '1';
+        box.dataset.inlineTogglesBound = '1';
     }
 
-    function renderPluginAiMessages(messages = []) {
-        const container = document.getElementById('plugin-ai-messages');
-        if (!container) return;
+    function renderMsgs(msgs = []) {
+        const box = document.getElementById('plugin-ai-messages');
+        if (!box) return;
 
         const state = window.getPluginAiState();
-        const uiState = typeof window.ensurePluginAiUiState === 'function'
+        const ui = typeof window.ensurePluginAiUiState === 'function'
             ? window.ensurePluginAiUiState()
             : { activityExpanded: false, summaryExpanded: false };
-        const activityEntries = buildPluginAiActivityEntries(state.liveActivity || state.events || [], state.liveActivityOptions || {});
-        const distanceFromBottom = Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight);
-        const shouldStickToBottom = distanceFromBottom <= 40;
+        const entries = buildActivity(state.liveActivity || state.events || [], state.liveActivityOptions || {});
+        const dist = Math.max(0, box.scrollHeight - box.scrollTop - box.clientHeight);
+        const stick = dist <= 40;
 
-        if (!Array.isArray(messages) || messages.length === 0) {
-            container.innerHTML = '';
-            container.dataset.renderSignature = '';
+        if (!Array.isArray(msgs) || msgs.length === 0) {
+            box.innerHTML = '';
+            box.dataset.renderSignature = '';
             return;
         }
 
-        bindPluginAiInlineToggles(container);
+        bindToggles(box);
 
-        const latestAssistantIndex = [...messages].map((message, index) => ({ message, index })).reverse().find((item) => String(item.message?.role || 'assistant') !== 'user' && !item.message?.is_pending_assistant)?.index ?? -1;
+        const lastBotIdx = [...msgs].map((msg, idx) => ({ msg, idx })).reverse().find((item) => String(item.msg?.role || 'assistant') !== 'user' && !item.msg?.is_pending_assistant)?.idx ?? -1;
 
-        const nextHtml = messages
-            .map((message, index) => {
-                const role = String(message.role || 'assistant');
-                const roleLabel = role === 'user' ? 'You' : 'AI';
-                const isPendingAssistant = !!message.is_pending_assistant;
-                const roleClass = `${role === 'user' ? ' is-user' : ''}${isPendingAssistant ? ' is-pending' : ''}`;
-                const content = isPendingAssistant ? '' : String(message.content || '');
-                const cachedEventsSnapshot = isPendingAssistant && typeof window.getPluginAiEventsSnapshot === 'function'
+        const html = msgs
+            .map((msg, idx) => {
+                const role = String(msg.role || 'assistant');
+                const who = role === 'user' ? 'You' : 'AI';
+                const pending = !!msg.is_pending_assistant;
+                const cls = `${role === 'user' ? ' is-user' : ''}${pending ? ' is-pending' : ''}`;
+                const content = pending ? '' : String(msg.content || '');
+                const cachedSnap = pending && typeof window.getPluginAiEventsSnapshot === 'function'
                     ? window.getPluginAiEventsSnapshot(state.plugin, state.threadId, !!state.isTheme)
                     : null;
-                const cachedEntries = isPendingAssistant && Array.isArray(cachedEventsSnapshot?.events)
-                    ? buildPluginAiActivityEntries(cachedEventsSnapshot.events, state.liveActivityOptions || {})
+                const cached = pending && Array.isArray(cachedSnap?.events)
+                    ? buildActivity(cachedSnap.events, state.liveActivityOptions || {})
                     : [];
-                const pendingEntries = activityEntries.length ? activityEntries : cachedEntries;
-                const bodyHtml = isPendingAssistant
+                const live = entries.length ? entries : cached;
+                const body = pending
                     ? `
-                        ${pendingEntries.length
-                            ? renderPluginAiActivityRail(pendingEntries, { expanded: !!uiState.activityExpanded })
+                        ${live.length
+                            ? renderRail(live, { expanded: !!ui.activityExpanded })
                             : `
                             <div class="plugin-ai-live-activity plugin-ai-live-activity--compact" aria-live="polite">
                                 <div class="plugin-ai-live-activity-head">
@@ -1376,114 +1348,114 @@
                                 </div>
                             </div>
                         `}
-                        ${state.pendingApproval ? renderPluginAiApprovalCard(state.pendingApproval, state.events || state.liveActivity || []) : ''}
+                        ${state.pendingApproval ? renderApproval(state.pendingApproval, state.events || state.liveActivity || []) : ''}
                     `
                     : `
-                        <div class="plugin-ai-markdown">${renderPluginAiMarkdown(content)}</div>
-                        ${role !== 'user' ? renderPluginAiStructuredOutput(message) : ''}
-                        ${role !== 'user' && index === latestAssistantIndex ? renderPluginAiApprovalCard(state.pendingApproval, state.events || state.liveActivity || []) : ''}
-                        ${role !== 'user' && index === latestAssistantIndex ? renderPluginAiExecutionSummary(state.events || state.liveActivity || [], { expanded: !!uiState.summaryExpanded }) : ''}
+                        <div class="plugin-ai-markdown">${renderMd(content)}</div>
+                        ${role !== 'user' ? renderStruct(msg) : ''}
+                        ${role !== 'user' && idx === lastBotIdx ? renderApproval(state.pendingApproval, state.events || state.liveActivity || []) : ''}
+                        ${role !== 'user' && idx === lastBotIdx ? renderSummary(state.events || state.liveActivity || [], { expanded: !!ui.summaryExpanded }) : ''}
                     `;
                 return `
-                    <article class="plugin-ai-message${roleClass}">
-                        <strong>${escapeHtml(roleLabel)}</strong>
-                        ${bodyHtml}
+                    <article class="plugin-ai-message${cls}">
+                        <strong>${escapeHtml(who)}</strong>
+                        ${body}
                     </article>
                 `;
             })
             .join('');
 
-        const renderSignature = JSON.stringify({
-            messageCount: messages.length,
-            latestAssistantIndex,
-            latestMessageId: messages[messages.length - 1]?.id || '',
-            latestMessageContent: String(messages[messages.length - 1]?.content || ''),
-            pendingCount: messages.filter((item) => item?.is_pending_assistant).length,
+        const sig = JSON.stringify({
+            messageCount: msgs.length,
+            latestAssistantIndex: lastBotIdx,
+            latestMessageId: msgs[msgs.length - 1]?.id || '',
+            latestMessageContent: String(msgs[msgs.length - 1]?.content || ''),
+            pendingCount: msgs.filter((item) => item?.is_pending_assistant).length,
             eventCount: Array.isArray(state.events) ? state.events.length : 0,
             liveActivityCount: Array.isArray(state.liveActivity) ? state.liveActivity.length : 0,
-            activityExpanded: !!uiState.activityExpanded,
-            summaryExpanded: !!uiState.summaryExpanded,
-            traceExpanded: !!uiState.traceExpanded,
+            activityExpanded: !!ui.activityExpanded,
+            summaryExpanded: !!ui.summaryExpanded,
+            traceExpanded: !!ui.traceExpanded,
         });
 
-        if (container.dataset.renderSignature !== renderSignature) {
-            container.innerHTML = nextHtml;
-            container.dataset.renderSignature = renderSignature;
+        if (box.dataset.renderSignature !== sig) {
+            box.innerHTML = html;
+            box.dataset.renderSignature = sig;
         }
 
-        if (shouldStickToBottom) {
-            container.scrollTop = container.scrollHeight;
+        if (stick) {
+            box.scrollTop = box.scrollHeight;
         }
     }
 
-    function renderPluginAiActivity(events = []) {
-        return renderPluginAiActivityRail(buildPluginAiActivityEntries(events), { expanded: true });
+    function renderActivity(events = []) {
+        return renderRail(buildActivity(events), { expanded: true });
     }
 
-    function refreshPluginAiRenderedState() {
+    function refreshUi() {
         const state = window.getPluginAiState();
-        renderPluginAiSourceStatusCard();
-        renderPluginAiMessages(state.messages || []);
+        renderSrcCard();
+        renderMsgs(state.messages || []);
     }
 
-    function updatePluginAiThreadsAfterMessage(threadId) {
+    function bumpThread(tid) {
         const state = window.getPluginAiState();
         const threads = Array.isArray(state.threads) ? state.threads : [];
-        const threadIndex = threads.findIndex((item) => Number(item.id || 0) === Number(threadId || 0));
-        if (threadIndex < 0) return;
-        const [thread] = threads.splice(threadIndex, 1);
+        const idx = threads.findIndex((item) => Number(item.id || 0) === Number(tid || 0));
+        if (idx < 0) return;
+        const [thread] = threads.splice(idx, 1);
         thread.updated_at = new Date().toISOString();
         state.threads = [thread, ...threads];
-        updatePluginAiSessionUi();
+        updateChatUi();
     }
 
-    function replacePluginAiThreadInState(updatedThread = {}) {
+    function replaceThread(thread = {}) {
         const state = window.getPluginAiState();
         const threads = Array.isArray(state.threads) ? [...state.threads] : [];
-        const index = threads.findIndex((item) => Number(item.id || 0) === Number(updatedThread.id || 0));
-        if (index < 0) return;
-        threads[index] = { ...threads[index], ...updatedThread };
+        const idx = threads.findIndex((item) => Number(item.id || 0) === Number(thread.id || 0));
+        if (idx < 0) return;
+        threads[idx] = { ...threads[idx], ...thread };
         state.threads = threads;
-        updatePluginAiSessionUi();
+        updateChatUi();
     }
 
-    function removePluginAiThreadFromState(threadId) {
+    function removeThread(tid) {
         const state = window.getPluginAiState();
-        const threads = Array.isArray(state.threads) ? state.threads.filter((item) => Number(item.id || 0) !== Number(threadId || 0)) : [];
+        const threads = Array.isArray(state.threads) ? state.threads.filter((item) => Number(item.id || 0) !== Number(tid || 0)) : [];
         state.threads = threads;
-        updatePluginAiSessionUi();
+        updateChatUi();
     }
 
-    window.normalizePluginAiInput = normalizePluginAiInput;
-    window.sanitizePluginAiMessageInput = sanitizePluginAiMessageInput;
-    window.normalizePluginAiMessagesPayload = normalizePluginAiMessagesPayload;
-    window.extractToolEventsFromMessages = extractToolEventsFromMessages;
-    window.buildPluginAiActivityEntries = buildPluginAiActivityEntries;
-    window.describeAiActivityEvent = describeAiActivityEvent;
-    window.formatPluginAiActivity = formatPluginAiActivity;
-    window.extractPluginAiMessages = extractPluginAiMessages;
-    window.mergePluginAiMessages = mergePluginAiMessages;
-    window.capturePluginAiMessages = capturePluginAiMessages;
-    window.pushPluginAiMessage = pushPluginAiMessage;
-    window.replacePendingAssistantMessage = replacePendingAssistantMessage;
-    window.removePendingAssistantMessage = removePendingAssistantMessage;
-    window.capturePluginAiToolAudit = capturePluginAiToolAudit;
-    window.appendPluginAiLiveActivity = appendPluginAiLiveActivity;
-    window.applyPluginAiStreamChunk = applyPluginAiStreamChunk;
-    window.buildPluginAiSessionLabel = buildPluginAiSessionLabel;
-    window.buildPluginAiSessionMeta = buildPluginAiSessionMeta;
-    window.getPluginAiSourceStatus = getPluginAiSourceStatus;
-    window.renderPluginAiSourceStatusCard = renderPluginAiSourceStatusCard;
-    window.renderInlineMarkdown = renderInlineMarkdown;
-    window.renderPluginAiMarkdown = renderPluginAiMarkdown;
-    window.renderPluginAiSessions = renderPluginAiSessions;
-    window.updatePluginAiSessionUi = updatePluginAiSessionUi;
-    window.setPluginAiMessagesEmptyView = setPluginAiMessagesEmptyView;
-    window.setPluginAiActivityEmptyView = setPluginAiActivityEmptyView;
-    window.renderPluginAiMessages = renderPluginAiMessages;
-    window.renderPluginAiActivity = renderPluginAiActivity;
-    window.refreshPluginAiRenderedState = refreshPluginAiRenderedState;
-    window.updatePluginAiThreadsAfterMessage = updatePluginAiThreadsAfterMessage;
-    window.replacePluginAiThreadInState = replacePluginAiThreadInState;
-    window.removePluginAiThreadFromState = removePluginAiThreadFromState;
+    window.normalizePluginAiInput = normInput;
+    window.sanitizePluginAiMessageInput = cleanInput;
+    window.normalizePluginAiMessagesPayload = normMsgs;
+    window.extractToolEventsFromMessages = toolEvents;
+    window.buildPluginAiActivityEntries = buildActivity;
+    window.describeAiActivityEvent = describeEvt;
+    window.formatPluginAiActivity = fmtActivity;
+    window.extractPluginAiMessages = extractMsgs;
+    window.mergePluginAiMessages = mergeMsgs;
+    window.capturePluginAiMessages = saveMsgs;
+    window.pushPluginAiMessage = pushMsg;
+    window.replacePendingAssistantMessage = replaceBot;
+    window.removePendingAssistantMessage = dropBot;
+    window.capturePluginAiToolAudit = saveAudit;
+    window.appendPluginAiLiveActivity = addActivity;
+    window.applyPluginAiStreamChunk = applyChunk;
+    window.buildPluginAiSessionLabel = chatLabel;
+    window.buildPluginAiSessionMeta = chatMeta;
+    window.getPluginAiSourceStatus = srcStatus;
+    window.renderPluginAiSourceStatusCard = renderSrcCard;
+    window.renderInlineMarkdown = inlineMd;
+    window.renderPluginAiMarkdown = renderMd;
+    window.renderPluginAiSessions = renderChats;
+    window.updatePluginAiSessionUi = updateChatUi;
+    window.setPluginAiMessagesEmptyView = emptyMsgs;
+    window.setPluginAiActivityEmptyView = emptyActivity;
+    window.renderPluginAiMessages = renderMsgs;
+    window.renderPluginAiActivity = renderActivity;
+    window.refreshPluginAiRenderedState = refreshUi;
+    window.updatePluginAiThreadsAfterMessage = bumpThread;
+    window.replacePluginAiThreadInState = replaceThread;
+    window.removePluginAiThreadFromState = removeThread;
 })();

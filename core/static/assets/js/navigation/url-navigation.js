@@ -103,35 +103,35 @@ function restoreViewFromUrl() {
     setUrlState({ view: runtime.getTabToView()[tabId] || 'new-scan', plugin: '' }, { replace: true });
 }
 
-function findPluginIndex(results, slug) {
+function findIdx(results, slug) {
     return Array.isArray(results) ? results.findIndex((plugin) => plugin.slug === slug) : -1;
 }
 
-function openPluginFromResults(results, slug, options = {}) {
-    const index = findPluginIndex(results, slug);
-    if (index === -1) return false;
+function openResult(results, slug, options = {}) {
+    const idx = findIdx(results, slug);
+    if (idx === -1) return false;
     window.currentScanResults = results;
-    openPluginModal(index, options);
+    openPluginModal(idx, options);
     return true;
 }
 
-async function fetchFavoriteBySlug(slug) {
-    const resp = await fetch('/api/favorites');
-    const data = await resp.json();
+async function getFav(slug) {
+    const res = await fetch('/api/favorites');
+    const data = await res.json();
     return Array.isArray(data.favorites)
         ? data.favorites.find((plugin) => plugin.slug === slug) || null
         : null;
 }
 
-async function fetchScanResults(scanId) {
-    const resp = await fetch(`/api/scans/${scanId}/results?limit=500`);
-    const data = await resp.json();
+async function getResults(scanId) {
+    const res = await fetch(`/api/scans/${scanId}/results?limit=500`);
+    const data = await res.json();
     return Array.isArray(data.results) ? data.results : [];
 }
 
-async function fetchSortedSessions() {
-    const resp = await fetch('/api/scans');
-    const data = await resp.json();
+async function getSessions() {
+    const res = await fetch('/api/scans');
+    const data = await res.json();
     const sessions = Array.isArray(data.sessions) ? data.sessions : [];
     return sessions.sort(
         (a, b) => new Date(b.created_at || b.start_time) - new Date(a.created_at || a.start_time)
@@ -139,13 +139,13 @@ async function fetchSortedSessions() {
 }
 
 async function openPluginModalBySlug(slug, options = {}) {
-    if (openPluginFromResults(window.currentScanResults, slug, options)) {
+    if (openResult(window.currentScanResults, slug, options)) {
         return;
     }
 
     try {
-        const favorite = await fetchFavoriteBySlug(slug);
-        if (favorite && openPluginFromResults([favorite], slug, options)) {
+        const fav = await getFav(slug);
+        if (fav && openResult([fav], slug, options)) {
             return;
         }
     } catch (error) {
@@ -154,8 +154,8 @@ async function openPluginModalBySlug(slug, options = {}) {
 
     if (runtime.getCurrentScanId()) {
         try {
-            const currentResults = await fetchScanResults(runtime.getCurrentScanId());
-            if (openPluginFromResults(currentResults, slug, options)) {
+            const current = await getResults(runtime.getCurrentScanId());
+            if (openResult(current, slug, options)) {
                 return;
             }
         } catch (error) {
@@ -164,11 +164,11 @@ async function openPluginModalBySlug(slug, options = {}) {
     }
 
     try {
-        const sessions = await fetchSortedSessions();
+        const sessions = await getSessions();
         for (const session of sessions) {
             try {
-                const results = await fetchScanResults(session.id);
-                const found = openPluginFromResults(results, slug, options);
+                const results = await getResults(session.id);
+                const found = openResult(results, slug, options);
                 if (!found) continue;
                 runtime.setCurrentScanId(session.id);
                 return;
@@ -202,9 +202,7 @@ window.switchTab = function(tabId, options = {}) {
     const pluginDetailView = document.getElementById('plugin-detail-view');
     if (pluginDetailView) pluginDetailView.style.display = 'none';
 
-
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-
 
     if (tabId === 'scan') {
         document.getElementById('scan-view').style.display = 'block';

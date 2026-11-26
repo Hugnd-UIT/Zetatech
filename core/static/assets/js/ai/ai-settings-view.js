@@ -1,6 +1,6 @@
 (function() {
-    const AI_SETTINGS_STATUS_STORAGE_KEY = 'zetatechAgent.aiSettings.testStatusByProfile';
-    const PROVIDER_DEFAULTS = {
+    const STATUS_KEY = 'zetatechAgent.aiSettings.testStatusByProfile';
+    const PROVIDERS = {
         anthropic: {
             displayName: 'Anthropic',
             baseUrl: 'https://api.anthropic.com',
@@ -33,12 +33,12 @@
         },
     };
 
-    function getProviderDefaults(provider) {
-        return PROVIDER_DEFAULTS[String(provider || 'anthropic').trim()] || PROVIDER_DEFAULTS.anthropic;
+    function defaults(provider) {
+        return PROVIDERS[String(provider || 'anthropic').trim()] || PROVIDERS.anthropic;
     }
 
-    function applyProviderFormHints(provider, { preserveBaseUrl = true } = {}) {
-        const cfg = getProviderDefaults(provider);
+    function applyHints(provider, { preserveUrl = true } = {}) {
+        const cfg = defaults(provider);
         const modelEl = document.getElementById('plugin-ai-model');
         const keyEl = document.getElementById('plugin-ai-api-key');
         const urlEl = document.getElementById('plugin-ai-base-url');
@@ -58,26 +58,26 @@
         if (urlEl) {
             urlEl.placeholder = `${cfg.baseUrl} or local compatible endpoint`;
             const cur = String(urlEl.value || '').trim();
-            if (!preserveBaseUrl || !cur) {
+            if (!preserveUrl || !cur) {
                 urlEl.value = cur;
             }
         }
     }
 
-    function getAiSettingsState() {
+    function getState() {
         window.aiSettingsViewState = window.aiSettingsViewState || {
             dashboard: null,
             selectedProfileKey: null,
             loading: false,
-            testStatusByProfile: loadPersistedTestStatuses(),
+            testStatusByProfile: loadStatuses(),
             draftModels: [],
         };
         return window.aiSettingsViewState;
     }
 
-    function loadPersistedTestStatuses() {
+    function loadStatuses() {
         try {
-            const raw = window.localStorage?.getItem(AI_SETTINGS_STATUS_STORAGE_KEY);
+            const raw = window.localStorage?.getItem(STATUS_KEY);
             const parsed = raw ? JSON.parse(raw) : {};
             return parsed && typeof parsed === 'object' ? parsed : {};
         } catch (_) {
@@ -85,91 +85,91 @@
         }
     }
 
-    function persistTestStatuses() {
+    function saveStatuses() {
         try {
             window.localStorage?.setItem(
-                AI_SETTINGS_STATUS_STORAGE_KEY,
-                JSON.stringify(getAiSettingsState().testStatusByProfile || {})
+                STATUS_KEY,
+                JSON.stringify(getState().testStatusByProfile || {})
             );
         } catch (_) {
 
         }
     }
 
-    function setProfileTestStatus(profileKey, entry) {
-        const key = String(profileKey || '').trim();
-        if (!key) return;
-        const state = getAiSettingsState();
+    function setStatus(key, entry) {
+        const id = String(key || '').trim();
+        if (!id) return;
+        const state = getState();
         state.testStatusByProfile = state.testStatusByProfile || {};
-        state.testStatusByProfile[key] = entry;
-        persistTestStatuses();
+        state.testStatusByProfile[id] = entry;
+        saveStatuses();
     }
 
-    function deleteProfileTestStatus(profileKey) {
-        const key = String(profileKey || '').trim();
-        if (!key) return;
-        const state = getAiSettingsState();
-        if (state.testStatusByProfile && Object.prototype.hasOwnProperty.call(state.testStatusByProfile, key)) {
-            delete state.testStatusByProfile[key];
-            persistTestStatuses();
+    function delStatus(key) {
+        const id = String(key || '').trim();
+        if (!id) return;
+        const state = getState();
+        if (state.testStatusByProfile && Object.prototype.hasOwnProperty.call(state.testStatusByProfile, id)) {
+            delete state.testStatusByProfile[id];
+            saveStatuses();
         }
     }
 
-    function prunePersistedTestStatuses() {
-        const validKeys = new Set(getProfileList().map((item) => String(item.profile_key || '')).filter(Boolean));
-        const state = getAiSettingsState();
+    function pruneStatuses() {
+        const keys = new Set(getProfiles().map((item) => String(item.profile_key || '')).filter(Boolean));
+        const state = getState();
         const entries = state.testStatusByProfile || {};
         let changed = false;
         for (const key of Object.keys(entries)) {
-            if (!validKeys.has(key)) {
+            if (!keys.has(key)) {
                 delete entries[key];
                 changed = true;
             }
         }
-        if (changed) persistTestStatuses();
+        if (changed) saveStatuses();
     }
 
-    function getProfileList() {
-        return Array.isArray(getAiSettingsState().dashboard?.profiles)
-            ? getAiSettingsState().dashboard.profiles
+    function getProfiles() {
+        return Array.isArray(getState().dashboard?.profiles)
+            ? getState().dashboard.profiles
             : [];
     }
 
-    function getProfileByKey(profileKey) {
-        return getProfileList().find((item) => String(item.profile_key || '') === String(profileKey || '')) || null;
+    function findProfile(key) {
+        return getProfiles().find((item) => String(item.profile_key || '') === String(key || '')) || null;
     }
 
-    function getDraftModels() {
-        return Array.isArray(getAiSettingsState().draftModels) ? getAiSettingsState().draftModels : [];
+    function getModels() {
+        return Array.isArray(getState().draftModels) ? getState().draftModels : [];
     }
 
-    function setDraftModels(models = []) {
-        const unique = [];
+    function setModels(models = []) {
+        const uniq = [];
         for (const item of models) {
-            const value = String(item || '').trim();
-            if (!value || unique.includes(value)) continue;
-            unique.push(value);
+            const val = String(item || '').trim();
+            if (!val || uniq.includes(val)) continue;
+            uniq.push(val);
         }
-        getAiSettingsState().draftModels = unique;
-        renderModelChips();
+        getState().draftModels = uniq;
+        renderChips();
     }
 
-    function addDraftModel(model) {
-        const value = String(model || '').trim();
-        if (!value) return;
-        setDraftModels([...getDraftModels(), value]);
+    function addModel(model) {
+        const val = String(model || '').trim();
+        if (!val) return;
+        setModels([...getModels(), val]);
     }
 
-    function removeDraftModel(model) {
-        const value = String(model || '').trim();
-        setDraftModels(getDraftModels().filter((item) => item !== value));
+    function removeModel(model) {
+        const val = String(model || '').trim();
+        setModels(getModels().filter((item) => item !== val));
     }
 
-    function renderModelChips() {
-        const container = document.getElementById('ai-settings-model-chips');
-        if (!container) return;
-        const models = getDraftModels();
-        container.innerHTML = models.map((model) => `
+    function renderChips() {
+        const box = document.getElementById('ai-settings-model-chips');
+        if (!box) return;
+        const models = getModels();
+        box.innerHTML = models.map((model) => `
             <span class="ai-settings-model-chip">
                 <span>${escapeHtml(model)}</span>
                 <button type="button" data-model-remove="${escapeHtml(model)}" aria-label="Remove model">×</button>
@@ -177,27 +177,27 @@
         `).join('');
     }
 
-    function maskApiKeyForTable(value) {
-        const raw = String(value || '').trim();
+    function maskKey(val) {
+        const raw = String(val || '').trim();
         if (!raw) return 'No key saved';
         if (raw.length <= 8) return `${raw.slice(0, 2)}••••${raw.slice(-2)}`;
         return `${raw.slice(0, 6)}••••••${raw.slice(-4)}`;
     }
 
-    function renderApiKeySummary(profile) {
+    function keySummary(profile) {
         if (profile?.api_key_masked) return String(profile.api_key_masked);
         if (profile?.has_api_key) return 'Saved';
         return 'No key saved';
     }
 
-    function getSavedApiKeyPlaceholder(profile) {
-        const providerConfig = getProviderDefaults(profile?.provider);
+    function keyPlaceholder(profile) {
+        const cfg = defaults(profile?.provider);
         return profile?.has_api_key
             ? 'Saved API key will be kept unless you enter a new one'
-            : providerConfig.apiKeyPlaceholder;
+            : cfg.apiKeyPlaceholder;
     }
 
-    function getSavedApiKeyHint(profile) {
+    function keyHint(profile) {
         if (!profile?.has_api_key) return '';
         const masked = String(profile?.api_key_masked || '').trim();
         return masked
@@ -205,16 +205,16 @@
             : 'A saved API key already exists. Enter a new key only if you want to replace it.';
     }
 
-    function renderAiSettingsDashboard() {
-        const state = getAiSettingsState();
-        const dashboard = state.dashboard || { profiles: [], stats: {} };
+    function renderDash() {
+        const state = getState();
+        const dash = state.dashboard || { profiles: [], stats: {} };
 
         const table = document.getElementById('ai-settings-profiles-table');
         const empty = document.getElementById('ai-settings-profiles-empty');
         const tbody = document.getElementById('ai-settings-profiles-list');
         if (!table || !empty || !tbody) return;
 
-        const profiles = Array.isArray(dashboard.profiles) ? dashboard.profiles : [];
+        const profiles = Array.isArray(dash.profiles) ? dash.profiles : [];
         if (!profiles.length) {
             table.style.display = 'none';
             empty.style.display = 'block';
@@ -224,74 +224,74 @@
 
         empty.style.display = 'none';
         table.style.display = 'table';
-        tbody.innerHTML = profiles.map((profile) => {
-            const isSelected = String(profile.profile_key || '') === String(state.selectedProfileKey || '');
-            const profileKey = String(profile.profile_key || '');
-            const statusEntry = state.testStatusByProfile?.[profileKey] || null;
-            const chipTone = statusEntry?.tone === 'success'
+        tbody.innerHTML = profiles.map((p) => {
+            const selected = String(p.profile_key || '') === String(state.selectedProfileKey || '');
+            const key = String(p.profile_key || '');
+            const entry = state.testStatusByProfile?.[key] || null;
+            const tone = entry?.tone === 'success'
                 ? 'is-active'
-                : statusEntry?.tone === 'error'
+                : entry?.tone === 'error'
                     ? 'is-error'
                     : '';
-            const chipLabel = statusEntry?.label || 'Not tested';
-            const models = Array.isArray(profile.models) && profile.models.length ? profile.models.join(', ') : String(profile.model || '—');
+            const label = entry?.label || 'Not tested';
+            const models = Array.isArray(p.models) && p.models.length ? p.models.join(', ') : String(p.model || '—');
             return `
-                <tr data-profile-key="${escapeHtml(profileKey)}" class="${isSelected ? 'is-active' : ''}">
+                <tr data-profile-key="${escapeHtml(key)}" class="${selected ? 'is-active' : ''}">
                     <td>
                         <div class="ai-profile-name">
-                            <strong>${escapeHtml(String(profile.display_name || 'Untitled profile'))}</strong>
-                            <span>${escapeHtml(renderApiKeySummary(profile))}</span>
+                            <strong>${escapeHtml(String(p.display_name || 'Untitled profile'))}</strong>
+                            <span>${escapeHtml(keySummary(p))}</span>
                         </div>
                     </td>
-                    <td>${escapeHtml(String(profile.provider_label || profile.provider || '—'))}</td>
+                    <td>${escapeHtml(String(p.provider_label || p.provider || '—'))}</td>
                     <td>${escapeHtml(models)}</td>
-                    <td><span class="ai-profile-chip ${chipTone}">${escapeHtml(chipLabel)}</span></td>
+                    <td><span class="ai-profile-chip ${tone}">${escapeHtml(label)}</span></td>
                 </tr>
             `;
         }).join('');
     }
 
-    function fillAiSettingsForm(profile = null) {
-        const providerEl = document.getElementById('plugin-ai-provider');
+    function fillForm(profile = null) {
+        const provEl = document.getElementById('plugin-ai-provider');
         const modelEl = document.getElementById('plugin-ai-model');
         const nameEl = document.getElementById('plugin-ai-display-name');
-        const apiKeyEl = document.getElementById('plugin-ai-api-key');
-        const apiKeySavedHintEl = document.getElementById('plugin-ai-api-key-saved-hint');
-        const apiKeyToggle = document.getElementById('plugin-ai-api-key-toggle');
-        const baseUrlEl = document.getElementById('plugin-ai-base-url');
+        const keyEl = document.getElementById('plugin-ai-api-key');
+        const hintEl = document.getElementById('plugin-ai-api-key-saved-hint');
+        const toggle = document.getElementById('plugin-ai-api-key-toggle');
+        const urlEl = document.getElementById('plugin-ai-base-url');
         const models = Array.isArray(profile?.models) && profile.models.length
             ? profile.models
             : (profile?.model ? [String(profile.model)] : []);
         const provider = String(profile?.provider || 'anthropic');
-        if (providerEl) providerEl.value = provider;
+        if (provEl) provEl.value = provider;
         if (modelEl) modelEl.value = '';
         if (nameEl) nameEl.value = String(profile?.display_name || '');
-        if (apiKeyEl) {
-            apiKeyEl.value = '';
-            apiKeyEl.dataset.savedPlaceholder = getSavedApiKeyPlaceholder(profile);
-            apiKeyEl.placeholder = apiKeyEl.dataset.savedPlaceholder;
-            apiKeyEl.type = 'password';
+        if (keyEl) {
+            keyEl.value = '';
+            keyEl.dataset.savedPlaceholder = keyPlaceholder(profile);
+            keyEl.placeholder = keyEl.dataset.savedPlaceholder;
+            keyEl.type = 'password';
         }
-        if (apiKeyToggle) {
-            apiKeyToggle.setAttribute('aria-pressed', 'false');
-            apiKeyToggle.setAttribute('title', 'Show API key');
-            apiKeyToggle.setAttribute('aria-label', 'Show API key');
+        if (toggle) {
+            toggle.setAttribute('aria-pressed', 'false');
+            toggle.setAttribute('title', 'Show API key');
+            toggle.setAttribute('aria-label', 'Show API key');
         }
-        if (apiKeySavedHintEl) {
-            const savedHint = getSavedApiKeyHint(profile);
-            apiKeySavedHintEl.dataset.savedHint = savedHint;
-            apiKeySavedHintEl.textContent = savedHint;
-            apiKeySavedHintEl.style.display = savedHint ? 'block' : 'none';
+        if (hintEl) {
+            const hint = keyHint(profile);
+            hintEl.dataset.savedHint = hint;
+            hintEl.textContent = hint;
+            hintEl.style.display = hint ? 'block' : 'none';
         }
-        if (baseUrlEl) baseUrlEl.value = String(profile?.base_url || '');
-        setDraftModels(models);
-        applyProviderFormHints(provider, { preserveBaseUrl: true });
+        if (urlEl) urlEl.value = String(profile?.base_url || '');
+        setModels(models);
+        applyHints(provider, { preserveUrl: true });
     }
 
-    function collectAiSettingsPayload() {
-        const models = getDraftModels();
+    function buildPayload() {
+        const models = getModels();
         return {
-            profile_key: getAiSettingsState().selectedProfileKey || undefined,
+            profile_key: getState().selectedProfileKey || undefined,
             display_name: String(document.getElementById('plugin-ai-display-name')?.value || '').trim() || undefined,
             provider: String(document.getElementById('plugin-ai-provider')?.value || 'anthropic').trim(),
             model: String(models[0] || '').trim(),
@@ -302,181 +302,181 @@
         };
     }
 
-    function validateAiSettingsPayload(payload, { requireApiKey = false } = {}) {
+    function validatePayload(payload, { requireKey = false } = {}) {
         if (!Array.isArray(payload.models) || payload.models.length === 0) return 'At least one model is required.';
         if (!payload.model) return 'Provider model is required.';
-        if (requireApiKey && !payload.api_key && payload.provider !== 'copilot') return 'API key is required for this action.';
-        const existing = payload.profile_key ? getProfileByKey(payload.profile_key) : null;
-        const currentValue = String(payload.api_key || '').trim();
-        const savedValue = String(existing?.api_key_masked || '').trim();
-        const hasNewVisibleKey = currentValue && currentValue !== savedValue;
-        if (!hasNewVisibleKey && !existing?.has_api_key && payload.provider !== 'copilot') {
+        if (requireKey && !payload.api_key && payload.provider !== 'copilot') return 'API key is required for this action.';
+        const prev = payload.profile_key ? findProfile(payload.profile_key) : null;
+        const cur = String(payload.api_key || '').trim();
+        const saved = String(prev?.api_key_masked || '').trim();
+        const hasNew = cur && cur !== saved;
+        if (!hasNew && !prev?.has_api_key && payload.provider !== 'copilot') {
             return 'API key is required for the first save.';
         }
         return null;
     }
 
-    async function fetchAiSettingsDashboard() {
-        const response = await fetch('/api/ai/settings');
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    async function fetchDash() {
+        const res = await fetch('/api/ai/settings');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
         return data;
     }
 
-    async function loadAiSettingsDashboard() {
-        const state = getAiSettingsState();
+    async function loadDash() {
+        const state = getState();
         if (state.loading) return;
         state.loading = true;
         try {
-            const dashboard = await fetchAiSettingsDashboard();
-            state.dashboard = dashboard;
-            prunePersistedTestStatuses();
-            const desiredKey = state.selectedProfileKey || dashboard?.profiles?.[0]?.profile_key || dashboard?.active_profile?.profile_key || null;
-            state.selectedProfileKey = desiredKey;
-            renderAiSettingsDashboard();
-            fillAiSettingsForm(getProfileByKey(desiredKey) || dashboard?.active_profile || null);
-        } catch (error) {
-            showToast(`Failed to load AI settings: ${error.message}`, 'error');
+            const dash = await fetchDash();
+            state.dashboard = dash;
+            pruneStatuses();
+            const key = state.selectedProfileKey || dash?.profiles?.[0]?.profile_key || dash?.active_profile?.profile_key || null;
+            state.selectedProfileKey = key;
+            renderDash();
+            fillForm(findProfile(key) || dash?.active_profile || null);
+        } catch (err) {
+            showToast(`Failed to load AI settings: ${err.message}`, 'error');
         } finally {
             state.loading = false;
         }
     }
 
-    async function saveAiSettingsProfile(event) {
+    async function saveProfile(event) {
         event.preventDefault();
-        const payload = collectAiSettingsPayload();
-        const validationError = validateAiSettingsPayload(payload);
-        if (validationError) {
-            showToast(validationError, 'warn');
+        const payload = buildPayload();
+        const err = validatePayload(payload);
+        if (err) {
+            showToast(err, 'warn');
             return;
         }
 
-        const existing = payload.profile_key ? getProfileByKey(payload.profile_key) : null;
-        if (existing && payload.api_key === existing.api_key) {
+        const prev = payload.profile_key ? findProfile(payload.profile_key) : null;
+        if (prev && payload.api_key === prev.api_key) {
             delete payload.api_key;
         }
 
         try {
-            const response = await fetch('/api/ai/settings', {
+            const res = await fetch('/api/ai/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
 
-            const state = getAiSettingsState();
+            const state = getState();
             state.selectedProfileKey = data.profile_key || payload.profile_key || null;
-            setProfileTestStatus(state.selectedProfileKey, { label: 'Testing...', tone: '' });
-            await loadAiSettingsDashboard();
+            setStatus(state.selectedProfileKey, { label: 'Testing...', tone: '' });
+            await loadDash();
             showToast('AI profile saved.', 'success');
-            await testAiSettingsConnection({ silentSuccessToast: true });
-        } catch (error) {
-            showToast(`Failed to save AI settings: ${error.message}`, 'error');
+            await testConn({ silentSuccess: true });
+        } catch (saveErr) {
+            showToast(`Failed to save AI settings: ${saveErr.message}`, 'error');
         }
     }
 
-    async function testAiSettingsConnection(options = {}) {
-        const payload = collectAiSettingsPayload();
-        const validationError = validateAiSettingsPayload(payload, { requireApiKey: false });
-        const state = getAiSettingsState();
-        const profileKey = String(payload.profile_key || state.selectedProfileKey || '').trim();
-        const existing = payload.profile_key ? getProfileByKey(payload.profile_key) : null;
-        if (existing && payload.api_key === existing.api_key) {
+    async function testConn(opts = {}) {
+        const payload = buildPayload();
+        const err = validatePayload(payload, { requireKey: false });
+        const state = getState();
+        const key = String(payload.profile_key || state.selectedProfileKey || '').trim();
+        const prev = payload.profile_key ? findProfile(payload.profile_key) : null;
+        if (prev && payload.api_key === prev.api_key) {
             delete payload.api_key;
         }
 
-        if (validationError) {
-            if (profileKey) {
-                setProfileTestStatus(profileKey, { label: 'Failed', tone: 'error' });
-                renderAiSettingsDashboard();
+        if (err) {
+            if (key) {
+                setStatus(key, { label: 'Failed', tone: 'error' });
+                renderDash();
             }
-            if (!options.silentValidationToast) showToast(validationError, 'warn');
+            if (!opts.silentValidation) showToast(err, 'warn');
             return false;
         }
 
-        if (profileKey) {
-            setProfileTestStatus(profileKey, { label: 'Testing...', tone: '' });
-            renderAiSettingsDashboard();
+        if (key) {
+            setStatus(key, { label: 'Testing...', tone: '' });
+            renderDash();
         }
 
         try {
-            const response = await fetch('/api/ai/settings/test', {
+            const res = await fetch('/api/ai/settings/test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
-            const resolvedKey = String(data.profile_key || profileKey || '').trim();
-            if (resolvedKey) {
-                setProfileTestStatus(resolvedKey, { label: 'Success', tone: 'success' });
-                if (resolvedKey !== profileKey) deleteProfileTestStatus(profileKey);
-                renderAiSettingsDashboard();
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+            const resolved = String(data.profile_key || key || '').trim();
+            if (resolved) {
+                setStatus(resolved, { label: 'Success', tone: 'success' });
+                if (resolved !== key) delStatus(key);
+                renderDash();
             }
-            if (!options.silentSuccessToast) showToast('AI connection test passed.', 'success');
+            if (!opts.silentSuccess) showToast('AI connection test passed.', 'success');
             return true;
-        } catch (error) {
-            if (profileKey) {
-                setProfileTestStatus(profileKey, { label: 'Failed', tone: 'error' });
-                renderAiSettingsDashboard();
+        } catch (testErr) {
+            if (key) {
+                setStatus(key, { label: 'Failed', tone: 'error' });
+                renderDash();
             }
-            if (!options.silentErrorToast) showToast(`AI connection test failed: ${error.message}`, 'error');
+            if (!opts.silentError) showToast(`AI connection test failed: ${testErr.message}`, 'error');
             return false;
         }
     }
 
-    function selectAiSettingsProfile(profileKey) {
-        const state = getAiSettingsState();
-        state.selectedProfileKey = profileKey;
-        renderAiSettingsDashboard();
-        fillAiSettingsForm(getProfileByKey(profileKey));
+    function selectProfile(key) {
+        const state = getState();
+        state.selectedProfileKey = key;
+        renderDash();
+        fillForm(findProfile(key));
     }
 
-    function bindAiSettingsEvents() {
+    function bindEvents() {
         const list = document.getElementById('ai-settings-profiles-list');
         if (list && !list.dataset.bound) {
             list.addEventListener('click', (event) => {
                 const row = event.target.closest('[data-profile-key]');
                 if (!row) return;
-                selectAiSettingsProfile(row.getAttribute('data-profile-key'));
+                selectProfile(row.getAttribute('data-profile-key'));
             });
             list.dataset.bound = '1';
         }
 
-        const modelChips = document.getElementById('ai-settings-model-chips');
-        if (modelChips && !modelChips.dataset.bound) {
-            modelChips.addEventListener('click', (event) => {
-                const button = event.target.closest('[data-model-remove]');
-                if (!button) return;
-                removeDraftModel(button.getAttribute('data-model-remove'));
+        const chips = document.getElementById('ai-settings-model-chips');
+        if (chips && !chips.dataset.bound) {
+            chips.addEventListener('click', (event) => {
+                const btn = event.target.closest('[data-model-remove]');
+                if (!btn) return;
+                removeModel(btn.getAttribute('data-model-remove'));
             });
-            modelChips.dataset.bound = '1';
+            chips.dataset.bound = '1';
         }
 
         const form = document.getElementById('plugin-ai-settings-form');
         if (form && !form.dataset.bound) {
-            form.addEventListener('submit', saveAiSettingsProfile);
+            form.addEventListener('submit', saveProfile);
             form.dataset.bound = '1';
         }
 
         const newBtn = document.getElementById('ai-settings-new-profile-btn');
         if (newBtn && !newBtn.dataset.bound) {
             newBtn.addEventListener('click', () => {
-                getAiSettingsState().selectedProfileKey = null;
-                fillAiSettingsForm(null);
-                renderAiSettingsDashboard();
+                getState().selectedProfileKey = null;
+                fillForm(null);
+                renderDash();
             });
             newBtn.dataset.bound = '1';
         }
 
-        const providerEl = document.getElementById('plugin-ai-provider');
-        if (providerEl && !providerEl.dataset.bound) {
-            providerEl.addEventListener('change', () => {
-                applyProviderFormHints(providerEl.value, { preserveBaseUrl: true });
-                renderModelChips();
+        const provEl = document.getElementById('plugin-ai-provider');
+        if (provEl && !provEl.dataset.bound) {
+            provEl.addEventListener('change', () => {
+                applyHints(provEl.value, { preserveUrl: true });
+                renderChips();
             });
-            providerEl.dataset.bound = '1';
+            provEl.dataset.bound = '1';
         }
 
         const modelEl = document.getElementById('plugin-ai-model');
@@ -484,35 +484,35 @@
             modelEl.addEventListener('keydown', (event) => {
                 if (event.key !== 'Enter') return;
                 event.preventDefault();
-                const value = String(modelEl.value || '').trim();
-                if (!value) return;
-                addDraftModel(value);
+                const val = String(modelEl.value || '').trim();
+                if (!val) return;
+                addModel(val);
                 modelEl.value = '';
             });
             modelEl.dataset.bound = '1';
         }
 
-        const apiKeyToggle = document.getElementById('plugin-ai-api-key-toggle');
-        if (apiKeyToggle && !apiKeyToggle.dataset.bound) {
-            apiKeyToggle.addEventListener('click', () => {
+        const keyToggle = document.getElementById('plugin-ai-api-key-toggle');
+        if (keyToggle && !keyToggle.dataset.bound) {
+            keyToggle.addEventListener('click', () => {
                 const input = document.getElementById('plugin-ai-api-key');
                 if (!input) return;
-                const shouldReveal = input.type === 'password';
-                input.type = shouldReveal ? 'text' : 'password';
-                apiKeyToggle.setAttribute('aria-pressed', shouldReveal ? 'true' : 'false');
-                apiKeyToggle.setAttribute('title', shouldReveal ? 'Hide API key' : 'Show API key');
-                apiKeyToggle.setAttribute('aria-label', shouldReveal ? 'Hide API key' : 'Show API key');
+                const show = input.type === 'password';
+                input.type = show ? 'text' : 'password';
+                keyToggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+                keyToggle.setAttribute('title', show ? 'Hide API key' : 'Show API key');
+                keyToggle.setAttribute('aria-label', show ? 'Hide API key' : 'Show API key');
             });
-            apiKeyToggle.dataset.bound = '1';
+            keyToggle.dataset.bound = '1';
         }
 
-        const advancedToggle = document.getElementById('plugin-ai-advanced-toggle');
-        const advancedPanel = document.getElementById('plugin-ai-advanced-panel');
-        const runtimeStrategyChip = document.getElementById('plugin-ai-runtime-strategy-chip');
-        const runtimeApprovalChip = document.getElementById('plugin-ai-runtime-approval-chip');
-        const strategySelect = document.getElementById('plugin-ai-strategy');
-        const approvalSelect = document.getElementById('plugin-ai-approval-mode');
-        const runtimeFieldIds = [
+        const advToggle = document.getElementById('plugin-ai-advanced-toggle');
+        const advPanel = document.getElementById('plugin-ai-advanced-panel');
+        const stratChip = document.getElementById('plugin-ai-runtime-strategy-chip');
+        const appChip = document.getElementById('plugin-ai-runtime-approval-chip');
+        const stratSel = document.getElementById('plugin-ai-strategy');
+        const appSel = document.getElementById('plugin-ai-approval-mode');
+        const fieldIds = [
             'plugin-ai-strategy',
             'plugin-ai-loop-mode',
             'plugin-ai-trace-enabled',
@@ -525,32 +525,32 @@
             'plugin-ai-before-run-json',
             'plugin-ai-after-run-json',
         ];
-        const chatColumn = document.querySelector('.plugin-ai-chat-column');
+        const col = document.querySelector('.plugin-ai-chat-column');
         if (typeof window.hydratePluginAiRuntimePrefs === 'function') {
             window.hydratePluginAiRuntimePrefs();
         }
         if (typeof window.refreshPluginAiRuntimeSummary === 'function') {
             window.refreshPluginAiRuntimeSummary();
         }
-        if (runtimeStrategyChip && !runtimeStrategyChip.dataset.bound) {
-            runtimeStrategyChip.addEventListener('click', () => {
+        if (stratChip && !stratChip.dataset.bound) {
+            stratChip.addEventListener('click', () => {
                 if (typeof window.cyclePluginAiStrategy === 'function') {
                     window.cyclePluginAiStrategy();
                 }
             });
-            runtimeStrategyChip.dataset.bound = '1';
+            stratChip.dataset.bound = '1';
         }
-        if (runtimeApprovalChip && !runtimeApprovalChip.dataset.bound) {
-            runtimeApprovalChip.addEventListener('click', () => {
+        if (appChip && !appChip.dataset.bound) {
+            appChip.addEventListener('click', () => {
                 if (typeof window.cyclePluginAiApprovalMode === 'function') {
                     window.cyclePluginAiApprovalMode();
                 }
             });
-            runtimeApprovalChip.dataset.bound = '1';
+            appChip.dataset.bound = '1';
         }
-        [strategySelect, approvalSelect].forEach((element) => {
-            if (!element || element.dataset.summaryBound === '1') return;
-            element.addEventListener('change', () => {
+        [stratSel, appSel].forEach((el) => {
+            if (!el || el.dataset.summaryBound === '1') return;
+            el.addEventListener('change', () => {
                 if (typeof window.syncPluginAiApprovalModeUi === 'function') {
                     window.syncPluginAiApprovalModeUi();
                 }
@@ -561,13 +561,13 @@
                     window.refreshPluginAiRuntimeSummary();
                 }
             });
-            element.dataset.summaryBound = '1';
+            el.dataset.summaryBound = '1';
         });
-        runtimeFieldIds.forEach((fieldId) => {
-            const element = document.getElementById(fieldId);
-            if (!element || element.dataset.runtimePersistBound === '1') return;
-            const eventName = element.tagName === 'TEXTAREA' || element.type === 'text' ? 'input' : 'change';
-            element.addEventListener(eventName, () => {
+        fieldIds.forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el || el.dataset.runtimePersistBound === '1') return;
+            const evt = el.tagName === 'TEXTAREA' || el.type === 'text' ? 'input' : 'change';
+            el.addEventListener(evt, () => {
                 if (typeof window.persistPluginAiRuntimePrefs === 'function') {
                     window.persistPluginAiRuntimePrefs();
                 }
@@ -575,31 +575,31 @@
                     window.refreshPluginAiRuntimeSummary();
                 }
             });
-            element.dataset.runtimePersistBound = '1';
+            el.dataset.runtimePersistBound = '1';
         });
-        if (advancedToggle && advancedPanel && !advancedToggle.dataset.bound) {
-            if (chatColumn) {
-                chatColumn.classList.toggle('is-advanced-open', !advancedPanel.hasAttribute('hidden'));
+        if (advToggle && advPanel && !advToggle.dataset.bound) {
+            if (col) {
+                col.classList.toggle('is-advanced-open', !advPanel.hasAttribute('hidden'));
             }
-            advancedToggle.addEventListener('click', () => {
-                const nextExpanded = advancedPanel.hasAttribute('hidden');
-                if (nextExpanded) {
-                    advancedPanel.removeAttribute('hidden');
+            advToggle.addEventListener('click', () => {
+                const open = advPanel.hasAttribute('hidden');
+                if (open) {
+                    advPanel.removeAttribute('hidden');
                 } else {
-                    advancedPanel.setAttribute('hidden', 'hidden');
+                    advPanel.setAttribute('hidden', 'hidden');
                 }
-                if (chatColumn) {
-                    chatColumn.classList.toggle('is-advanced-open', nextExpanded);
+                if (col) {
+                    col.classList.toggle('is-advanced-open', open);
                 }
-                advancedToggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+                advToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
                 if (typeof window.refreshPluginAiRuntimeSummary === 'function') {
                     window.refreshPluginAiRuntimeSummary();
                 }
             });
-            advancedToggle.dataset.bound = '1';
+            advToggle.dataset.bound = '1';
         }
     }
 
-    window.loadAiSettingsDashboard = loadAiSettingsDashboard;
-    window.bindAiSettingsEvents = bindAiSettingsEvents;
+    window.loadAiSettingsDashboard = loadDash;
+    window.bindAiSettingsEvents = bindEvents;
 })();

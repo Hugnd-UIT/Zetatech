@@ -6,26 +6,26 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from agents.context import (
-    build_plugin_context_for_source,
-    ensure_thread_source_dir,
+    ensure_source,
+    source_context,
 )
 from agents.repos import AIRepository
-from agents.bridge import run_agent_bridge, run_agent_bridge_stream
+from agents.bridge import run_agent_bridge, stream_bridge
 from agents.workspace import cleanup_run_workspace
 from paths import resolve_runtime_paths
 from core.routers.agents.provider import (
-    run_provider_connection_test,
+    test_provider,
     urllib_request,
 )
-from core.routers.agents.stream import stream_ai_message_events
+from core.routers.agents.stream import stream_events
 from core.routers.agents.serialize import (
-    list_latest_thread_team_events,
-    list_structured_thread_events,
     serialize_message,
     serialize_run_approval,
     serialize_settings,
     serialize_settings_dashboard,
     serialize_thread,
+    team_events,
+    thread_events,
 )
 from core.routers.agents.service import execute_ai_message
 from core.schemas import (
@@ -92,7 +92,7 @@ def test_settings_profile(payload: AISettingsTestRequest):
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="API key is required to test the AI connection.")
 
-    msg = run_provider_connection_test(
+    msg = test_provider(
         provider=payload.provider,
         api_key=key,
         model=payload.model,
@@ -114,7 +114,7 @@ def list_plugin_threads(plugin_slug: str, is_theme: bool = False):
 
 
 @router.post("/threads/plugin")
-def create_or_get_plugin_thread(payload: AIPluginThreadRequest):
+def get_or_create_thread(payload: AIPluginThreadRequest):
     thread = repo.get_or_create_thread(
         plugin_slug=payload.plugin_slug,
         is_theme=payload.is_theme,
@@ -149,7 +149,7 @@ def list_thread_messages(thread_id: int, plugin_slug: str, is_theme: bool = Fals
     msgs = [serialize_message(m) for m in repo.list_messages(thread_id)]
     latest = repo.get_latest_run(thread_id)
     pending = str(latest.get("status") or "").lower() in {"pending", "running"} if latest else False
-    team = list_latest_thread_team_events(repo, thread_id)
+    team = team_events(repo, thread_id)
     approval = repo.get_thread_pending_approval(thread_id)
     return {
         "messages": msgs,
@@ -200,7 +200,7 @@ def prepare_thread_source(thread_id: int, payload: AIPluginThreadRequest):
             detail="AI thread not found.",
         )
 
-    src = ensure_thread_source_dir(
+    src = ensure_source(
         db_path=repo.db_path,
         plugin_slug=payload.plugin_slug,
         is_theme=payload.is_theme,
@@ -232,8 +232,8 @@ def create_message(payload: AIMessageCreateRequest):
         repo=repo,
         payload=payload,
         path_cwd=Path.cwd,
-        build_plugin_context_for_source=build_plugin_context_for_source,
-        resolve_existing_thread_source_path=ensure_thread_source_dir,
+        source_context=source_context,
+        existing_source=ensure_source,
         cleanup_run_workspace=cleanup_run_workspace,
         run_agent_bridge=run_agent_bridge,
     )
@@ -242,14 +242,14 @@ def create_message(payload: AIMessageCreateRequest):
 @router.post("/messages/stream")
 def create_message_stream(payload: AIMessageCreateRequest):
     return StreamingResponse(
-        stream_ai_message_events(
+        stream_events(
             repo=repo,
             payload=payload,
             path_cwd=Path.cwd,
-            build_plugin_context_for_source=build_plugin_context_for_source,
-            resolve_existing_thread_source_path=ensure_thread_source_dir,
+            source_context=source_context,
+            existing_source=ensure_source,
             cleanup_run_workspace=cleanup_run_workspace,
-            run_agent_bridge_stream=run_agent_bridge_stream,
+            stream_bridge=stream_bridge,
         ),
         media_type="application/x-ndjson",
     )
@@ -307,4 +307,4 @@ def decide_run_approval(run_id: int, payload: AIRunApprovalDecisionRequest):
 _serialize_settings = lambda settings: serialize_settings(repo, settings)
 _serialize_message = serialize_message
 _serialize_thread = serialize_thread
-_list_structured_thread_events = lambda thread_id: list_structured_thread_events(repo, thread_id)
+_list_structured_thread_events = lambda thread_id: thread_events(repo, thread_id)

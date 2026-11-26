@@ -6,35 +6,35 @@ from typing import Any, Callable, Dict, Iterator
 from fastapi import HTTPException
 
 from core.routers.agents.runtime import (
-    arm_manual_run_approval_if_needed,
-    auto_approve_pending_run_approval,
+    arm_approval,
+    auto_approve,
     cleanup_workspace,
-    create_user_message_and_run,
     persist_completed_run,
-    raise_mapped_ai_error,
+    raise_ai_error,
+    start_run,
 )
 from core.routers.agents.serialize import serialize_message, serialize_run_approval
 from core.routers.agents.service import (
     build_bridge_request,
-    build_effective_context_summary,
     build_final_response,
+    effective_summary,
     prepare_execution_workspace,
     prepare_message_execution,
     resolve_active_provider,
-    update_thread_memory_from_run,
+    save_memory,
 )
 from core.routers.agents.intent import summarize_intent_decision
 
 
-def stream_ai_message_events(
+def stream_events(
     *,
     repo,
     payload,
     path_cwd: Callable[[], Path],
-    build_plugin_context_for_source: Callable[..., Dict[str, Any]],
-    resolve_existing_thread_source_path: Callable[..., Path | None],
+    source_context: Callable[..., Dict[str, Any]],
+    existing_source: Callable[..., Path | None],
     cleanup_run_workspace: Callable[[Path], None],
-    run_agent_bridge_stream: Callable[[Dict[str, Any]], Iterator[Dict[str, Any]]],
+    stream_bridge: Callable[[Dict[str, Any]], Iterator[Dict[str, Any]]],
 ):
     try:
         prov = resolve_active_provider(repo=repo, payload=payload)
@@ -60,8 +60,8 @@ def stream_ai_message_events(
             thread=exec_ctx["thread"],
             last_scan_session_id=exec_ctx["last_scan_session_id"],
             path_cwd=path_cwd,
-            resolve_existing_thread_source_path=resolve_existing_thread_source_path,
-            build_plugin_context_for_source=build_plugin_context_for_source,
+            existing_source=existing_source,
+            source_context=source_context,
             runtime_events=evts,
             intent_info=exec_ctx["intent_info"],
         )
@@ -82,7 +82,7 @@ def stream_ai_message_events(
                 ensure_ascii=False,
             ) + "\n"
 
-        user_msg, run = create_user_message_and_run(
+        user_msg, run = start_run(
             repo=repo,
             thread_id=payload.thread_id,
             content=payload.content,
@@ -94,7 +94,7 @@ def stream_ai_message_events(
             ensure_ascii=False,
         ) + "\n"
 
-        ctrl = arm_manual_run_approval_if_needed(
+        ctrl = arm_approval(
             repo=repo,
             payload=payload,
             run_id=run["id"],
@@ -110,14 +110,14 @@ def stream_ai_message_events(
             execution_mode=exec_ctx["execution_mode"],
             team_mode=exec_ctx["team_mode"],
             strategy=exec_ctx["strategy"],
-            context_summary=build_effective_context_summary(
+            context_summary=effective_summary(
                 intent_info=exec_ctx["intent_info"],
                 context_summary=exec_ctx["context_summary"],
             ),
             approval_control_path=ctrl,
         )
 
-        for event in run_agent_bridge_stream(req):
+        for event in stream_bridge(req):
             if event.get("type") == "approval_requested" and run is not None:
                 data = event.get("data") or {}
                 if isinstance(data, dict):
@@ -171,12 +171,12 @@ def stream_ai_message_events(
             runtime_events=evts,
         )
         if run is not None:
-            auto_approve_pending_run_approval(
+            auto_approve(
                 repo=repo,
                 run_id=run["id"],
                 thread_id=payload.thread_id,
             )
-        update_thread_memory_from_run(
+        save_memory(
             repo=repo,
             payload=payload,
             assistant_message=bot_msg,
@@ -217,7 +217,7 @@ def stream_ai_message_events(
     except Exception as exc:
         if run is not None:
             try:
-                raise_mapped_ai_error(
+                raise_ai_error(
                     repo=repo,
                     exc=exc,
                     run=run,

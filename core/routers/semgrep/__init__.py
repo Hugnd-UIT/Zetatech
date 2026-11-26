@@ -2,18 +2,18 @@ from fastapi import APIRouter, BackgroundTasks, Request
 
 from database.repos import ScanRepository
 from core.limiter import limiter
-from core.routers.semgrep.helper import build_semgrep_rules_response
+from core.routers.semgrep.helper import rules_response
 from core.routers.semgrep.service import (
     add_custom_rule,
     add_ruleset,
+    bulk_stats,
     delete_custom_rule,
     delete_ruleset,
-    get_bulk_semgrep_scan_stats,
-    get_latest_semgrep_scan,
-    start_bulk_semgrep_scan,
-    start_semgrep_scan_for_plugin,
-    stop_bulk_semgrep_scan,
-    toggle_all_custom_rules,
+    latest_scan,
+    start_bulk,
+    start_scan,
+    stop_bulk,
+    toggle_all,
     toggle_custom_rule,
     toggle_ruleset,
 )
@@ -33,7 +33,7 @@ repo = ScanRepository()
 async def start_semgrep_scan(
     request: Request, scan_request: DownloadRequest, background_tasks: BackgroundTasks
 ):
-    return start_semgrep_scan_for_plugin(
+    return start_scan(
         repo=repo,
         scan_request=scan_request,
         background_tasks=background_tasks,
@@ -42,12 +42,12 @@ async def start_semgrep_scan(
 
 @router.get("/scan/{slug}")
 async def get_semgrep_scan(slug: str):
-    return get_latest_semgrep_scan(repo=repo, slug=slug)
+    return latest_scan(repo=repo, slug=slug)
 
 
 @router.get("/rules")
 async def get_semgrep_rules():
-    return build_semgrep_rules_response()
+    return rules_response()
 
 
 @router.post("/rules")
@@ -66,8 +66,8 @@ async def toggle_semgrep_rule(rule_id: str):
 
 
 @router.post("/rules/actions/toggle-all")
-async def toggle_all_semgrep_rules(toggle_request: SemgrepBulkToggleRequest):
-    return toggle_all_custom_rules(enabled=toggle_request.enabled)
+async def toggle_all_rules(toggle_request: SemgrepBulkToggleRequest):
+    return toggle_all(enabled=toggle_request.enabled)
 
 
 @router.post("/rulesets")
@@ -87,7 +87,7 @@ async def remove_ruleset(ruleset_id: str):
 
 @router.post("/bulk/{session_id}")
 async def run_bulk_semgrep(session_id: int, background_tasks: BackgroundTasks):
-    return start_bulk_semgrep_scan(
+    return start_bulk(
         repo=repo,
         session_id=session_id,
         background_tasks=background_tasks,
@@ -96,9 +96,9 @@ async def run_bulk_semgrep(session_id: int, background_tasks: BackgroundTasks):
 
 @router.post("/bulk/{session_id}/stop")
 async def stop_bulk_semgrep(session_id: int):
-    return stop_bulk_semgrep_scan(session_id)
+    return stop_bulk(session_id)
 
 
 @router.get("/bulk/{session_id}/stats")
-async def get_bulk_semgrep_stats(session_id: int):
-    return get_bulk_semgrep_scan_stats(repo=repo, session_id=session_id)
+async def get_bulk_stats(session_id: int):
+    return bulk_stats(repo=repo, session_id=session_id)

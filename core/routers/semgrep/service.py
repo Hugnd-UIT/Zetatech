@@ -10,42 +10,42 @@ from core.routers.semgrep.helper import (
     CORE_RULESET_KEYS,
     CUSTOM_RULES_PATH,
     SEMGREP_REGISTRY_RULESETS,
-    _canonicalize_ruleset_value,
-    _validate_rule_id_or_raise,
-    _validate_semgrep_rules_config,
-    _validate_slug_or_raise,
+    _canon_ruleset,
+    _check_rule,
+    _check_rules,
+    _check_slug,
+    check_ruleset,
     get_disabled_config,
-    load_custom_rules_document,
-    save_custom_rules_document,
+    load_doc,
     save_disabled_config,
-    validate_ruleset_or_raise,
+    save_doc,
 )
 from core.routers.semgrep.tasks import (
     active_bulk_scans,
-    run_bulk_semgrep_task,
-    run_plugin_semgrep_scan,
+    run_bulk,
+    run_scan,
 )
 
 SEMGREP_BULK_RESULT_LIMIT = 9999
 
 
-def require_valid_slug(slug: str) -> str:
+def valid_slug(slug: str) -> str:
     try:
-        return _validate_slug_or_raise(slug)
+        return _check_slug(slug)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid slug format") from exc
 
 
-def require_valid_rule_id(rule_id: str) -> str:
+def valid_rule(rule_id: str) -> str:
     try:
-        return _validate_rule_id_or_raise(rule_id)
+        return _check_rule(rule_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid rule ID format") from exc
 
 
-def require_valid_ruleset(ruleset: str) -> str:
+def valid_ruleset(ruleset: str) -> str:
     try:
-        return validate_ruleset_or_raise(ruleset)
+        return check_ruleset(ruleset)
     except ValueError as exc:
         detail = (
             "Ruleset cannot be empty"
@@ -55,7 +55,7 @@ def require_valid_ruleset(ruleset: str) -> str:
         raise HTTPException(status_code=400, detail=detail) from exc
 
 
-def _resolve_single_scan_version(*, repo, slug: str) -> str:
+def _scan_version(*, repo, slug: str) -> str:
     try:
         resolved = repo.get_catalog_latest_version(slug, is_theme=False)
     except Exception:
@@ -63,12 +63,12 @@ def _resolve_single_scan_version(*, repo, slug: str) -> str:
     return str(resolved or "latest")
 
 
-def start_semgrep_scan_for_plugin(*, repo, scan_request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
-    safe = require_valid_slug(scan_request.slug)
-    ver = _resolve_single_scan_version(repo=repo, slug=safe)
+def start_scan(*, repo, scan_request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    safe = valid_slug(scan_request.slug)
+    ver = _scan_version(repo=repo, slug=safe)
     scan_id = repo.create_semgrep_scan(safe, version=ver)
     background_tasks.add_task(
-        run_plugin_semgrep_scan,
+        run_scan,
         scan_id,
         safe,
         str(scan_request.download_url),
@@ -77,15 +77,15 @@ def start_semgrep_scan_for_plugin(*, repo, scan_request, background_tasks: Backg
     return {"success": True, "scan_id": scan_id, "status": "pending"}
 
 
-def get_latest_semgrep_scan(*, repo, slug: str) -> Dict[str, Any]:
-    safe = require_valid_slug(slug)
+def latest_scan(*, repo, slug: str) -> Dict[str, Any]:
+    safe = valid_slug(slug)
     scan = repo.get_semgrep_scan(safe)
     return scan or {"status": "none"}
 
 
 def add_custom_rule(rule) -> Dict[str, Any]:
-    rule_id = require_valid_rule_id(rule.id)
-    doc = load_custom_rules_document()
+    rule_id = valid_rule(rule.id)
+    doc = load_doc()
     for existing in doc.get("rules", []):
         if existing.get("id") == rule_id:
             raise HTTPException(
@@ -102,7 +102,7 @@ def add_custom_rule(rule) -> Dict[str, Any]:
     }
     doc.setdefault("rules", []).append(item)
 
-    err = _validate_semgrep_rules_config(doc)
+    err = _check_rules(doc)
     if err:
         raise HTTPException(
             status_code=400,
@@ -113,7 +113,7 @@ def add_custom_rule(rule) -> Dict[str, Any]:
         )
 
     try:
-        save_custom_rules_document(doc)
+        save_doc(doc)
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -123,19 +123,19 @@ def add_custom_rule(rule) -> Dict[str, Any]:
 
 
 def delete_custom_rule(rule_id: str) -> Dict[str, Any]:
-    rule_id = require_valid_rule_id(rule_id)
+    rule_id = valid_rule(rule_id)
     if not CUSTOM_RULES_PATH.exists():
         raise HTTPException(status_code=404, detail="No custom rules file found")
 
     try:
-        data = load_custom_rules_document()
+        data = load_doc()
         orig = len(data.get("rules", []))
         data["rules"] = [
             rule for rule in data.get("rules", []) if rule.get("id") != rule_id
         ]
         if len(data["rules"]) == orig:
             raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
-        save_custom_rules_document(data)
+        save_doc(data)
         return {"success": True, "deleted": rule_id}
     except HTTPException:
         raise
@@ -147,7 +147,7 @@ def delete_custom_rule(rule_id: str) -> Dict[str, Any]:
 
 
 def toggle_custom_rule(rule_id: str) -> Dict[str, Any]:
-    rule_id = require_valid_rule_id(rule_id)
+    rule_id = valid_rule(rule_id)
     cfg = get_disabled_config()
     if rule_id in cfg["rules"]:
         cfg["rules"].remove(rule_id)
@@ -159,8 +159,8 @@ def toggle_custom_rule(rule_id: str) -> Dict[str, Any]:
     return {"success": True, "rule_id": rule_id, "enabled": False}
 
 
-def toggle_all_custom_rules(*, enabled: bool) -> Dict[str, Any]:
-    data = load_custom_rules_document()
+def toggle_all(*, enabled: bool) -> Dict[str, Any]:
+    data = load_doc()
     ids: List[str] = []
     for rule in data.get("rules", []):
         if not isinstance(rule, dict):
@@ -169,7 +169,7 @@ def toggle_all_custom_rules(*, enabled: bool) -> Dict[str, Any]:
         if not isinstance(rule_id, str):
             continue
         try:
-            ids.append(_validate_rule_id_or_raise(rule_id))
+            ids.append(_check_rule(rule_id))
         except ValueError:
             continue
 
@@ -202,7 +202,7 @@ def toggle_all_custom_rules(*, enabled: bool) -> Dict[str, Any]:
 
 
 def add_ruleset(ruleset: str) -> Dict[str, Any]:
-    rid = require_valid_ruleset(ruleset)
+    rid = valid_ruleset(ruleset)
     cfg = get_disabled_config()
     if (
         rid not in cfg["extra_rulesets"]
@@ -218,7 +218,7 @@ def add_ruleset(ruleset: str) -> Dict[str, Any]:
 
 
 def toggle_ruleset(ruleset_id: str) -> Dict[str, Any]:
-    rid = require_valid_ruleset(ruleset_id)
+    rid = valid_ruleset(ruleset_id)
     cfg = get_disabled_config()
     avail = set(CORE_RULESET_KEYS) | set(cfg.get("extra_rulesets", []))
     if rid not in avail:
@@ -235,8 +235,8 @@ def toggle_ruleset(ruleset_id: str) -> Dict[str, Any]:
 
 
 def delete_ruleset(ruleset_id: str) -> Dict[str, Any]:
-    rid = require_valid_ruleset(ruleset_id)
-    canonical = _canonicalize_ruleset_value(rid)
+    rid = valid_ruleset(ruleset_id)
+    canonical = _canon_ruleset(rid)
     if canonical in CORE_RULESET_KEYS or canonical in CORE_RULESET_CONFIGS:
         raise HTTPException(status_code=400, detail="Built-in rulesets cannot be deleted")
 
@@ -251,7 +251,7 @@ def delete_ruleset(ruleset_id: str) -> Dict[str, Any]:
     return {"success": True, "deleted": rid}
 
 
-def start_bulk_semgrep_scan(*, repo, session_id: int, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+def start_bulk(*, repo, session_id: int, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     if session_id in active_bulk_scans:
         raise HTTPException(status_code=400, detail="Bulk scan already running for this session")
 
@@ -261,11 +261,11 @@ def start_bulk_semgrep_scan(*, repo, session_id: int, background_tasks: Backgrou
 
     stop = asyncio.Event()
     active_bulk_scans[session_id] = stop
-    background_tasks.add_task(run_bulk_semgrep_task, session_id, results, repo, stop)
+    background_tasks.add_task(run_bulk, session_id, results, repo, stop)
     return {"success": True, "count": len(results), "status": "started"}
 
 
-def stop_bulk_semgrep_scan(session_id: int) -> Dict[str, Any]:
+def stop_bulk(session_id: int) -> Dict[str, Any]:
     if session_id not in active_bulk_scans:
         raise HTTPException(status_code=404, detail="No active bulk scan found for this session")
 
@@ -273,7 +273,7 @@ def stop_bulk_semgrep_scan(session_id: int) -> Dict[str, Any]:
     return {"success": True, "status": "stopping"}
 
 
-def get_bulk_semgrep_scan_stats(*, repo, session_id: int) -> Dict[str, Any]:
+def bulk_stats(*, repo, session_id: int) -> Dict[str, Any]:
     results = repo.get_session_results(session_id, limit=SEMGREP_BULK_RESULT_LIMIT)
     slugs = [result["slug"] for result in results]
     stats = repo.get_semgrep_stats_for_slugs(slugs)

@@ -15,7 +15,7 @@ def _has_any(text: str, phrases: set[str]) -> bool:
     return any(str(phrase).casefold() in low for phrase in phrases if str(phrase).strip())
 
 
-def summarize_recent_thread_context(repo, thread_id: int, limit: int = 6) -> str:
+def recent_context(repo, thread_id: int, limit: int = 6) -> str:
     msgs = repo.list_messages(thread_id)
     if not msgs:
         return ""

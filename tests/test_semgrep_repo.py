@@ -33,35 +33,35 @@ def _insert_semgrep_finding(cursor, scan_id, rule_id, message):
     )
 
 
-def test_get_semgrep_scan_returns_latest_scan_by_id_with_its_findings(tmp_path):
-    db_path = tmp_path / "semgrep_repo.db"
-    init_db(db_path)
-    repo = ScanRepository(db_path=db_path)
+def test_latest_semgrep(tmp_path):
+    db = tmp_path / "semgrep_repo.db"
+    init_db(db)
+    repo = ScanRepository(db_path=db)
 
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        older_scan_id = _insert_semgrep_scan(
-            cursor,
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+        old = _insert_semgrep_scan(
+            cur,
             "hello-dolly",
             "1.0.0",
             "completed",
             {"total_findings": 0, "breakdown": {}},
         )
-        newer_scan_id = _insert_semgrep_scan(
-            cursor,
+        new = _insert_semgrep_scan(
+            cur,
             "hello-dolly",
             "1.0.1",
             "completed",
             {"total_findings": 1, "breakdown": {"ERROR": 1}},
         )
-        _insert_semgrep_finding(cursor, newer_scan_id, "wp.audit.test", "Latest finding")
+        _insert_semgrep_finding(cur, new, "wp.audit.test", "Latest finding")
         conn.commit()
 
-    result = repo.get_semgrep_scan("hello-dolly")
+    res = repo.get_semgrep_scan("hello-dolly")
 
-    assert result is not None
-    assert result["id"] == newer_scan_id
-    assert result["version"] == "1.0.1"
-    assert result["summary"] == {"total_findings": 1, "breakdown": {"ERROR": 1}}
-    assert [finding["rule_id"] for finding in result["findings"]] == ["wp.audit.test"]
-    assert older_scan_id != newer_scan_id
+    assert res is not None
+    assert res["id"] == new
+    assert res["version"] == "1.0.1"
+    assert res["summary"] == {"total_findings": 1, "breakdown": {"ERROR": 1}}
+    assert [f["rule_id"] for f in res["findings"]] == ["wp.audit.test"]
+    assert old != new

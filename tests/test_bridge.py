@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from agents.bridge import _build_child_env, _strip_env
+from agents.bridge import _child_env, _strip_env
 from core.routers.agents.bridge import build_bridge_payload, build_system_prompt
 
 
-def test_build_system_prompt_includes_wp_hunter_security_focus_and_metadata_context():
+def test_system_prompt():
     prompt = build_system_prompt(
         context={
             "plugin": {
@@ -43,7 +43,7 @@ def test_build_system_prompt_includes_wp_hunter_security_focus_and_metadata_cont
     assert "Tool policy:" in prompt
 
 
-def test_build_bridge_payload_filters_unsupported_custom_fields():
+def test_filter_payload():
     payload = build_bridge_payload(
         active_provider={
             "provider": "anthropic",
@@ -93,7 +93,7 @@ def test_build_bridge_payload_filters_unsupported_custom_fields():
     assert "extra" not in payload
 
 
-def test_build_bridge_payload_passes_supported_runtime_overrides():
+def test_runtime_overrides():
     payload = build_bridge_payload(
         active_provider={
             "provider": "openai",
@@ -127,16 +127,16 @@ def test_build_bridge_payload_passes_supported_runtime_overrides():
     assert payload["loopDetection"]["onLoopDetected"] == "warn"
 
 
-def test_runtime_env_is_scoped_to_child_process(monkeypatch):
+def test_child_env(monkeypatch):
     monkeypatch.setenv("ZETATECH_AI_API_KEY", "stale")
     payload = {
         "provider": "openai",
         "runtimeEnv": {"ZETATECH_AI_API_KEY": "fresh", "EXTRA_FLAG": "1"},
     }
 
-    child_env = _build_child_env(payload)
-    sanitized_payload = _strip_env(payload)
+    env = _child_env(payload)
+    clean = _strip_env(payload)
 
-    assert child_env["ZETATECH_AI_API_KEY"] == "fresh"
-    assert child_env["EXTRA_FLAG"] == "1"
-    assert "runtimeEnv" not in sanitized_payload
+    assert env["ZETATECH_AI_API_KEY"] == "fresh"
+    assert env["EXTRA_FLAG"] == "1"
+    assert "runtimeEnv" not in clean

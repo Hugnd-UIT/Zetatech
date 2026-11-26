@@ -15,7 +15,7 @@ from core.routers.agents.serialize import (
 logger = logging.getLogger("zetatech.ai.router")
 
 
-def persist_failed_run_message(
+def fail_message(
     *,
     repo,
     run_id: int,
@@ -34,7 +34,7 @@ def persist_failed_run_message(
     )
 
 
-def resolve_effective_last_scan_session_id(
+def pick_session(
     thread: Dict[str, Any],
     req_sid: int | None,
 ) -> int | None:
@@ -52,10 +52,10 @@ def resolve_source_dir(
     thread: Dict[str, Any],
     last_scan_session_id: int | None,
     path_cwd: Callable[[], Path],
-    resolve_existing_thread_source_path: Callable[..., Path | None],
+    existing_source: Callable[..., Path | None],
 ) -> Path | None:
     try:
-        return resolve_existing_thread_source_path(
+        return existing_source(
             db_path=repo.db_path,
             plugin_slug=thread["plugin_slug"],
             is_theme=bool(thread.get("is_theme")),
@@ -69,7 +69,7 @@ def resolve_source_dir(
         ) from exc
 
 
-def prepare_thread_for_message(*, repo, payload) -> tuple[Dict[str, Any], int | None]:
+def prep_thread(*, repo, payload) -> tuple[Dict[str, Any], int | None]:
     thread = repo.get_thread(payload.thread_id)
     if thread is None:
         raise HTTPException(
@@ -77,7 +77,7 @@ def prepare_thread_for_message(*, repo, payload) -> tuple[Dict[str, Any], int | 
             detail="AI thread not found.",
         )
 
-    last_sid = resolve_effective_last_scan_session_id(
+    last_sid = pick_session(
         thread,
         payload.last_scan_session_id,
     )
@@ -89,13 +89,13 @@ def prepare_thread_for_message(*, repo, payload) -> tuple[Dict[str, Any], int | 
     return repo.get_thread(payload.thread_id) or thread, last_sid
 
 
-def prepare_thread_run_context(
+def prep_context(
     *,
     repo,
     thread: Dict[str, Any],
     last_scan_session_id: int | None,
     path_cwd: Callable[[], Path],
-    resolve_existing_thread_source_path: Callable[..., Path | None],
+    existing_source: Callable[..., Path | None],
     runtime_events: List[Dict[str, Any]],
 ) -> tuple[Path | None, Path, str]:
     runtime_events.append(
@@ -113,7 +113,7 @@ def prepare_thread_run_context(
         thread=thread,
         last_scan_session_id=last_scan_session_id,
         path_cwd=path_cwd,
-        resolve_existing_thread_source_path=resolve_existing_thread_source_path,
+        existing_source=existing_source,
     )
     if src_dir is not None:
         src = src_dir.resolve()
@@ -146,7 +146,7 @@ def prepare_thread_run_context(
     return src_dir, root, src_path
 
 
-def create_user_message_and_run(
+def start_run(
     *,
     repo,
     thread_id: int,
@@ -171,18 +171,18 @@ def create_user_message_and_run(
     return msg, run
 
 
-def build_approval_control_path(*, workspace_root: Path, thread_id: int, run_id: int) -> Path:
+def approval_path(*, workspace_root: Path, thread_id: int, run_id: int) -> Path:
     del workspace_root
     dir = resolve_runtime_paths().approvals_dir
     dir.mkdir(parents=True, exist_ok=True)
     return dir / f"thread-{thread_id}-run-{run_id}.json"
 
 
-def arm_manual_run_approval_if_needed(*, repo, payload, run_id: int, workspace_root: Path) -> str | None:
+def arm_approval(*, repo, payload, run_id: int, workspace_root: Path) -> str | None:
     if str(getattr(payload, "approval_mode", "off") or "off") != "manual":
         return None
     ctrl = str(
-        build_approval_control_path(
+        approval_path(
             workspace_root=workspace_root,
             thread_id=payload.thread_id,
             run_id=run_id,
@@ -199,7 +199,7 @@ def arm_manual_run_approval_if_needed(*, repo, payload, run_id: int, workspace_r
     return ctrl
 
 
-def auto_approve_pending_run_approval(*, repo, run_id: int, thread_id: int) -> None:
+def auto_approve(*, repo, run_id: int, thread_id: int) -> None:
     approval = repo.get_run_approval(run_id)
     if approval and str(approval.get("status") or "") == "pending":
         repo.upsert_run_approval(
@@ -299,7 +299,7 @@ def persist_completed_run(
     return msg, team, saved
 
 
-def raise_mapped_ai_error(
+def raise_ai_error(
     *, repo, exc: Exception, run: Dict[str, Any] | None, thread_id: int
 ) -> None:
     if isinstance(exc, BridgeTimeoutError):
@@ -317,7 +317,7 @@ def raise_mapped_ai_error(
         logger.exception("Unexpected AI request failure", exc_info=exc)
 
     if run is not None:
-        persist_failed_run_message(
+        fail_message(
             repo=repo,
             run_id=run["id"],
             thread_id=thread_id,

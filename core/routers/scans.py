@@ -27,7 +27,7 @@ def request_scanner_stop(scanner: Any) -> None:
         stop()
 
 
-def apply_relative_risk_labels_to_dict_results(results: List[Dict[str, Any]]) -> None:
+def apply_risk_labels(results: List[Dict[str, Any]]) -> None:
     label_risk(
         results,
         get_score=lambda item: int(item.get("score", 0) or 0),
@@ -60,7 +60,7 @@ def build_scan_config(scan_request) -> ScanConfig:
     )
 
 
-def _build_theme_plugin_result(result: Dict[str, Any]) -> PluginResult:
+def _theme_result(result: Dict[str, Any]) -> PluginResult:
     return PluginResult(
         slug=result.get("slug", ""),
         name=result.get("name", "Unknown"),
@@ -78,33 +78,33 @@ def _build_theme_plugin_result(result: Dict[str, Any]) -> PluginResult:
     )
 
 
-async def _send_session_event(session_id: int, payload: Dict[str, Any]) -> None:
+async def _send_event(session_id: int, payload: Dict[str, Any]) -> None:
     await manager.send_to_session(session_id, payload)
 
 
-def _send_session_event_threadsafe(
+def _send_async(
     loop: asyncio.AbstractEventLoop,
     session_id: int,
     payload: Dict[str, Any],
 ) -> None:
-    asyncio.run_coroutine_threadsafe(_send_session_event(session_id, payload), loop)
+    asyncio.run_coroutine_threadsafe(_send_event(session_id, payload), loop)
 
 
-def _scan_was_cancelled(session_id: int, repo: ScanRepository) -> bool:
+def _is_cancelled(session_id: int, repo: ScanRepository) -> bool:
     state = repo.get_session(session_id)
     return bool(
         state and state.get("status") == ScanStatus.CANCELLED.value
     )
 
 
-async def _handle_scan_cancellation(
+async def _handle_cancel(
     *,
     session_id: int,
     repo: ScanRepository,
     found_count: int,
     high_risk_count: int,
 ) -> bool:
-    if not _scan_was_cancelled(session_id, repo):
+    if not _is_cancelled(session_id, repo):
         return False
 
     repo.update_session_status(
@@ -113,7 +113,7 @@ async def _handle_scan_cancellation(
         total_found=found_count,
         high_risk_count=high_risk_count,
     )
-    await _send_session_event(
+    await _send_event(
         session_id,
         {
             "type": "cancelled",
@@ -125,7 +125,7 @@ async def _handle_scan_cancellation(
     return True
 
 
-async def _deduplicate_completed_scan(
+async def _dedup_scan(
     *,
     session_id: int,
     repo: ScanRepository,
@@ -142,7 +142,7 @@ async def _deduplicate_completed_scan(
 
     repo.delete_session(session_id)
     repo.mark_session_merged(prev_id)
-    await _send_session_event(
+    await _send_event(
         session_id,
         {
             "type": "deduplicated",
@@ -153,7 +153,7 @@ async def _deduplicate_completed_scan(
     return True
 
 
-def _save_plugin_result_and_emit(
+def _save_emit(
     *,
     loop: asyncio.AbstractEventLoop,
     session_id: int,
@@ -162,7 +162,7 @@ def _save_plugin_result_and_emit(
     found_count: int,
 ) -> None:
     repo.save_result(session_id, result)
-    _send_session_event_threadsafe(
+    _send_async(
         loop,
         session_id,
         {
@@ -180,7 +180,7 @@ def _emit_progress(
     current: int,
     total: int,
 ) -> None:
-    _send_session_event_threadsafe(
+    _send_async(
         loop,
         session_id,
         {
@@ -192,7 +192,7 @@ def _emit_progress(
     )
 
 
-def _count_high_risk_plugin_results(results: List[PluginResult]) -> int:
+def _count_high(results: List[PluginResult]) -> int:
     return sum(
         1
         for result in results
@@ -200,7 +200,7 @@ def _count_high_risk_plugin_results(results: List[PluginResult]) -> int:
     )
 
 
-async def _run_theme_scan(
+async def _theme_scan(
     *,
     session_id: int,
     config: ScanConfig,
@@ -216,8 +216,8 @@ async def _run_theme_scan(
         if result.get("risk_level") == "HIGH":
             high += 1
 
-        item = _build_theme_plugin_result(result)
-        _save_plugin_result_and_emit(
+        item = _theme_result(result)
+        _save_emit(
             loop=loop,
             session_id=session_id,
             repo=repo,
@@ -236,7 +236,7 @@ async def _run_theme_scan(
     return found, high
 
 
-async def _run_plugin_scan(
+async def _plugin_scan(
     *,
     session_id: int,
     config: ScanConfig,
@@ -250,7 +250,7 @@ async def _run_plugin_scan(
     def on_res(result: PluginResult) -> None:
         nonlocal found
         found += 1
-        _save_plugin_result_and_emit(
+        _save_emit(
             loop=loop,
             session_id=session_id,
             repo=repo,
@@ -269,21 +269,21 @@ async def _run_plugin_scan(
     scanner.on_result = on_res
     scanner.on_progress = on_prog
     await loop.run_in_executor(None, scanner.scan)
-    return found, _count_high_risk_plugin_results(scanner.results)
+    return found, _count_high(scanner.results)
 
 
-async def _run_scan_mode(
+async def _scan_mode(
     *,
     session_id: int,
     config: ScanConfig,
     repo: ScanRepository,
 ) -> tuple[int, int]:
     if config.themes:
-        return await _run_theme_scan(session_id=session_id, config=config, repo=repo)
-    return await _run_plugin_scan(session_id=session_id, config=config, repo=repo)
+        return await _theme_scan(session_id=session_id, config=config, repo=repo)
+    return await _plugin_scan(session_id=session_id, config=config, repo=repo)
 
 
-async def _finalize_scan_completion(
+async def _finalize_scan(
     *,
     session_id: int,
     config: ScanConfig,
@@ -291,7 +291,7 @@ async def _finalize_scan_completion(
     found_count: int,
     high_risk_count: int,
 ) -> bool:
-    if await _handle_scan_cancellation(
+    if await _handle_cancel(
         session_id=session_id,
         repo=repo,
         found_count=found_count,
@@ -306,14 +306,14 @@ async def _finalize_scan_completion(
         high_risk_count=high_risk_count,
     )
 
-    if await _deduplicate_completed_scan(
+    if await _dedup_scan(
         session_id=session_id,
         repo=repo,
         config=config,
     ):
         return False
 
-    await _send_session_event(
+    await _send_event(
         session_id,
         {
             "type": "complete",
@@ -328,15 +328,15 @@ async def _finalize_scan_completion(
 async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepository) -> None:
     try:
         repo.update_session_status(session_id, ScanStatus.RUNNING)
-        await _send_session_event(session_id, {"type": "start", "session_id": session_id})
+        await _send_event(session_id, {"type": "start", "session_id": session_id})
 
-        found, high = await _run_scan_mode(
+        found, high = await _scan_mode(
             session_id=session_id,
             config=config,
             repo=repo,
         )
 
-        await _finalize_scan_completion(
+        await _finalize_scan(
             session_id=session_id,
             config=config,
             repo=repo,
@@ -345,7 +345,7 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
         )
     except Exception as exc:
         repo.update_session_status(session_id, ScanStatus.FAILED, error_message=str(exc))
-        await _send_session_event(session_id, {"type": "error", "message": str(exc)})
+        await _send_event(session_id, {"type": "error", "message": str(exc)})
     finally:
         active_scans.pop(session_id, None)
 
@@ -387,7 +387,7 @@ def get_scan_session_results(
 ) -> Dict[str, Any]:
     get_scan_session(repo=repo, session_id=session_id)
     results = repo.get_session_results(session_id, sort_by, sort_order, limit)
-    apply_relative_risk_labels_to_dict_results(results)
+    apply_risk_labels(results)
 
     slugs = [result["slug"] for result in results]
     statuses = repo.get_semgrep_statuses_for_slugs(slugs)

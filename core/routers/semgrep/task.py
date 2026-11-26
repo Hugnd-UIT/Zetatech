@@ -13,8 +13,8 @@ from paths import resolve_runtime_paths
 from scanners.semgrep import SemgrepScanner
 from core.routers.semgrep.helper import (
     CUSTOM_RULES_PATH,
-    _extract_bulk_plugin_meta,
-    _validate_slug_or_raise,
+    _bulk_meta,
+    _check_slug,
     get_active_rulesets,
     get_disabled_config,
 )
@@ -31,11 +31,11 @@ def stop_requested(stop_event: Optional[asyncio.Event]) -> bool:
     return bool(stop_event and stop_event.is_set())
 
 
-def mark_semgrep_scan_stopped(*, repo: ScanRepository, scan_id: int) -> None:
+def mark_stopped(*, repo: ScanRepository, scan_id: int) -> None:
     repo.update_semgrep_scan(scan_id, "failed", error="Stopped by user")
 
 
-async def download_plugin_for_semgrep(
+async def download_plugin(
     *,
     slug: str,
     download_url: str,
@@ -52,13 +52,13 @@ async def download_plugin_for_semgrep(
     return str(path) if path is not None else None
 
 
-def prepare_semgrep_output_dir(*, slug: str, scan_id: int) -> Path:
+def prepare_out(*, slug: str, scan_id: int) -> Path:
     out = SEMGREP_OUTPUTS_DIR / f"{slug}_{scan_id}"
     out.mkdir(parents=True, exist_ok=True)
     return out
 
 
-def copy_custom_rules_if_available(output_dir: Path) -> None:
+def copy_rules(output_dir: Path) -> None:
     if not CUSTOM_RULES_PATH.exists():
         return
     try:
@@ -67,7 +67,7 @@ def copy_custom_rules_if_available(output_dir: Path) -> None:
         logger.warning("Failed to copy custom Semgrep rules into scan directory.")
 
 
-def write_disabled_rules_snapshot(output_dir: Path) -> None:
+def write_disabled(output_dir: Path) -> None:
     rules = get_disabled_config().get("rules", [])
     if not rules:
         return
@@ -78,7 +78,7 @@ def write_disabled_rules_snapshot(output_dir: Path) -> None:
         logger.warning("Failed to write disabled rules for Semgrep scan.")
 
 
-async def execute_semgrep_scan(*, output_dir: Path, plugin_path: str, slug: str):
+async def exec_scan(*, output_dir: Path, plugin_path: str, slug: str):
     scanner = SemgrepScanner(
         output_dir=str(output_dir),
         use_registry_rules=True,
@@ -88,7 +88,7 @@ async def execute_semgrep_scan(*, output_dir: Path, plugin_path: str, slug: str)
     return await loop.run_in_executor(None, scanner.scan_plugin, str(plugin_path), slug)
 
 
-def build_semgrep_summary(findings: List[Dict[str, Any]], errors: Optional[List[str]] = None) -> Dict[str, Any]:
+def build_summary(findings: List[Dict[str, Any]], errors: Optional[List[str]] = None) -> Dict[str, Any]:
     summary = {
         "total_findings": len(findings),
         "breakdown": {"ERROR": 0, "WARNING": 0, "INFO": 0},
@@ -101,7 +101,7 @@ def build_semgrep_summary(findings: List[Dict[str, Any]], errors: Optional[List[
     return summary
 
 
-def persist_semgrep_findings(
+def save_findings(
     *,
     repo: ScanRepository,
     scan_id: int,
@@ -113,25 +113,25 @@ def persist_semgrep_findings(
         if stop_requested(stop_event):
             return None
         repo.save_semgrep_finding(scan_id, finding)
-    return build_semgrep_summary(findings, errors=errors)
+    return build_summary(findings, errors=errors)
 
 
-def validate_bulk_plugin(plugin: Dict[str, Any]) -> Dict[str, Any] | None:
+def check_plugin(plugin: Dict[str, Any]) -> Dict[str, Any] | None:
     raw_slug = plugin.get("slug")
     try:
-        plugin_meta = _extract_bulk_plugin_meta(plugin)
+        plugin_meta = _bulk_meta(plugin)
     except ValueError:
         logger.warning("Skipping plugin with invalid slug: %s", raw_slug)
         return None
     return plugin_meta
 
 
-async def pause_between_bulk_items(stop_event: asyncio.Event) -> None:
+async def pause_bulk(stop_event: asyncio.Event) -> None:
     for _ in range(BULK_SCAN_PAUSE_ITERATIONS):
         if stop_event.is_set():
             break
         await asyncio.sleep(BULK_SCAN_PAUSE_SECONDS)
 
 
-def validate_single_scan_slug(slug: str) -> str:
-    return _validate_slug_or_raise(slug)
+def check_slug(slug: str) -> str:
+    return _check_slug(slug)

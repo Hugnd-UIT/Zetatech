@@ -35,49 +35,49 @@ window.changeHistoryPage = function(delta) {
     renderHistoryRows(runtime.getHistoryFilteredCache());
 }
 
-function getHistorySessionMode(session) {
-    const config = session && session.config ? session.config : {};
-    return config.themes ? 'theme' : 'plugin';
+function modeFor(session) {
+    const cfg = session && session.config ? session.config : {};
+    return cfg.themes ? 'theme' : 'plugin';
 }
 
-function getHistoryRiskLevel(session) {
-    const highRiskCount = parseInt((session && session.high_risk_count) || 0, 10) || 0;
-    if (highRiskCount >= 20) return 'high';
-    if (highRiskCount >= 5) return 'medium';
+function riskFor(session) {
+    const high = parseInt((session && session.high_risk_count) || 0, 10) || 0;
+    if (high >= 20) return 'high';
+    if (high >= 5) return 'medium';
     return 'low';
 }
 
-function getHistoryFilterState() {
-    const queryEl = document.getElementById('history-filter-query');
-    const statusEl = document.getElementById('history-filter-status');
-    const modeEl = document.getElementById('history-filter-mode');
-    const riskEl = document.getElementById('history-filter-risk');
+function filterState() {
+    const qEl = document.getElementById('history-filter-query');
+    const sEl = document.getElementById('history-filter-status');
+    const mEl = document.getElementById('history-filter-mode');
+    const rEl = document.getElementById('history-filter-risk');
 
     return {
-        query: String(queryEl ? queryEl.value : '').trim().toLowerCase(),
-        status: String(statusEl ? statusEl.value : 'all').toLowerCase(),
-        mode: String(modeEl ? modeEl.value : 'all').toLowerCase(),
-        risk: String(riskEl ? riskEl.value : 'all').toLowerCase()
+        query: String(qEl ? qEl.value : '').trim().toLowerCase(),
+        status: String(sEl ? sEl.value : 'all').toLowerCase(),
+        mode: String(mEl ? mEl.value : 'all').toLowerCase(),
+        risk: String(rEl ? rEl.value : 'all').toLowerCase()
     };
 }
 
-function filterHistorySessions(sessions, filterState) {
-    const state = filterState || getHistoryFilterState();
+function filterSessions(sessions, stateInput) {
+    const state = stateInput || filterState();
 
     return (sessions || []).filter((session) => {
         const status = String((session && session.status) || '').toLowerCase();
-        const mode = getHistorySessionMode(session);
-        const risk = getHistoryRiskLevel(session);
-        const dateStr = new Date((session && (session.created_at || session.start_time)) || Date.now()).toLocaleString().toLowerCase();
-        const idStr = String((session && session.id) || '').toLowerCase();
+        const mode = modeFor(session);
+        const risk = riskFor(session);
+        const date = new Date((session && (session.created_at || session.start_time)) || Date.now()).toLocaleString().toLowerCase();
+        const id = String((session && session.id) || '').toLowerCase();
 
         if (state.status !== 'all' && status !== state.status) return false;
         if (state.mode !== 'all' && mode !== state.mode) return false;
         if (state.risk !== 'all' && risk !== state.risk) return false;
 
         if (state.query) {
-            const haystack = `${idStr} ${status} ${mode} ${dateStr}`;
-            if (!haystack.includes(state.query)) return false;
+            const text = `${id} ${status} ${mode} ${date}`;
+            if (!text.includes(state.query)) return false;
         }
 
         return true;
@@ -176,10 +176,9 @@ window.renderHistoryRows = function(sessions) {
 
 window.applyHistoryFilters = function() {
     runtime.setHistoryCurrentPage(1);
-    const filtered = filterHistorySessions(runtime.getHistorySessionsCache(), getHistoryFilterState());
+    const filtered = filterSessions(runtime.getHistorySessionsCache(), filterState());
     renderHistoryRows(filtered);
-}
-
+};
 
 window.initializeHistoryFilters = function() {
     if (window.__historyFiltersInitialized) return;
@@ -188,16 +187,14 @@ window.initializeHistoryFilters = function() {
     const modeEl = document.getElementById('history-filter-mode');
     const riskEl = document.getElementById('history-filter-risk');
 
-    const controls = [queryEl, statusEl, modeEl, riskEl].filter(Boolean);
-    if (controls.length === 0) return;
+    const ctrls = [queryEl, statusEl, modeEl, riskEl].filter(Boolean);
+    if (ctrls.length === 0) return;
 
-    controls.forEach((control) => {
-        const eventName = control.tagName === 'SELECT' ? 'change' : 'input';
-        control.addEventListener(eventName, applyHistoryFilters);
+    ctrls.forEach((ctrl) => {
+        const evt = ctrl.tagName === 'SELECT' ? 'change' : 'input';
+        ctrl.addEventListener(evt, applyHistoryFilters);
     });
 
     window.__historyFiltersInitialized = true;
-}
-
-
+};
 })();

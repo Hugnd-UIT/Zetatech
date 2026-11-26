@@ -50,33 +50,33 @@ def _build_zip_bytes(*, slug: str, filename: str = "plugin.php", content: bytes 
     return payload.getvalue()
 
 
-def test_download_and_extract_succeeds_with_relative_redirect(monkeypatch, tmp_path):
-    runtime_root = tmp_path / ".zetatech"
+def test_relative_redirect(monkeypatch, tmp_path):
+    root = tmp_path / ".zetatech"
     monkeypatch.setattr(
         "downloaders.plugin.resolve_runtime_paths",
         lambda: RuntimePaths(
-            root=runtime_root,
-            db_file=runtime_root / "zetatech.db",
-            logs_dir=runtime_root / "logs",
-            plugins_dir=runtime_root / "plugins",
-            semgrep_dir=runtime_root / "semgrep",
-            semgrep_outputs_dir=runtime_root / "semgrep-results",
-            approvals_dir=runtime_root / "approvals",
+            root=root,
+            db_file=root / "zetatech.db",
+            logs_dir=root / "logs",
+            plugins_dir=root / "plugins",
+            semgrep_dir=root / "semgrep",
+            semgrep_outputs_dir=root / "semgrep-results",
+            approvals_dir=root / "approvals",
         ),
     )
     slug = "akismet"
-    archive_bytes = _build_zip_bytes(slug=slug)
+    raw = _build_zip_bytes(slug=slug)
     calls = []
 
     class _PinnedResponse:
         def __init__(self, *, status, location=None, body=b""):
             self.status = status
-            self._location = location
+            self._loc = location
             self._body = io.BytesIO(body)
 
         def getheader(self, name, default=None):
             if name.lower() == "location":
-                return self._location if self._location is not None else default
+                return self._loc if self._loc is not None else default
             return default
 
         def read(self, chunk_size=8192):
@@ -89,9 +89,9 @@ def test_download_and_extract_succeeds_with_relative_redirect(monkeypatch, tmp_p
         def close(self):
             return None
 
-    responses = [
+    resps = [
         (_PinnedConnection(), _PinnedResponse(status=302, location="/plugin.zip")),
-        (_PinnedConnection(), _PinnedResponse(status=200, body=archive_bytes)),
+        (_PinnedConnection(), _PinnedResponse(status=200, body=raw)),
     ]
 
     monkeypatch.setattr("downloaders.plugin.get_session", lambda: object())
@@ -101,34 +101,34 @@ def test_download_and_extract_succeeds_with_relative_redirect(monkeypatch, tmp_p
         lambda self, url: ("downloads.wordpress.org", ["93.184.216.34"]),
     )
 
-    def fake_open(self, url, hostname, validated_ips):
-        calls.append({"url": url, "hostname": hostname, "validated_ips": validated_ips})
-        return responses.pop(0)
+    def _open(self, url, host, ips):
+        calls.append({"url": url, "hostname": host, "validated_ips": ips})
+        return resps.pop(0)
 
-    monkeypatch.setattr(PluginDownloader, "_open_pinned_response", fake_open)
+    monkeypatch.setattr(PluginDownloader, "_open_pinned", _open)
 
-    downloader = PluginDownloader()
-    extracted = downloader.download_and_extract(
+    dl = PluginDownloader()
+    out = dl.download_and_extract(
         "https://downloads.wordpress.org/plugin/akismet.latest.zip",
         slug,
         verbose=False,
     )
 
-    assert extracted is not None
-    assert extracted.exists()
-    plugin_file = extracted / "plugin.php"
-    assert plugin_file.exists()
-    assert plugin_file.read_text(encoding="utf-8") == "<?php echo 'ok';"
+    assert out is not None
+    assert out.exists()
+    file = out / "plugin.php"
+    assert file.exists()
+    assert file.read_text(encoding="utf-8") == "<?php echo 'ok';"
     assert len(calls) == 2
     assert calls[0]["url"].startswith("https://downloads.wordpress.org/plugin/")
     assert calls[1]["url"] == "https://downloads.wordpress.org/plugin.zip"
 
 
-def test_download_and_extract_returns_none_on_zip_slip(monkeypatch, tmp_path):
+def test_zip_slip(monkeypatch, tmp_path):
     slug = "akismet"
 
-    malicious_payload = io.BytesIO()
-    with zipfile.ZipFile(malicious_payload, "w", zipfile.ZIP_DEFLATED) as zf:
+    raw = io.BytesIO()
+    with zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("../escape.php", b"<?php // bad")
 
     class _PinnedResponse:
@@ -157,31 +157,31 @@ def test_download_and_extract_returns_none_on_zip_slip(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         PluginDownloader,
-        "_open_pinned_response",
-        lambda self, url, hostname, validated_ips: (_PinnedConnection(), _PinnedResponse(malicious_payload.getvalue())),
+        "_open_pinned",
+        lambda self, url, host, ips: (_PinnedConnection(), _PinnedResponse(raw.getvalue())),
     )
 
-    runtime_root = tmp_path / ".zetatech"
+    root = tmp_path / ".zetatech"
     monkeypatch.setattr(
         "downloaders.plugin.resolve_runtime_paths",
         lambda: RuntimePaths(
-            root=runtime_root,
-            db_file=runtime_root / "zetatech.db",
-            logs_dir=runtime_root / "logs",
-            plugins_dir=runtime_root / "plugins",
-            semgrep_dir=runtime_root / "semgrep",
-            semgrep_outputs_dir=runtime_root / "semgrep-results",
-            approvals_dir=runtime_root / "approvals",
+            root=root,
+            db_file=root / "zetatech.db",
+            logs_dir=root / "logs",
+            plugins_dir=root / "plugins",
+            semgrep_dir=root / "semgrep",
+            semgrep_outputs_dir=root / "semgrep-results",
+            approvals_dir=root / "approvals",
         ),
     )
 
-    downloader = PluginDownloader()
-    extracted = downloader.download_and_extract(
+    dl = PluginDownloader()
+    out = dl.download_and_extract(
         "https://downloads.wordpress.org/plugin/akismet.latest.zip",
         slug,
         verbose=False,
     )
 
-    assert extracted is None
-    plugin_dir = runtime_root / "plugins" / "Plugins" / slug
-    assert not plugin_dir.exists()
+    assert out is None
+    dir = root / "plugins" / "Plugins" / slug
+    assert not dir.exists()

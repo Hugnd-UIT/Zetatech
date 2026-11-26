@@ -10,15 +10,15 @@ SESSION_OVERFETCH_MINIMUM = 200
 SESSION_RESULT_LIMIT = MAX_QUERY_LIMIT * 10 - 1
 
 
-def _parse_json_value(raw: Any) -> Any:
+def _parse_json(raw: Any) -> Any:
     return json.loads(raw) if raw else None
 
 
-def _parse_csv_list(raw: Any) -> List[str]:
+def _parse_csv(raw: Any) -> List[str]:
     return str(raw).split(",") if raw else []
 
 
-def _serialize_code_analysis(result: PluginResult) -> str | None:
+def _serialize_code(result: PluginResult) -> str | None:
     if not result.code_analysis:
         return None
     return json.dumps(
@@ -33,20 +33,20 @@ def _serialize_code_analysis(result: PluginResult) -> str | None:
     )
 
 
-def _serialize_session_row(row: Dict[str, Any], *, status_override: str | None = None, is_merged: bool = False) -> Dict[str, Any]:
+def _session_row(row: Dict[str, Any], *, status_override: str | None = None, is_merged: bool = False) -> Dict[str, Any]:
     return {
         "id": row["id"],
         "created_at": row["created_at"],
         "status": status_override or row["status"],
         "is_merged": is_merged,
-        "config": _parse_json_value(row.get("config_json")),
+        "config": _parse_json(row.get("config_json")),
         "total_found": row["total_found"],
         "high_risk_count": row["high_risk_count"],
         "error_message": row["error_message"],
     }
 
 
-def _serialize_result_row(row: Dict[str, Any]) -> Dict[str, Any]:
+def _result_row(row: Dict[str, Any]) -> Dict[str, Any]:
     result = {
         "id": row["id"],
         "slug": row["slug"],
@@ -61,9 +61,9 @@ def _serialize_result_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "is_user_facing": bool(row["is_user_facing"]),
         "is_duplicate": bool(row["is_duplicate"]) if "is_duplicate" in row.keys() else False,
         "is_theme": bool(row["is_theme"]) if "is_theme" in row.keys() else False,
-        "risk_tags": _parse_csv_list(row["risk_tags"]),
-        "security_flags": _parse_csv_list(row["security_flags"]),
-        "feature_flags": _parse_csv_list(row["feature_flags"]),
+        "risk_tags": _parse_csv(row["risk_tags"]),
+        "security_flags": _parse_csv(row["security_flags"]),
+        "feature_flags": _parse_csv(row["feature_flags"]),
         "download_link": row["download_link"],
         "wp_org_link": row["wp_org_link"] if "wp_org_link" in row.keys() else None,
         "cve_search_link": row["cve_search_link"],
@@ -133,7 +133,7 @@ class SessionMixin:
             )
             conn.commit()
 
-    def _mark_result_duplicate_if_needed(self, cursor: Any, session_id: int, result: PluginResult) -> None:
+    def _mark_dup(self, cursor: Any, session_id: int, result: PluginResult) -> None:
         cursor.execute(
             """
             SELECT 1 FROM scan_results
@@ -148,8 +148,8 @@ class SessionMixin:
     def save_result(self, session_id: int, result: PluginResult) -> int:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            self._mark_result_duplicate_if_needed(cursor, session_id, result)
-            code_analysis_json = _serialize_code_analysis(result)
+            self._mark_dup(cursor, session_id, result)
+            code_analysis_json = _serialize_code(result)
 
             cursor.execute(
                 """
@@ -186,8 +186,8 @@ class SessionMixin:
                 ),
             )
             inserted_id = cursor.lastrowid or 0
-            session_created_at = self._get_session_created_at(cursor, session_id)
-            self._upsert_catalog_entry(cursor, session_id, session_created_at, result)
+            session_created_at = self._session_time(cursor, session_id)
+            self._upsert_catalog(cursor, session_id, session_created_at, result)
             conn.commit()
             return inserted_id
 
@@ -196,9 +196,9 @@ class SessionMixin:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM scan_sessions WHERE id = ?", (session_id,))
             row = cursor.fetchone()
-            return _serialize_session_row(dict(row)) if row else None
+            return _session_row(dict(row)) if row else None
 
-    def _fetch_recent_session_rows(self, cursor: Any, limit: int) -> List[Dict[str, Any]]:
+    def _recent_rows(self, cursor: Any, limit: int) -> List[Dict[str, Any]]:
         cursor.execute(
             """
             SELECT * FROM scan_sessions
@@ -209,7 +209,7 @@ class SessionMixin:
         )
         return [dict(row) for row in cursor.fetchall()]
 
-    def _fetch_slugs_by_session(self, cursor: Any, session_ids: List[int]) -> Dict[int, Set[str]]:
+    def _slugs_by_session(self, cursor: Any, session_ids: List[int]) -> Dict[int, Set[str]]:
         if not session_ids:
             return {}
         marks = ",".join(["?"] * len(session_ids))
@@ -227,7 +227,7 @@ class SessionMixin:
             map.setdefault(sid, set()).add(str(row["slug"]))
         return map
 
-    def _build_completed_signature_counts(
+    def _signature_counts(
         self,
         rows: List[Dict[str, Any]],
         slugs_by_session: Dict[int, Set[str]],
@@ -246,15 +246,15 @@ class SessionMixin:
     def get_all_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
             cur = conn.cursor()
-            rows = self._fetch_recent_session_rows(cur, limit)
+            rows = self._recent_rows(cur, limit)
             if not rows:
                 return []
 
-            by_sid = self._fetch_slugs_by_session(
+            by_sid = self._slugs_by_session(
                 cur,
                 [int(row["id"]) for row in rows],
             )
-            counts = self._build_completed_signature_counts(rows, by_sid)
+            counts = self._signature_counts(rows, by_sid)
 
             sessions: List[Dict[str, Any]] = []
             seen: Set[Tuple[bool, Tuple[str, ...]]] = set()
@@ -277,7 +277,7 @@ class SessionMixin:
                 )
                 state = ScanStatus.MERGED.value if merged else row["status"]
                 sessions.append(
-                    _serialize_session_row(
+                    _session_row(
                         row,
                         status_override=state,
                         is_merged=merged,
@@ -313,7 +313,7 @@ class SessionMixin:
             """,
                 (session_id, lim),
             )
-            return [_serialize_result_row(dict(row)) for row in cur.fetchall()]
+            return [_result_row(dict(row)) for row in cur.fetchall()]
 
     def delete_session(self, session_id: int) -> bool:
         with get_db(self.db_path) as conn:
@@ -328,7 +328,7 @@ class SessionMixin:
             cur.execute("DELETE FROM scan_sessions WHERE id = ?", (session_id,))
             deleted = cur.rowcount > 0
             for cid in set(cat_ids):
-                self._refresh_catalog_entry(cur, cid)
+                self._refresh_catalog(cur, cid)
             conn.commit()
             return deleted
 

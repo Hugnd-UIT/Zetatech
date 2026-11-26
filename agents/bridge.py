@@ -39,7 +39,7 @@ def _parse_line(raw: str) -> Dict[str, Any]:
         raise BridgeProtocolError("AI agent bridge returned malformed output.") from exc
 
 
-def _build_child_env(payload: Dict[str, Any]) -> Dict[str, str]:
+def _child_env(payload: Dict[str, Any]) -> Dict[str, str]:
     env = os.environ.copy()
     env.pop("ZETATECH_AI_API_KEY", None)
 
@@ -59,12 +59,12 @@ def _strip_env(payload: Dict[str, Any]) -> Dict[str, Any]:
     return safe
 
 
-def run_agent_bridge_stream(
+def stream_bridge(
     payload: Dict[str, Any],
     timeout_seconds: int = TIMEOUT,
 ) -> Iterator[Dict[str, Any]]:
     _check_env()
-    env = _build_child_env(payload)
+    env = _child_env(payload)
     safe = _strip_env(payload)
 
     try:
@@ -130,7 +130,7 @@ def run_agent_bridge(
     result: Dict[str, Any] = {}
     output = ""
 
-    for event in run_agent_bridge_stream(payload, timeout_seconds=timeout_seconds):
+    for event in stream_bridge(payload, timeout_seconds=timeout_seconds):
         kind = event.get("type")
         data = event.get("data") or {}
         if kind == "run_completed":

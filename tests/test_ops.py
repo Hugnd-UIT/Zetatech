@@ -15,12 +15,12 @@ from infrastructure.workflow_validation import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _read_workflow(name: str) -> dict:
+def _wf(name: str) -> dict:
     return yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
 
 
-def test_normalize_workflow_inputs_preserves_expected_metadata_values():
-    inputs = normalize_workflow_inputs(
+def test_normalize_inputs():
+    inp = normalize_workflow_inputs(
         image_version=" 0.1.3 ",
         image_tag=" v0.1.3 ",
         image_build=" sha-123 ",
@@ -28,7 +28,7 @@ def test_normalize_workflow_inputs_preserves_expected_metadata_values():
         release_mode=False,
     )
 
-    assert inputs == ValidationWorkflowInputs(
+    assert inp == ValidationWorkflowInputs(
         image_version="0.1.3",
         image_tag="v0.1.3",
         image_build="sha-123",
@@ -37,7 +37,7 @@ def test_normalize_workflow_inputs_preserves_expected_metadata_values():
     )
 
 
-def test_smoke_required_update_fields_match_contract_expectations():
+def test_required_fields():
     assert SMOKE_REQUIRED_UPDATE_FIELDS == (
         "current_version",
         "current_tag",
@@ -48,7 +48,7 @@ def test_smoke_required_update_fields_match_contract_expectations():
     )
 
 
-def test_runtime_contract_output_tracks_smoke_setting():
+def test_contract_output():
     assert runtime_contract_output(
         ValidationWorkflowInputs("ci", "main", "sha-1", True, False)
     ) == "true"
@@ -57,7 +57,7 @@ def test_runtime_contract_output_tracks_smoke_setting():
     ) == "false"
 
 
-def test_validated_image_ref_matches_validation_mode():
+def test_image_ref():
     assert validated_image_ref(
         ValidationWorkflowInputs("ci", "main", "sha-1", True, False)
     ) == "zetatech:ci-validation"
@@ -66,24 +66,24 @@ def test_validated_image_ref_matches_validation_mode():
     ) == "zetatech:release-validation"
 
 
-def test_reusable_validation_workflow_runs_shared_validation_chain():
-    workflow = _read_workflow("ops.yml")
-    workflow_call = workflow[True]["workflow_call"]
-    inputs = workflow_call["inputs"]
-    outputs = workflow_call["outputs"]
-    job = workflow["jobs"]["validate"]
+def test_ops_chain():
+    wf = _wf("ops.yml")
+    call = wf[True]["workflow_call"]
+    inp = call["inputs"]
+    out = call["outputs"]
+    job = wf["jobs"]["validate"]
     steps = job["steps"]
-    step_names = [step["name"] for step in steps]
+    names = [step["name"] for step in steps]
 
-    assert set(inputs) == {
+    assert set(inp) == {
         "version",
         "tag",
         "build",
         "test",
         "release",
     }
-    assert set(outputs) == {"image", "result"}
-    assert step_names == [
+    assert set(out) == {"image", "result"}
+    assert names == [
         "Checkout repository",
         "Resolve image reference",
         "Set up Python",
@@ -100,39 +100,39 @@ def test_reusable_validation_workflow_runs_shared_validation_chain():
     assert steps[7]["run"] == CANONICAL_NODE_TEST_COMMAND
 
 
-def test_reusable_validation_workflow_uses_one_canonical_node_test_command_for_all_parity_runs():
-    workflow = _read_workflow("ops.yml")
-    run_node_tests_step = workflow["jobs"]["validate"]["steps"][7]
+def test_node_cmd():
+    wf = _wf("ops.yml")
+    step = wf["jobs"]["validate"]["steps"][7]
 
-    assert run_node_tests_step["name"] == "Run Node tests"
-    assert run_node_tests_step["run"] == CANONICAL_NODE_TEST_COMMAND
+    assert step["name"] == "Run Node tests"
+    assert step["run"] == CANONICAL_NODE_TEST_COMMAND
 
 
-def test_node_runner_package_test_script_matches_canonical_workflow_command():
-    package = yaml.safe_load((ROOT / "agents" / "nodejs" / "package.json").read_text(encoding="utf-8"))
+def test_package_script():
+    pkg = yaml.safe_load((ROOT / "agents" / "nodejs" / "package.json").read_text(encoding="utf-8"))
 
-    assert package["scripts"]["test"] == "node --import tsx --test --test-force-exit test/nodejs.test.ts"
+    assert pkg["scripts"]["test"] == "node --import tsx --test --test-force-exit test/nodejs.test.ts"
     assert CANONICAL_NODE_TEST_COMMAND == "npm --prefix agents/nodejs run test"
-    assert "--test-force-exit" in package["scripts"]["test"]
+    assert "--test-force-exit" in pkg["scripts"]["test"]
 
 
-def test_ci_workflow_preserves_push_pr_and_manual_triggers():
-    workflow = _read_workflow("ci.yml")
-    triggers = workflow[True]
+def test_ci_triggers():
+    wf = _wf("ci.yml")
+    trig = wf[True]
 
-    assert triggers == {
+    assert trig == {
         "pull_request": {"branches": ["main"]},
         "push": {"branches": ["main"]},
         "workflow_dispatch": None,
     }
 
 
-def test_ci_workflow_calls_reusable_validation_with_ci_metadata():
-    workflow = _read_workflow("ci.yml")
-    validate_job = workflow["jobs"]["validate"]
+def test_ci_inputs():
+    wf = _wf("ci.yml")
+    job = wf["jobs"]["validate"]
 
-    assert validate_job["uses"] == "./.github/workflows/ops.yml"
-    assert validate_job["with"] == {
+    assert job["uses"] == "./.github/workflows/ops.yml"
+    assert job["with"] == {
         "version": "ci",
         "tag": "${{ github.ref_name }}",
         "build": "${{ github.sha }}",
@@ -141,123 +141,123 @@ def test_ci_workflow_calls_reusable_validation_with_ci_metadata():
     }
 
 
-def test_ci_workflow_remains_a_thin_caller_without_inline_validation_steps():
-    workflow = _read_workflow("ci.yml")
-    validate_job = workflow["jobs"]["validate"]
+def test_ci_thin():
+    wf = _wf("ci.yml")
+    job = wf["jobs"]["validate"]
 
-    assert set(workflow["jobs"]) == {"validate"}
-    assert "steps" not in validate_job
-    assert set(validate_job) == {"uses", "with"}
+    assert set(wf["jobs"]) == {"validate"}
+    assert "steps" not in job
+    assert set(job) == {"uses", "with"}
 
 
-def test_reusable_validation_smoke_waits_for_health_before_update_contract():
-    workflow = _read_workflow("ops.yml")
-    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
-    run_script = smoke_step["run"]
+def test_smoke_health():
+    wf = _wf("ops.yml")
+    step = wf["jobs"]["validate"]["steps"][-2]
+    run = step["run"]
 
-    assert "wait http://127.0.0.1:18080/health" in run_script
-    assert "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update.json" in run_script
-    assert run_script.index("wait http://127.0.0.1:18080/health") < run_script.index(
+    assert "wait http://127.0.0.1:18080/health" in run
+    assert "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update.json" in run
+    assert run.index("wait http://127.0.0.1:18080/health") < run.index(
         "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update.json"
     )
 
 
-def test_reusable_validation_smoke_uses_documented_runtime_mounts():
-    workflow = _read_workflow("ops.yml")
-    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
-    run_script = smoke_step["run"]
+def test_smoke_mounts():
+    wf = _wf("ops.yml")
+    step = wf["jobs"]["validate"]["steps"][-2]
+    run = step["run"]
 
-    assert 'docker run -d --name "$name" -p 18080:8080 \\' in run_script
-    assert '-v zetatech-data:/home/appuser/.zetatech \\' in run_script
-    assert '-v zetatech-plugin:/app/Plugins \\' in run_script
-    assert '-v zetatech-semgrep:/app/semgrep_results \\' in run_script
-    assert "docker volume create zetatech-data" in run_script
-    assert "docker volume create zetatech-plugin" in run_script
-    assert "docker volume create zetatech-semgrep" in run_script
+    assert 'docker run -d --name "$name" -p 18080:8080 \\' in run
+    assert '-v zetatech-data:/home/appuser/.zetatech \\' in run
+    assert '-v zetatech-plugin:/app/Plugins \\' in run
+    assert '-v zetatech-semgrep:/app/semgrep_results \\' in run
+    assert "docker volume create zetatech-data" in run
+    assert "docker volume create zetatech-plugin" in run
+    assert "docker volume create zetatech-semgrep" in run
 
 
-def test_reusable_validation_smoke_verifies_mounted_paths_are_writable():
-    workflow = _read_workflow("ops.yml")
-    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
-    run_script = smoke_step["run"]
+def test_smoke_writable():
+    wf = _wf("ops.yml")
+    step = wf["jobs"]["validate"]["steps"][-2]
+    run = step["run"]
 
-    assert "check()" in run_script
-    assert "check zetatech-smoke" in run_script
-    assert "check zetatech-smoke-recreated" in run_script
-    assert "touch /home/appuser/.zetatech/write-test" in run_script
-    assert "touch /app/Plugins/write-test" in run_script
-    assert "touch /app/semgrep_results/write-test" in run_script
-    assert run_script.index("check zetatech-smoke") < run_script.index(
+    assert "check()" in run
+    assert "check zetatech-smoke" in run
+    assert "check zetatech-smoke-recreated" in run
+    assert "touch /home/appuser/.zetatech/write-test" in run
+    assert "touch /app/Plugins/write-test" in run
+    assert "touch /app/semgrep_results/write-test" in run
+    assert run.index("check zetatech-smoke") < run.index(
         "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update.json"
     )
-    assert run_script.index("check zetatech-smoke-recreated") < run_script.index(
+    assert run.index("check zetatech-smoke-recreated") < run.index(
         "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update-recreated.json"
     )
 
 
-def test_reusable_validation_smoke_verifies_restart_and_recreate_persistence_contract():
-    workflow = _read_workflow("ops.yml")
-    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
-    run_script = smoke_step["run"]
+def test_smoke_persist():
+    wf = _wf("ops.yml")
+    step = wf["jobs"]["validate"]["steps"][-2]
+    run = step["run"]
 
-    assert "docker exec zetatech-smoke python - <<'PY'" in run_script
-    assert "docker restart zetatech-smoke >/dev/null" in run_script
-    assert "docker rm -f zetatech-smoke >/dev/null" in run_script
-    assert "start zetatech-smoke-recreated" in run_script
-    assert "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update-recreated.json" in run_script
-    assert "persisted across restart and recreate" in run_script
-    assert "Path('/home/appuser/.zetatech/acceptance/persistence.txt')" in run_script
-
-
-def test_reusable_validation_smoke_cleans_up_volume_and_containers():
-    workflow = _read_workflow("ops.yml")
-    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
-    run_script = smoke_step["run"]
-
-    assert "docker rm -f zetatech-smoke zetatech-smoke-recreated >/dev/null 2>&1 || true" in run_script
-    assert "docker volume rm zetatech-data zetatech-plugin zetatech-semgrep >/dev/null 2>&1 || true" in run_script
-    assert "trap clean EXIT" in run_script
-    assert "docker logs zetatech-smoke || true" in run_script
-    assert "docker logs zetatech-smoke-recreated || true" in run_script
-    assert "clean" in run_script
-    assert "trap - EXIT" in run_script
+    assert "docker exec zetatech-smoke python - <<'PY'" in run
+    assert "docker restart zetatech-smoke >/dev/null" in run
+    assert "docker rm -f zetatech-smoke >/dev/null" in run
+    assert "start zetatech-smoke-recreated" in run
+    assert "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update-recreated.json" in run
+    assert "persisted across restart and recreate" in run
+    assert "Path('/home/appuser/.zetatech/acceptance/persistence.txt')" in run
 
 
-def test_reusable_validation_smoke_checks_update_contract_after_recreate():
-    workflow = _read_workflow("ops.yml")
-    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
-    run_script = smoke_step["run"]
+def test_smoke_clean():
+    wf = _wf("ops.yml")
+    step = wf["jobs"]["validate"]["steps"][-2]
+    run = step["run"]
 
-    assert "for name in ('/tmp/zetatech-system-update.json', '/tmp/zetatech-system-update-recreated.json'):" in run_script
-    assert "missing = required - payload.keys()" in run_script
-    assert "manual_update_required" in run_script
-    assert "runtime_status" in run_script
-    assert "current_tag" in run_script
-    assert "current_version" in run_script
-    assert "update_available" in run_script
-    assert "status" in run_script
-    assert "Missing keys from {name}: {sorted(missing)}" in run_script
-    assert run_script.index("/tmp/zetatech-system-update-recreated.json") > run_script.index(
+    assert "docker rm -f zetatech-smoke zetatech-smoke-recreated >/dev/null 2>&1 || true" in run
+    assert "docker volume rm zetatech-data zetatech-plugin zetatech-semgrep >/dev/null 2>&1 || true" in run
+    assert "trap clean EXIT" in run
+    assert "docker logs zetatech-smoke || true" in run
+    assert "docker logs zetatech-smoke-recreated || true" in run
+    assert "clean" in run
+    assert "trap - EXIT" in run
+
+
+def test_smoke_update():
+    wf = _wf("ops.yml")
+    step = wf["jobs"]["validate"]["steps"][-2]
+    run = step["run"]
+
+    assert "for name in ('/tmp/zetatech-system-update.json', '/tmp/zetatech-system-update-recreated.json'):" in run
+    assert "missing = required - payload.keys()" in run
+    assert "manual_update_required" in run
+    assert "runtime_status" in run
+    assert "current_tag" in run
+    assert "current_version" in run
+    assert "update_available" in run
+    assert "status" in run
+    assert "Missing keys from {name}: {sorted(missing)}" in run
+    assert run.index("/tmp/zetatech-system-update-recreated.json") > run.index(
         "/tmp/zetatech-system-update.json"
     )
 
 
-def test_dockerfile_defines_healthcheck():
-    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+def test_docker_health():
+    df = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6" in dockerfile
-    assert "http://127.0.0.1:8080/health" in dockerfile
-
-
-def test_app_exposes_health_endpoint_as_public_route():
-    app_text = (ROOT / "core" / "app.py").read_text(encoding="utf-8")
-
-    assert '"/health"' in app_text
-    assert '@app.get("/health")' in app_text
-    assert 'JSONResponse({"status": "ok"})' in app_text
+    assert "HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6" in df
+    assert "http://127.0.0.1:8080/health" in df
 
 
-def test_health_endpoint_returns_ok(monkeypatch):
+def test_public_health():
+    txt = (ROOT / "core" / "app.py").read_text(encoding="utf-8")
+
+    assert '"/health"' in txt
+    assert '@app.get("/health")' in txt
+    assert 'JSONResponse({"status": "ok"})' in txt
+
+
+def test_health_ok(monkeypatch):
     monkeypatch.setattr(
         "core.app.release.manager.get_status",
         lambda force=False: {"status": "ok"},
@@ -269,18 +269,18 @@ def test_health_endpoint_returns_ok(monkeypatch):
     from fastapi.testclient import TestClient
     from core.app import create_app
 
-    client = TestClient(create_app(), base_url="http://localhost")
-    response = client.get("/health")
+    cli = TestClient(create_app(), base_url="http://localhost")
+    res = cli.get("/health")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-    assert response.headers["content-type"].startswith("application/json")
-    assert response.request.url.path == "/health"
-    assert response.request.headers["host"] == "localhost"
-    assert response.request.method == "GET"
-    assert response.request.url.scheme == "http"
-    assert str(response.request.url).startswith("http://localhost/health")
-    assert response.request.headers["accept"] == "*/*"
-    assert response.request.headers["connection"] == "keep-alive"
-    assert response.request.headers["user-agent"]
-    assert client.headers.get("host", "") == ""
+    assert res.status_code == 200
+    assert res.json() == {"status": "ok"}
+    assert res.headers["content-type"].startswith("application/json")
+    assert res.request.url.path == "/health"
+    assert res.request.headers["host"] == "localhost"
+    assert res.request.method == "GET"
+    assert res.request.url.scheme == "http"
+    assert str(res.request.url).startswith("http://localhost/health")
+    assert res.request.headers["accept"] == "*/*"
+    assert res.request.headers["connection"] == "keep-alive"
+    assert res.request.headers["user-agent"]
+    assert cli.headers.get("host", "") == ""

@@ -1,9 +1,9 @@
 from database.repos import ScanRepository
 
 
-def test_add_favorite_persists_record(tmp_path):
-    db_path = tmp_path / "favorites.db"
-    repo = ScanRepository(db_path)
+def test_add_favorite(tmp_path):
+    db = tmp_path / "favorites.db"
+    repo = ScanRepository(db)
 
     payload = {
         "slug": "akismet",
@@ -30,8 +30,8 @@ def test_add_favorite_persists_record(tmp_path):
 
     assert repo.add_favorite(payload) is True
 
-    favorites = repo.get_favorites()
-    assert len(favorites) == 1
-    assert favorites[0]["slug"] == "akismet"
-    assert favorites[0]["feature_flags"] == ["settings-page"]
-    assert favorites[0]["code_analysis"]["summary"] == "ok"
+    favs = repo.get_favorites()
+    assert len(favs) == 1
+    assert favs[0]["slug"] == "akismet"
+    assert favs[0]["feature_flags"] == ["settings-page"]
+    assert favs[0]["code_analysis"]["summary"] == "ok"

@@ -77,29 +77,29 @@ def _create_test_client(monkeypatch, db_path):
     return TestClient(create_app(), base_url="http://localhost")
 
 
-def test_classify_message_intent_always_routes_to_workspace(tmp_path):
+def test_intent_routes(tmp_path):
     from core.routers.agents.intent import classify_message_intent
 
     repo = AIRepository(db_path=tmp_path / "ai_router.db")
     thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    social_intent = classify_message_intent(content="hello", repo=repo, thread_id=thread["id"])
-    assert social_intent["needs_tools"] is True
-    assert social_intent["needs_workspace_access"] is True
+    chat = classify_message_intent(content="hello", repo=repo, thread_id=thread["id"])
+    assert chat["needs_tools"] is True
+    assert chat["needs_workspace_access"] is True
 
-    workspace_intent = classify_message_intent(content="scan this plugin source code for security issues", repo=repo, thread_id=thread["id"])
-    assert workspace_intent["needs_tools"] is True
-    assert workspace_intent["needs_workspace_access"] is True
-    assert workspace_intent["execution_mode"] == "raw_open_multi_agent"
+    work = classify_message_intent(content="scan this plugin source code for security issues", repo=repo, thread_id=thread["id"])
+    assert work["needs_tools"] is True
+    assert work["needs_workspace_access"] is True
+    assert work["execution_mode"] == "raw_open_multi_agent"
 
 
-def test_resolve_message_intent_returns_raw_open_multi_agent_shape(tmp_path):
+def test_intent_shape(tmp_path):
     from core.routers.agents.intent import resolve_message_intent
 
     repo = AIRepository(db_path=tmp_path / "ai_router.db")
     thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    result = resolve_message_intent(
+    res = resolve_message_intent(
         content="read the source and summarize the main attack surface",
         repo=repo,
         thread_id=thread["id"],
@@ -108,26 +108,26 @@ def test_resolve_message_intent_returns_raw_open_multi_agent_shape(tmp_path):
         active_provider={"provider": "anthropic", "api_key": "k", "model": "m"},
     )
 
-    assert result["execution_mode"] == "raw_open_multi_agent"
-    assert result["team_mode"] == "single_agent"
-    assert result["normalized_decision"]["composition_source"] == "raw_open_multi_agent"
+    assert res["execution_mode"] == "raw_open_multi_agent"
+    assert res["team_mode"] == "single_agent"
+    assert res["normalized_decision"]["composition_source"] == "raw_open_multi_agent"
 
 
-def test_summarize_recent_thread_context_returns_recent_messages(tmp_path):
-    from core.routers.agents.service import summarize_recent_thread_context
+def test_thread_summary(tmp_path):
+    from core.routers.agents.intent import recent_context
 
     repo = AIRepository(db_path=tmp_path / "ai_router.db")
     thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
     repo.create_message(thread_id=thread["id"], role="user", content="First message")
     repo.create_message(thread_id=thread["id"], role="assistant", content="First reply")
 
-    summary = summarize_recent_thread_context(repo, thread["id"])
+    out = recent_context(repo, thread["id"])
 
-    assert "- user: First message" in summary
-    assert "- assistant: First reply" in summary
+    assert "- user: First message" in out
+    assert "- assistant: First reply" in out
 
 
-def test_list_thread_messages_keeps_long_running_runs_pending(monkeypatch, tmp_path):
+def test_pending_runs(monkeypatch, tmp_path):
     db_path = tmp_path / "ai_router.db"
     repo = AIRepository(db_path=db_path)
     thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
@@ -154,7 +154,7 @@ def test_list_thread_messages_keeps_long_running_runs_pending(monkeypatch, tmp_p
     assert data["messages"][0]["role"] == "user"
 
 
-def test_list_thread_messages_hides_stale_pending_approval_for_completed_run(monkeypatch, tmp_path):
+def test_stale_approval(monkeypatch, tmp_path):
     db_path = tmp_path / "ai_router.db"
     repo = AIRepository(db_path=db_path)
     thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
@@ -188,67 +188,67 @@ def test_list_thread_messages_hides_stale_pending_approval_for_completed_run(mon
     assert data["pending_approval"] is None
 
 
-def test_create_message_workspace_default_prepares_workspace_even_for_short_prompt(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    repository.upsert_provider_settings(
+def test_short_prompt(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    repo.upsert_provider_settings(
         provider="anthropic",
         api_key="test-key",
         model="claude-3-7-sonnet",
         base_url="https://api.anthropic.com",
         is_active=True,
     )
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
     _patch_runtime_paths(monkeypatch, tmp_path / ".zetatech")
 
-    prepare_calls = []
-    bridge_payloads = []
+    prep_calls = []
+    payloads = []
 
-    def fake_prepare(**kwargs):
-        prepare_calls.append(kwargs)
+    def _prep(**kwargs):
+        prep_calls.append(kwargs)
         return tmp_path, tmp_path, str(tmp_path)
 
-    def fake_bridge(payload):
-        bridge_payloads.append(payload)
+    def _bridge(payload):
+        payloads.append(payload)
         return {"output": "Hello!", "events": [], "result": {"content": "Hello!", "agents": [], "tasks": []}}
 
-    monkeypatch.setattr("core.routers.agents.service.prepare_thread_run_context", fake_prepare)
-    monkeypatch.setattr("core.routers.agents.run_agent_bridge", fake_bridge)
+    monkeypatch.setattr("core.routers.agents.service.prep_context", _prep)
+    monkeypatch.setattr("core.routers.agents.run_agent_bridge", _bridge)
     monkeypatch.setattr(
-        "core.routers.agents.build_plugin_context_for_source",
+        "core.routers.agents.source_context",
         lambda **kwargs: {"plugin": {"slug": "akismet"}, "source": {"available": True, "mode": "source"}},
     )
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         "/api/ai/messages",
         json={"thread_id": thread["id"], "content": "hello"},
     )
 
-    assert response.status_code == 200
-    assert len(prepare_calls) == 1
-    assert bridge_payloads[0]["executionMode"] == "raw_open_multi_agent"
-    assert bridge_payloads[0]["teamMode"] == "single_agent"
-    assert bridge_payloads[0]["needsTools"] is True
+    assert res.status_code == 200
+    assert len(prep_calls) == 1
+    assert payloads[0]["executionMode"] == "raw_open_multi_agent"
+    assert payloads[0]["teamMode"] == "single_agent"
+    assert payloads[0]["needsTools"] is True
 
 
-def test_create_message_workspace_mode_builds_bridge_payload(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    repository.upsert_provider_settings(
+def test_workspace_payload(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    repo.upsert_provider_settings(
         provider="anthropic",
         api_key="test-key",
         model="claude-3-7-sonnet",
         base_url="https://api.anthropic.com",
         is_active=True,
     )
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    _prepare_trusted_source(monkeypatch, tmp_path, db_path, "akismet", 1, is_theme=False)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    _prepare_trusted_source(monkeypatch, tmp_path, db, "akismet", 1, is_theme=False)
 
-    captured_payload = {}
+    got = {}
     monkeypatch.setattr(
-        "core.routers.agents.build_plugin_context_for_source",
+        "core.routers.agents.source_context",
         lambda **kwargs: {
             "source_path": str(kwargs["source_dir"]),
             "plugin": {"slug": "akismet"},
@@ -258,11 +258,11 @@ def test_create_message_workspace_mode_builds_bridge_payload(monkeypatch, tmp_pa
     )
     monkeypatch.setattr(
         "core.routers.agents.run_agent_bridge",
-        lambda payload: captured_payload.update(payload) or {"output": "Assistant summary", "events": [], "result": {"content": "Assistant summary", "agents": [], "tasks": []}},
+        lambda payload: got.update(payload) or {"output": "Assistant summary", "events": [], "result": {"content": "Assistant summary", "agents": [], "tasks": []}},
     )
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         "/api/ai/messages",
         json={
             "thread_id": thread["id"],
@@ -271,34 +271,34 @@ def test_create_message_workspace_mode_builds_bridge_payload(monkeypatch, tmp_pa
         },
     )
 
-    assert response.status_code == 200
-    assert captured_payload["executionMode"] == "raw_open_multi_agent"
-    assert captured_payload["teamMode"] == "single_agent"
-    assert captured_payload["workspaceRoot"].endswith("/plugins/Plugins/akismet/source")
-    assert captured_payload["needsTools"] is True
-    assert captured_payload["runtimeEnv"]["ZETATECH_AI_API_KEY"] == "test-key"
-    assert 'Zetatech' in captured_payload["systemPrompt"]
+    assert res.status_code == 200
+    assert got["executionMode"] == "raw_open_multi_agent"
+    assert got["teamMode"] == "single_agent"
+    assert got["workspaceRoot"].endswith("/plugins/Plugins/akismet/source")
+    assert got["needsTools"] is True
+    assert got["runtimeEnv"]["ZETATECH_AI_API_KEY"] == "test-key"
+    assert 'Zetatech' in got["systemPrompt"]
 
 
-def test_create_message_runs_bridge_and_stores_assistant_output(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    repository.upsert_provider_settings(
+def test_assistant_output(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    repo.upsert_provider_settings(
         provider="anthropic",
         api_key="test-key",
         model="claude-3-7-sonnet",
         base_url="https://api.anthropic.com",
         is_active=True,
     )
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    _prepare_trusted_source(monkeypatch, tmp_path, db_path, "akismet", 1, is_theme=False)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    _prepare_trusted_source(monkeypatch, tmp_path, db, "akismet", 1, is_theme=False)
 
     monkeypatch.setattr(
-        "core.routers.agents.build_plugin_context_for_source",
+        "core.routers.agents.source_context",
         lambda **kwargs: {"source": {"available": True}, "plugin": {"slug": "akismet"}, "source_path": str(kwargs["source_dir"])},
     )
 
-    def fake_bridge(payload):
+    def _bridge(payload):
         return {
             "output": "Assistant summary",
             "events": [
@@ -313,10 +313,10 @@ def test_create_message_runs_bridge_and_stores_assistant_output(monkeypatch, tmp
             },
         }
 
-    monkeypatch.setattr("core.routers.agents.run_agent_bridge", fake_bridge)
+    monkeypatch.setattr("core.routers.agents.run_agent_bridge", _bridge)
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         "/api/ai/messages",
         json={
             "thread_id": thread["id"],
@@ -325,38 +325,38 @@ def test_create_message_runs_bridge_and_stores_assistant_output(monkeypatch, tmp
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["assistant_message"]["content"] == "Assistant summary"
-    assert payload["events"] == [
+    assert res.status_code == 200
+    data = res.json()
+    assert data["assistant_message"]["content"] == "Assistant summary"
+    assert data["events"] == [
         {"type": "tool_call", "data": {"name": "read", "path": "plugin.php"}},
         {"type": "tool_result", "data": {"name": "read", "status": "ok"}},
     ]
-    assert payload["agents"][0]["name"] == "source_agent"
-    assert payload["tasks"][0]["id"] == "direct-source-conversation"
+    assert data["agents"][0]["name"] == "source_agent"
+    assert data["tasks"][0]["id"] == "direct-source-conversation"
 
 
-def test_create_message_uses_metadata_only_mode_when_trusted_source_path_is_missing(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    repository.upsert_provider_settings(
+def test_metadata_mode(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    repo.upsert_provider_settings(
         provider="anthropic",
         api_key="test-key",
         model="claude-3-7-sonnet",
         base_url="https://api.anthropic.com",
         is_active=True,
     )
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    _insert_scan_result(db_path, 1, "akismet", is_theme=False)
+    _insert_scan_result(db, 1, "akismet", is_theme=False)
     _patch_runtime_paths(monkeypatch, tmp_path / ".zetatech")
     monkeypatch.setattr(
         "core.routers.agents.run_agent_bridge",
         lambda payload: {"output": "Assistant summary", "events": [], "result": {"content": "Assistant summary"}},
     )
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         "/api/ai/messages",
         json={
             "thread_id": thread["id"],
@@ -365,35 +365,35 @@ def test_create_message_uses_metadata_only_mode_when_trusted_source_path_is_miss
         },
     )
 
-    assert response.status_code == 200
-    assert "No trusted local source directory was available" in response.json()["assistant_message"]["content"]
+    assert res.status_code == 200
+    assert "No trusted local source directory was available" in res.json()["assistant_message"]["content"]
 
 
-def test_create_message_applies_runtime_overrides_to_bridge_payload(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    repository.upsert_provider_settings(
+def test_runtime_overrides(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    repo.upsert_provider_settings(
         provider="openai",
         api_key="test-key",
         model="gpt-4.1-mini",
         base_url="http://localhost:11434/v1",
         is_active=True,
     )
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    _prepare_trusted_source(monkeypatch, tmp_path, db_path, "akismet", 1, is_theme=False)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    _prepare_trusted_source(monkeypatch, tmp_path, db, "akismet", 1, is_theme=False)
 
-    captured_payload = {}
+    got = {}
     monkeypatch.setattr(
-        "core.routers.agents.build_plugin_context_for_source",
+        "core.routers.agents.source_context",
         lambda **kwargs: {"source": {"available": True}, "plugin": {"slug": "akismet"}, "source_path": str(kwargs["source_dir"])},
     )
     monkeypatch.setattr(
         "core.routers.agents.run_agent_bridge",
-        lambda payload: captured_payload.update(payload) or {"output": "Assistant summary", "events": [], "result": {"content": "Assistant summary", "agents": [], "tasks": []}},
+        lambda payload: got.update(payload) or {"output": "Assistant summary", "events": [], "result": {"content": "Assistant summary", "agents": [], "tasks": []}},
     )
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         "/api/ai/messages",
         json={
             "thread_id": thread["id"],
@@ -411,65 +411,65 @@ def test_create_message_applies_runtime_overrides_to_bridge_payload(monkeypatch,
         },
     )
 
-    assert response.status_code == 200
-    assert captured_payload["strategy"] == "tasks"
-    assert captured_payload["teamMode"] == "tasks"
-    assert captured_payload["traceEnabled"] is False
-    assert captured_payload["outputSchema"]["properties"]["summary"]["type"] == "string"
-    assert captured_payload["tasks"][0]["maxRetries"] == 2
-    assert captured_payload["fanout"]["analysts"][0]["name"] == "optimist"
-    assert captured_payload["loopDetection"]["onLoopDetected"] == "warn"
-    assert captured_payload["approvalMode"] == "auto_approve"
-    assert captured_payload["beforeRun"]["promptPrefix"] == "Use strict evidence."
-    assert captured_payload["afterRun"]["outputSuffix"] == "End of reviewed output."
+    assert res.status_code == 200
+    assert got["strategy"] == "tasks"
+    assert got["teamMode"] == "tasks"
+    assert got["traceEnabled"] is False
+    assert got["outputSchema"]["properties"]["summary"]["type"] == "string"
+    assert got["tasks"][0]["maxRetries"] == 2
+    assert got["fanout"]["analysts"][0]["name"] == "optimist"
+    assert got["loopDetection"]["onLoopDetected"] == "warn"
+    assert got["approvalMode"] == "auto_approve"
+    assert got["beforeRun"]["promptPrefix"] == "Use strict evidence."
+    assert got["afterRun"]["outputSuffix"] == "End of reviewed output."
 
 
-def test_create_message_stream_emits_runtime_bridge_and_final_events(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    repository.upsert_provider_settings(
+def test_stream_events(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    repo.upsert_provider_settings(
         provider="anthropic",
         api_key="test-key",
         model="claude-3-7-sonnet",
         base_url="https://api.anthropic.com",
         is_active=True,
     )
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    _prepare_trusted_source(monkeypatch, tmp_path, db_path, "akismet", 1, is_theme=False)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    _prepare_trusted_source(monkeypatch, tmp_path, db, "akismet", 1, is_theme=False)
 
     monkeypatch.setattr(
-        "core.routers.agents.build_plugin_context_for_source",
+        "core.routers.agents.source_context",
         lambda **kwargs: {"source": {"available": True}, "plugin": {"slug": "akismet"}, "source_path": str(kwargs["source_dir"])},
     )
 
-    def fake_stream(payload):
+    def _stream(payload):
         yield {"type": "decision_trace", "data": {"execution_mode": "raw_open_multi_agent"}}
         yield {"type": "tool_call", "data": {"name": "read", "path": "plugin.php"}}
         yield {"type": "run_completed", "data": {"content": "Streamed assistant summary", "agents": [], "tasks": []}}
 
-    monkeypatch.setattr("core.routers.agents.run_agent_bridge_stream", fake_stream)
+    monkeypatch.setattr("core.routers.agents.stream_bridge", _stream)
 
-    client = _create_test_client(monkeypatch, db_path)
+    client = _create_test_client(monkeypatch, db)
     with client.stream(
         "POST",
         "/api/ai/messages/stream",
         json={"thread_id": thread["id"], "content": "scan this plugin", "last_scan_session_id": 1},
-    ) as response:
-        assert response.status_code == 200
-        chunks = [json.loads(line) for line in response.iter_lines() if line]
+    ) as res:
+        assert res.status_code == 200
+        chunks = [json.loads(line) for line in res.iter_lines() if line]
 
-    chunk_types = [chunk["type"] for chunk in chunks]
-    assert "runtime_event" in chunk_types
-    assert "bridge_event" in chunk_types
-    assert "final" in chunk_types
-    final_chunk = next(chunk for chunk in chunks if chunk["type"] == "final")
-    assert final_chunk["data"]["assistant_message"]["content"] == "Streamed assistant summary"
+    types = [chunk["type"] for chunk in chunks]
+    assert "runtime_event" in types
+    assert "bridge_event" in types
+    assert "final" in types
+    final = next(chunk for chunk in chunks if chunk["type"] == "final")
+    assert final["data"]["assistant_message"]["content"] == "Streamed assistant summary"
 
 
-def test_ai_settings_dashboard_lists_active_profile(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    repository.upsert_provider_settings(
+def test_settings_dashboard(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    repo.upsert_provider_settings(
         provider="anthropic",
         profile_key="anthropic-main",
         display_name="Anthropic Main",
@@ -480,74 +480,74 @@ def test_ai_settings_dashboard_lists_active_profile(monkeypatch, tmp_path):
         is_active=True,
     )
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.get("/api/ai/settings")
+    client = _create_test_client(monkeypatch, db)
+    res = client.get("/api/ai/settings")
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["active_profile"]["profile_key"] == "anthropic-main"
-    assert payload["active_profile"]["provider"] == "anthropic"
-    assert payload["active_profile"]["is_active"] is True
-    assert payload["stats"]["total_profiles"] == 1
+    assert res.status_code == 200
+    data = res.json()
+    assert data["active_profile"]["profile_key"] == "anthropic-main"
+    assert data["active_profile"]["provider"] == "anthropic"
+    assert data["active_profile"]["is_active"] is True
+    assert data["stats"]["total_profiles"] == 1
 
 
-def test_create_or_get_and_list_plugin_threads_endpoints(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
+def test_plugin_threads(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    AIRepository(db_path=db)
 
-    client = _create_test_client(monkeypatch, db_path)
+    client = _create_test_client(monkeypatch, db)
 
-    create_response = client.post(
+    post_res = client.post(
         "/api/ai/threads/plugin",
         json={"plugin_slug": "akismet", "is_theme": False, "title": "Chat A"},
     )
-    assert create_response.status_code == 200
-    created = create_response.json()
+    assert post_res.status_code == 200
+    created = post_res.json()
     assert created["plugin_slug"] == "akismet"
 
-    list_response = client.get(
+    list_res = client.get(
         "/api/ai/threads/plugin",
         params={"plugin_slug": "akismet", "is_theme": False},
     )
-    assert list_response.status_code == 200
-    listed = list_response.json()
+    assert list_res.status_code == 200
+    listed = list_res.json()
     assert listed["threads"]
     assert listed["threads"][0]["id"] == created["id"]
 
 
-def test_update_and_delete_thread_endpoints(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+def test_thread_crud(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    client = _create_test_client(monkeypatch, db_path)
+    client = _create_test_client(monkeypatch, db)
 
-    patch_response = client.patch(
+    patch_res = client.patch(
         f"/api/ai/threads/{thread['id']}",
         json={"plugin_slug": "akismet", "is_theme": False, "title": "Renamed Thread"},
     )
-    assert patch_response.status_code == 200
-    assert patch_response.json()["title"] == "Renamed Thread"
+    assert patch_res.status_code == 200
+    assert patch_res.json()["title"] == "Renamed Thread"
 
-    delete_response = client.request(
+    del_res = client.request(
         "DELETE",
         f"/api/ai/threads/{thread['id']}",
         json={"plugin_slug": "akismet", "is_theme": False},
     )
-    assert delete_response.status_code == 200
-    assert delete_response.json()["ok"] is True
+    assert del_res.status_code == 200
+    assert del_res.json()["ok"] is True
 
 
-def test_prepare_thread_source_endpoint_returns_attached_thread(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+def test_prepare_source(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    source_dir = _prepare_thread_source(tmp_path, "akismet", is_theme=False)
+    src = _prepare_thread_source(tmp_path, "akismet", is_theme=False)
     _patch_runtime_paths(monkeypatch, tmp_path / ".zetatech")
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         f"/api/ai/threads/{thread['id']}/source",
         json={
             "plugin_slug": "akismet",
@@ -556,20 +556,20 @@ def test_prepare_thread_source_endpoint_returns_attached_thread(monkeypatch, tmp
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ok"] is True
-    assert payload["thread"]["id"] == thread["id"]
-    assert payload["thread"]["source_available"] is True
-    assert payload["thread"]["source_context_mode"] == "attached"
-    assert payload["thread"]["source_path"] == str(source_dir.resolve())
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ok"] is True
+    assert data["thread"]["id"] == thread["id"]
+    assert data["thread"]["source_available"] is True
+    assert data["thread"]["source_context_mode"] == "attached"
+    assert data["thread"]["source_path"] == str(src.resolve())
 
 
-def test_run_approval_endpoint_rejects_pending_run(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    run = repository.create_run(
+def test_reject_approval(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    run = repo.create_run(
         thread_id=thread["id"],
         provider="anthropic",
         provider_label="Anthropic",
@@ -578,51 +578,51 @@ def test_run_approval_endpoint_rejects_pending_run(monkeypatch, tmp_path):
         workspace_path=str(tmp_path),
     )
 
-    runtime_root = tmp_path / ".zetatech"
-    _patch_runtime_paths(monkeypatch, runtime_root)
-    control_file = runtime_root / "approvals" / "decision.json"
-    repository.upsert_run_approval(
+    root = tmp_path / ".zetatech"
+    _patch_runtime_paths(monkeypatch, root)
+    ctrl = root / "approvals" / "decision.json"
+    repo.upsert_run_approval(
         run_id=run["id"],
         thread_id=thread["id"],
         status="pending",
         mode="manual",
-        control_path=str(control_file),
+        control_path=str(ctrl),
         request_payload={"nextTasks": [{"id": "t1", "title": "inspect"}]},
     )
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         f"/api/ai/runs/{run['id']}/approval",
         json={"plugin_slug": "akismet", "is_theme": False, "decision": "rejected"},
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "decided"
-    assert payload["decision"] == "rejected"
-    assert control_file.exists()
-    assert json.loads(control_file.read_text(encoding="utf-8"))["decision"] == "rejected"
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "decided"
+    assert data["decision"] == "rejected"
+    assert ctrl.exists()
+    assert json.loads(ctrl.read_text(encoding="utf-8"))["decision"] == "rejected"
 
 
-def test_run_approval_endpoint_returns_404_for_missing_run(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    AIRepository(db_path=db_path)
+def test_missing_approval(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    AIRepository(db_path=db)
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         "/api/ai/runs/999/approval",
         json={"plugin_slug": "akismet", "is_theme": False, "decision": "approved"},
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "AI run not found."
+    assert res.status_code == 404
+    assert res.json()["detail"] == "AI run not found."
 
 
-def test_run_approval_endpoint_rejects_control_path_outside_workspace(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    run = repository.create_run(
+def test_escape_approval(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    run = repo.create_run(
         thread_id=thread["id"],
         provider="anthropic",
         provider_label="Anthropic",
@@ -632,48 +632,48 @@ def test_run_approval_endpoint_rejects_control_path_outside_workspace(monkeypatc
     )
 
     _patch_runtime_paths(monkeypatch, tmp_path / ".zetatech")
-    bad_control_file = tmp_path / "somewhere-else" / "approvals" / "decision.json"
-    repository.upsert_run_approval(
+    bad = tmp_path / "somewhere-else" / "approvals" / "decision.json"
+    repo.upsert_run_approval(
         run_id=run["id"],
         thread_id=thread["id"],
         status="pending",
         mode="manual",
-        control_path=str(bad_control_file),
+        control_path=str(bad),
         request_payload={"nextTasks": [{"id": "t1", "title": "inspect"}]},
     )
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         f"/api/ai/runs/{run['id']}/approval",
         json={"plugin_slug": "akismet", "is_theme": False, "decision": "approved"},
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid approval control path."
+    assert res.status_code == 400
+    assert res.json()["detail"] == "Invalid approval control path."
 
 
-def test_update_thread_requires_valid_scope(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+def test_update_scope(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.patch(
+    client = _create_test_client(monkeypatch, db)
+    res = client.patch(
         f"/api/ai/threads/{thread['id']}",
         json={"plugin_slug": "jetpack", "is_theme": False, "title": "Wrong scope"},
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "AI thread not found."
+    assert res.status_code == 404
+    assert res.json()["detail"] == "AI thread not found."
 
 
-def test_prepare_thread_source_returns_404_for_invalid_scope(monkeypatch, tmp_path):
-    db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+def test_source_scope(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    client = _create_test_client(monkeypatch, db_path)
-    response = client.post(
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
         f"/api/ai/threads/{thread['id']}/source",
         json={
             "plugin_slug": "jetpack",
@@ -682,5 +682,5 @@ def test_prepare_thread_source_returns_404_for_invalid_scope(monkeypatch, tmp_pa
         },
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "AI thread not found."
+    assert res.status_code == 404
+    assert res.json()["detail"] == "AI thread not found."

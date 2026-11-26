@@ -13,9 +13,9 @@ class DatabaseBootstrapper:
 
     def initialize(self) -> None:
         init_db(self.db_path)
-        self._ensure_scan_results_columns()
-        self._ensure_favorite_plugins_columns()
-        self._ensure_ai_run_approvals_columns()
+        self._scan_cols()
+        self._fav_cols()
+        self._approval_cols()
 
     def ensure_catalog_backfill(self, rebuild_catalog) -> None:
         if DatabaseBootstrapper._catalog_backfill_attempted:
@@ -23,13 +23,13 @@ class DatabaseBootstrapper:
 
         DatabaseBootstrapper._catalog_backfill_attempted = True
         try:
-            if not self._needs_catalog_backfill():
+            if not self._needs_backfill():
                 return
             rebuild_catalog(reset=True)
         except Exception:
             pass
 
-    def _needs_catalog_backfill(self) -> bool:
+    def _needs_backfill(self) -> bool:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) AS c FROM plugin_catalog")
@@ -41,7 +41,7 @@ class DatabaseBootstrapper:
             results = int((cursor.fetchone() or {"c": 0})["c"])
             return results > 0
 
-    def _ensure_scan_results_columns(self) -> None:
+    def _scan_cols(self) -> None:
         self._ensure_columns(
             table_name="scan_results",
             columns={
@@ -54,7 +54,7 @@ class DatabaseBootstrapper:
             },
         )
 
-    def _ensure_favorite_plugins_columns(self) -> None:
+    def _fav_cols(self) -> None:
         self._ensure_columns(
             table_name="favorite_plugins",
             columns={
@@ -70,7 +70,7 @@ class DatabaseBootstrapper:
             },
         )
 
-    def _ensure_ai_run_approvals_columns(self) -> None:
+    def _approval_cols(self) -> None:
         self._ensure_columns(
             table_name="ai_run_approvals",
             columns={

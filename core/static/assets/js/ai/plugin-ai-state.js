@@ -1,10 +1,10 @@
 (function() {
-    function getCurrentScanId() {
+    function scanId() {
         return typeof window.getCurrentScanId === 'function' ? window.getCurrentScanId() : null;
     }
 
-    function escapeOption(value) {
-        return String(value ?? '')
+    function escOpt(val) {
+        return String(val ?? '')
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -12,13 +12,13 @@
             .replace(/'/g, '&#39;');
     }
 
-    const PLUGIN_AI_PENDING_STORAGE_KEY = 'zetatechAgentPluginAiPending';
-    const PLUGIN_AI_EVENTS_STORAGE_KEY = 'zetatechAgentPluginAiLiveEvents';
-    const PLUGIN_AI_SELECTED_THREAD_STORAGE_KEY = 'zetatechAgentPluginAiSelectedThread';
-    const PLUGIN_AI_THREAD_UI_STORAGE_KEY = 'zetatechAgentPluginAiThreadUi';
-    const PLUGIN_AI_RUNTIME_PREFS_STORAGE_KEY = 'zetatechAgentPluginAiRuntimePrefs';
+    const PENDING_KEY = 'zetatechAgentPluginAiPending';
+    const EVENTS_KEY = 'zetatechAgentPluginAiLiveEvents';
+    const THREAD_KEY = 'zetatechAgentPluginAiSelectedThread';
+    const UI_KEY = 'zetatechAgentPluginAiThreadUi';
+    const PREFS_KEY = 'zetatechAgentPluginAiRuntimePrefs';
 
-    const DEFAULT_PLUGIN_AI_RUNTIME_PREFS = {
+    const DEFAULT_PREFS = {
         strategy: 'auto',
         loop_mode: '',
         trace_enabled: false,
@@ -32,315 +32,254 @@
         after_run_json_text: '',
     };
 
-    function normalizePluginAiStrategy(value) {
-        const normalized = String(value || 'auto').trim().toLowerCase();
-        return normalized || 'auto';
+    function normStrat(val) {
+        const res = String(val || 'auto').trim().toLowerCase();
+        return res || 'auto';
     }
 
-    function getPluginAiAllowedApprovalModes(strategy = 'auto') {
-        const normalizedStrategy = normalizePluginAiStrategy(strategy);
-        if (normalizedStrategy === 'tasks') {
+    function allowedModes(strat = 'auto') {
+        if (normStrat(strat) === 'tasks') {
             return ['manual', 'auto_approve', 'off'];
         }
         return ['manual', 'off'];
     }
 
-    function normalizePluginAiApprovalMode(value, strategy = 'auto') {
-        const normalized = String(value || 'manual').trim().toLowerCase();
-        const allowed = getPluginAiAllowedApprovalModes(strategy);
-        if (allowed.includes(normalized)) return normalized;
-        return allowed[0] || 'manual';
+    function normMode(val, strat = 'auto') {
+        const res = String(val || 'manual').trim().toLowerCase();
+        const ok = allowedModes(strat);
+        if (ok.includes(res)) return res;
+        return ok[0] || 'manual';
     }
 
-    function syncPluginAiApprovalModeUi(preferredValue = null) {
+    function syncModeUi(pref = null) {
         const stratEl = document.getElementById('plugin-ai-strategy');
         const modeEl = document.getElementById('plugin-ai-approval-mode');
         if (!modeEl) return 'manual';
 
-        const strat = normalizePluginAiStrategy(stratEl?.value || 'auto');
-        const allowed = getPluginAiAllowedApprovalModes(strat);
+        const strat = normStrat(stratEl?.value || 'auto');
+        const ok = allowedModes(strat);
         const labels = {
             manual: 'Manual gate',
             auto_approve: 'Auto approve',
             off: 'Off (YOLO • Dangerous)',
         };
-        const cur = preferredValue != null ? String(preferredValue).trim() : String(modeEl.value || '').trim();
-        const mode = normalizePluginAiApprovalMode(cur, strat);
+        const cur = pref != null ? String(pref).trim() : String(modeEl.value || '').trim();
+        const mode = normMode(cur, strat);
 
-        modeEl.innerHTML = allowed
-            .map((item) => `<option value="${escapeOption(item)}">${escapeOption(labels[item] || item)}</option>`)
+        modeEl.innerHTML = ok
+            .map((item) => `<option value="${escOpt(item)}">${escOpt(labels[item] || item)}</option>`)
             .join('');
         modeEl.value = mode;
         return mode;
     }
 
-    function getPluginAiState() {
+    function getState() {
         return window.currentPluginAi || {};
     }
 
-    function buildPluginAiPendingStorageKey(plugin, threadId, isTheme = false) {
+    function itemKey(plugin, tid, theme = false) {
         return [
             String(plugin || '').trim(),
-            String(threadId || '').trim(),
-            isTheme ? 'theme' : 'plugin',
+            String(tid || '').trim(),
+            theme ? 'theme' : 'plugin',
         ].join('::');
     }
 
-    function buildPluginAiScopeStorageKey(plugin, isTheme = false) {
+    function scopeKey(plugin, theme = false) {
         return [
             String(plugin || '').trim(),
-            isTheme ? 'theme' : 'plugin',
+            theme ? 'theme' : 'plugin',
         ].join('::');
     }
 
-    function readPluginAiSelectedThreadSnapshot() {
+    function readMap(storageKey) {
         try {
-            const raw = window.sessionStorage?.getItem(PLUGIN_AI_SELECTED_THREAD_STORAGE_KEY);
+            const raw = window.sessionStorage?.getItem(storageKey);
             if (!raw) return {};
             const parsed = JSON.parse(raw);
             return parsed && typeof parsed === 'object' ? parsed : {};
-        } catch (_error) {
+        } catch (_) {
             return {};
         }
     }
 
-    function readPluginAiThreadUiSnapshotMap() {
-        try {
-            const raw = window.sessionStorage?.getItem(PLUGIN_AI_THREAD_UI_STORAGE_KEY);
-            if (!raw) return {};
-            const parsed = JSON.parse(raw);
-            return parsed && typeof parsed === 'object' ? parsed : {};
-        } catch (_error) {
-            return {};
-        }
-    }
-
-    function writePluginAiThreadUiSnapshotMap(map) {
+    function writeMap(storageKey, map) {
         try {
             if (!map || typeof map !== 'object' || !window.sessionStorage) return;
-            window.sessionStorage.setItem(PLUGIN_AI_THREAD_UI_STORAGE_KEY, JSON.stringify(map));
-        } catch (_error) {
+            window.sessionStorage.setItem(storageKey, JSON.stringify(map));
+        } catch (_) {
 
         }
     }
 
-    function writePluginAiSelectedThreadSnapshotMap(map) {
-        try {
-            if (!map || typeof map !== 'object' || !window.sessionStorage) return;
-            window.sessionStorage.setItem(PLUGIN_AI_SELECTED_THREAD_STORAGE_KEY, JSON.stringify(map));
-        } catch (_error) {
-
-        }
-    }
-
-    function rememberPluginAiSelectedThread(plugin, threadId, isTheme = false) {
-        const key = buildPluginAiScopeStorageKey(plugin, isTheme);
+    function saveThread(plugin, tid, theme = false) {
+        const key = scopeKey(plugin, theme);
         if (!key.replace(/:/g, '').trim()) return null;
-        const safeThreadId = Number(threadId || 0) || null;
-        const map = readPluginAiSelectedThreadSnapshot();
-        if (!safeThreadId) {
+        const safeId = Number(tid || 0) || null;
+        const map = readMap(THREAD_KEY);
+        if (!safeId) {
             delete map[key];
-            writePluginAiSelectedThreadSnapshotMap(map);
+            writeMap(THREAD_KEY, map);
             return null;
         }
         map[key] = {
             plugin: String(plugin || '').trim(),
-            threadId: safeThreadId,
-            isTheme: !!isTheme,
+            threadId: safeId,
+            isTheme: !!theme,
             updatedAt: new Date().toISOString(),
         };
-        writePluginAiSelectedThreadSnapshotMap(map);
+        writeMap(THREAD_KEY, map);
         return map[key];
     }
 
-    function getPluginAiSelectedThread(plugin, isTheme = false) {
-        const key = buildPluginAiScopeStorageKey(plugin, isTheme);
-        const item = readPluginAiSelectedThreadSnapshot()[key] || null;
+    function getThread(plugin, theme = false) {
+        const key = scopeKey(plugin, theme);
+        const item = readMap(THREAD_KEY)[key] || null;
         return Number(item?.threadId || 0) || null;
     }
 
-    function rememberPluginAiThreadUiSnapshot(snapshot = {}) {
-        const state = getPluginAiState();
-        const plugin = String(snapshot.plugin || state.plugin || '').trim();
-        const threadId = Number(snapshot.threadId || state.threadId || 0) || null;
-        const isTheme = !!(snapshot.isTheme ?? state.isTheme);
-        const key = buildPluginAiPendingStorageKey(plugin, threadId, isTheme);
-        if (!plugin || !threadId || !key.replace(/:/g, '').trim()) return null;
-        const map = readPluginAiThreadUiSnapshotMap();
+    function saveUiSnap(snap = {}) {
+        const state = getState();
+        const plugin = String(snap.plugin || state.plugin || '').trim();
+        const tid = Number(snap.threadId || state.threadId || 0) || null;
+        const theme = !!(snap.isTheme ?? state.isTheme);
+        const key = itemKey(plugin, tid, theme);
+        if (!plugin || !tid || !key.replace(/:/g, '').trim()) return null;
+        const map = readMap(UI_KEY);
         map[key] = {
             plugin,
-            threadId,
-            isTheme,
-            messages: Array.isArray(snapshot.messages) ? snapshot.messages : (Array.isArray(state.messages) ? state.messages : []),
-            events: Array.isArray(snapshot.events) ? snapshot.events : (Array.isArray(state.events) ? state.events : []),
-            liveActivity: Array.isArray(snapshot.liveActivity) ? snapshot.liveActivity : (Array.isArray(state.liveActivity) ? state.liveActivity : []),
-            sending: Object.prototype.hasOwnProperty.call(snapshot, 'sending') ? !!snapshot.sending : !!state.sending,
-            runStartedAt: String(snapshot.runStartedAt ?? state.runStartedAt ?? '').trim(),
-            statusText: String(snapshot.statusText ?? state.statusText ?? '').trim(),
-            badgeText: String(snapshot.badgeText ?? state.badgeText ?? '').trim(),
-            sourceStatus: snapshot.sourceStatus && typeof snapshot.sourceStatus === 'object'
-                ? snapshot.sourceStatus
+            threadId: tid,
+            isTheme: theme,
+            messages: Array.isArray(snap.messages) ? snap.messages : (Array.isArray(state.messages) ? state.messages : []),
+            events: Array.isArray(snap.events) ? snap.events : (Array.isArray(state.events) ? state.events : []),
+            liveActivity: Array.isArray(snap.liveActivity) ? snap.liveActivity : (Array.isArray(state.liveActivity) ? state.liveActivity : []),
+            sending: Object.prototype.hasOwnProperty.call(snap, 'sending') ? !!snap.sending : !!state.sending,
+            runStartedAt: String(snap.runStartedAt ?? state.runStartedAt ?? '').trim(),
+            statusText: String(snap.statusText ?? state.statusText ?? '').trim(),
+            badgeText: String(snap.badgeText ?? state.badgeText ?? '').trim(),
+            sourceStatus: snap.sourceStatus && typeof snap.sourceStatus === 'object'
+                ? snap.sourceStatus
                 : (state.sourceStatus && typeof state.sourceStatus === 'object' ? state.sourceStatus : {}),
-            pendingApproval: snapshot.pendingApproval && typeof snapshot.pendingApproval === 'object'
-                ? snapshot.pendingApproval
+            pendingApproval: snap.pendingApproval && typeof snap.pendingApproval === 'object'
+                ? snap.pendingApproval
                 : (state.pendingApproval && typeof state.pendingApproval === 'object' ? state.pendingApproval : null),
             updatedAt: new Date().toISOString(),
         };
-        writePluginAiThreadUiSnapshotMap(map);
+        writeMap(UI_KEY, map);
         return map[key];
     }
 
-    function getPluginAiThreadUiSnapshot(plugin, threadId, isTheme = false) {
-        const key = buildPluginAiPendingStorageKey(plugin, threadId, isTheme);
-        return readPluginAiThreadUiSnapshotMap()[key] || null;
+    function getUiSnap(plugin, tid, theme = false) {
+        const key = itemKey(plugin, tid, theme);
+        return readMap(UI_KEY)[key] || null;
     }
 
-    function hydratePluginAiThreadUiSnapshot(plugin, threadId, isTheme = false) {
-        const state = getPluginAiState();
-        const snapshot = getPluginAiThreadUiSnapshot(plugin, threadId, isTheme);
-        if (!snapshot) return null;
+    function loadUiSnap(plugin, tid, theme = false) {
+        const state = getState();
+        const snap = getUiSnap(plugin, tid, theme);
+        if (!snap) return null;
         state.plugin = String(plugin || state.plugin || '').trim();
-        state.threadId = Number(threadId || state.threadId || 0) || null;
-        state.isTheme = !!isTheme;
-        state.messages = Array.isArray(snapshot.messages) ? snapshot.messages : [];
-        state.events = Array.isArray(snapshot.events) ? snapshot.events : [];
-        state.liveActivity = Array.isArray(snapshot.liveActivity) ? snapshot.liveActivity : (Array.isArray(snapshot.events) ? snapshot.events : []);
-        state.sending = !!snapshot.sending;
-        state.runStartedAt = String(snapshot.runStartedAt || '').trim();
-        state.statusText = String(snapshot.statusText || '').trim();
-        state.badgeText = String(snapshot.badgeText || '').trim();
-        state.sourceStatus = snapshot.sourceStatus && typeof snapshot.sourceStatus === 'object'
-            ? snapshot.sourceStatus
+        state.threadId = Number(tid || state.threadId || 0) || null;
+        state.isTheme = !!theme;
+        state.messages = Array.isArray(snap.messages) ? snap.messages : [];
+        state.events = Array.isArray(snap.events) ? snap.events : [];
+        state.liveActivity = Array.isArray(snap.liveActivity) ? snap.liveActivity : (Array.isArray(snap.events) ? snap.events : []);
+        state.sending = !!snap.sending;
+        state.runStartedAt = String(snap.runStartedAt || '').trim();
+        state.statusText = String(snap.statusText || '').trim();
+        state.badgeText = String(snap.badgeText || '').trim();
+        state.sourceStatus = snap.sourceStatus && typeof snap.sourceStatus === 'object'
+            ? snap.sourceStatus
             : (state.sourceStatus || {});
-        state.pendingApproval = snapshot.pendingApproval && typeof snapshot.pendingApproval === 'object'
-            ? snapshot.pendingApproval
+        state.pendingApproval = snap.pendingApproval && typeof snap.pendingApproval === 'object'
+            ? snap.pendingApproval
             : null;
-        return snapshot;
+        return snap;
     }
 
-    function syncCurrentPluginAiThreadSnapshot(overrides = {}) {
-        const state = getPluginAiState();
-        const threadId = Number(overrides.threadId || state.threadId || 0) || null;
-        if (!threadId) return null;
-        return rememberPluginAiThreadUiSnapshot({
-            plugin: String(overrides.plugin || state.plugin || '').trim(),
-            threadId,
-            isTheme: !!(overrides.isTheme ?? state.isTheme),
-            messages: Array.isArray(overrides.messages) ? overrides.messages : state.messages,
-            events: Array.isArray(overrides.events) ? overrides.events : state.events,
-            liveActivity: Array.isArray(overrides.liveActivity) ? overrides.liveActivity : state.liveActivity,
-            sending: Object.prototype.hasOwnProperty.call(overrides, 'sending') ? !!overrides.sending : !!state.sending,
-            runStartedAt: Object.prototype.hasOwnProperty.call(overrides, 'runStartedAt') ? overrides.runStartedAt : state.runStartedAt,
-            statusText: Object.prototype.hasOwnProperty.call(overrides, 'statusText') ? overrides.statusText : state.statusText,
-            badgeText: Object.prototype.hasOwnProperty.call(overrides, 'badgeText') ? overrides.badgeText : state.badgeText,
-            sourceStatus: overrides.sourceStatus || state.sourceStatus,
-            pendingApproval: Object.prototype.hasOwnProperty.call(overrides, 'pendingApproval') ? overrides.pendingApproval : state.pendingApproval,
+    function syncSnap(over = {}) {
+        const state = getState();
+        const tid = Number(over.threadId || state.threadId || 0) || null;
+        if (!tid) return null;
+        return saveUiSnap({
+            plugin: String(over.plugin || state.plugin || '').trim(),
+            threadId: tid,
+            isTheme: !!(over.isTheme ?? state.isTheme),
+            messages: Array.isArray(over.messages) ? over.messages : state.messages,
+            events: Array.isArray(over.events) ? over.events : state.events,
+            liveActivity: Array.isArray(over.liveActivity) ? over.liveActivity : state.liveActivity,
+            sending: Object.prototype.hasOwnProperty.call(over, 'sending') ? !!over.sending : !!state.sending,
+            runStartedAt: Object.prototype.hasOwnProperty.call(over, 'runStartedAt') ? over.runStartedAt : state.runStartedAt,
+            statusText: Object.prototype.hasOwnProperty.call(over, 'statusText') ? over.statusText : state.statusText,
+            badgeText: Object.prototype.hasOwnProperty.call(over, 'badgeText') ? over.badgeText : state.badgeText,
+            sourceStatus: over.sourceStatus || state.sourceStatus,
+            pendingApproval: Object.prototype.hasOwnProperty.call(over, 'pendingApproval') ? over.pendingApproval : state.pendingApproval,
         });
     }
 
-    function readPluginAiPendingSnapshot() {
-        try {
-            const raw = window.sessionStorage?.getItem(PLUGIN_AI_PENDING_STORAGE_KEY);
-            if (!raw) return {};
-            const parsed = JSON.parse(raw);
-            return parsed && typeof parsed === 'object' ? parsed : {};
-        } catch (_error) {
-            return {};
-        }
-    }
-
-    function writePluginAiPendingSnapshotMap(map) {
-        try {
-            if (!map || typeof map !== 'object' || !window.sessionStorage) return;
-            window.sessionStorage.setItem(PLUGIN_AI_PENDING_STORAGE_KEY, JSON.stringify(map));
-        } catch (_error) {
-
-        }
-    }
-
-    function readPluginAiEventsSnapshot() {
-        try {
-            const raw = window.sessionStorage?.getItem(PLUGIN_AI_EVENTS_STORAGE_KEY);
-            if (!raw) return {};
-            const parsed = JSON.parse(raw);
-            return parsed && typeof parsed === 'object' ? parsed : {};
-        } catch (_error) {
-            return {};
-        }
-    }
-
-    function writePluginAiEventsSnapshotMap(map) {
-        try {
-            if (!map || typeof map !== 'object' || !window.sessionStorage) return;
-            window.sessionStorage.setItem(PLUGIN_AI_EVENTS_STORAGE_KEY, JSON.stringify(map));
-        } catch (_error) {
-
-        }
-    }
-
-    function rememberPluginAiEventsSnapshot(snapshot = {}) {
-        const state = getPluginAiState();
-        const key = buildPluginAiPendingStorageKey(snapshot.plugin || state.plugin, snapshot.threadId || state.threadId, snapshot.isTheme ?? state.isTheme);
+    function saveEvents(snap = {}) {
+        const state = getState();
+        const key = itemKey(snap.plugin || state.plugin, snap.threadId || state.threadId, snap.isTheme ?? state.isTheme);
         if (!key.replace(/:/g, '').trim()) return null;
-        const events = Array.isArray(snapshot.events) ? snapshot.events : [];
-        const map = readPluginAiEventsSnapshot();
+        const events = Array.isArray(snap.events) ? snap.events : [];
+        const map = readMap(EVENTS_KEY);
         map[key] = {
-            plugin: String(snapshot.plugin || state.plugin || '').trim(),
-            threadId: Number(snapshot.threadId || state.threadId || 0) || null,
-            isTheme: !!(snapshot.isTheme ?? state.isTheme),
-            events: events,
-            createdAt: String(snapshot.createdAt || new Date().toISOString()),
+            plugin: String(snap.plugin || state.plugin || '').trim(),
+            threadId: Number(snap.threadId || state.threadId || 0) || null,
+            isTheme: !!(snap.isTheme ?? state.isTheme),
+            events,
+            createdAt: String(snap.createdAt || new Date().toISOString()),
         };
-        writePluginAiEventsSnapshotMap(map);
+        writeMap(EVENTS_KEY, map);
         return map[key];
     }
 
-    function getPluginAiEventsSnapshot(plugin, threadId, isTheme = false) {
-        const key = buildPluginAiPendingStorageKey(plugin, threadId, isTheme);
-        return readPluginAiEventsSnapshot()[key] || null;
+    function getEvents(plugin, tid, theme = false) {
+        const key = itemKey(plugin, tid, theme);
+        return readMap(EVENTS_KEY)[key] || null;
     }
 
-    function clearPluginAiEventsSnapshot(plugin, threadId, isTheme = false) {
-        const key = buildPluginAiPendingStorageKey(plugin, threadId, isTheme);
-        const map = readPluginAiEventsSnapshot();
+    function clearEvents(plugin, tid, theme = false) {
+        const key = itemKey(plugin, tid, theme);
+        const map = readMap(EVENTS_KEY);
         if (!Object.prototype.hasOwnProperty.call(map, key)) return;
         delete map[key];
-        writePluginAiEventsSnapshotMap(map);
+        writeMap(EVENTS_KEY, map);
     }
 
-    function rememberPluginAiPendingSnapshot(snapshot = {}) {
-        const state = getPluginAiState();
-        const key = buildPluginAiPendingStorageKey(snapshot.plugin || state.plugin, snapshot.threadId || state.threadId, snapshot.isTheme ?? state.isTheme);
+    function savePending(snap = {}) {
+        const state = getState();
+        const key = itemKey(snap.plugin || state.plugin, snap.threadId || state.threadId, snap.isTheme ?? state.isTheme);
         if (!key.replace(/:/g, '').trim()) return null;
-        const map = readPluginAiPendingSnapshot();
+        const map = readMap(PENDING_KEY);
         map[key] = {
-            plugin: String(snapshot.plugin || state.plugin || '').trim(),
-            threadId: Number(snapshot.threadId || state.threadId || 0) || null,
-            isTheme: !!(snapshot.isTheme ?? state.isTheme),
-            content: String(snapshot.content || '').trim(),
-            createdAt: String(snapshot.createdAt || new Date().toISOString()),
+            plugin: String(snap.plugin || state.plugin || '').trim(),
+            threadId: Number(snap.threadId || state.threadId || 0) || null,
+            isTheme: !!(snap.isTheme ?? state.isTheme),
+            content: String(snap.content || '').trim(),
+            createdAt: String(snap.createdAt || new Date().toISOString()),
         };
-        writePluginAiPendingSnapshotMap(map);
+        writeMap(PENDING_KEY, map);
         return map[key];
     }
 
-    function getPluginAiPendingSnapshot(plugin, threadId, isTheme = false) {
-        const key = buildPluginAiPendingStorageKey(plugin, threadId, isTheme);
-        return readPluginAiPendingSnapshot()[key] || null;
+    function getPending(plugin, tid, theme = false) {
+        const key = itemKey(plugin, tid, theme);
+        return readMap(PENDING_KEY)[key] || null;
     }
 
-    function clearPluginAiPendingSnapshot(plugin, threadId, isTheme = false) {
-        const key = buildPluginAiPendingStorageKey(plugin, threadId, isTheme);
-        const map = readPluginAiPendingSnapshot();
+    function clearPending(plugin, tid, theme = false) {
+        const key = itemKey(plugin, tid, theme);
+        const map = readMap(PENDING_KEY);
         if (!Object.prototype.hasOwnProperty.call(map, key)) return;
         delete map[key];
-        writePluginAiPendingSnapshotMap(map);
+        writeMap(PENDING_KEY, map);
     }
 
-    function beginPluginAiView(slug, isTheme = false) {
-        const state = getPluginAiState();
+    function beginView(slug, theme = false) {
+        const state = getState();
         state.plugin = String(slug || '').trim();
-        state.isTheme = !!isTheme;
+        state.isTheme = !!theme;
         state.threadId = null;
         state.threads = [];
         state.messages = [];
@@ -374,23 +313,22 @@
         return state.viewToken;
     }
 
-    function currentPluginMatchesState(plugin, state) {
+    function samePlugin(plugin, state) {
         const slug = String(plugin?.slug || '').trim();
         return state.plugin === slug && state.isTheme === !!plugin?.is_theme;
     }
 
-    function isPluginAiViewCurrent(slug, token) {
-        const state = getPluginAiState();
+    function isView(slug, token) {
+        const state = getState();
         return state.plugin === String(slug || '').trim() && state.viewToken === token;
     }
 
-    function shouldIgnorePluginAiResponse(slug, viewToken, threadId) {
-        const state = getPluginAiState();
-        return !isPluginAiViewCurrent(slug, viewToken)
-            || Number(state.threadId || 0) !== Number(threadId || 0);
+    function ignoreRes(slug, token, tid) {
+        const state = getState();
+        return !isView(slug, token) || Number(state.threadId || 0) !== Number(tid || 0);
     }
 
-    function clearPluginAiTransientState(state) {
+    function clearTransient(state) {
         state.messages = [];
         state.events = [];
         state.liveActivity = [];
@@ -405,8 +343,8 @@
         };
     }
 
-    function ensurePluginAiUiState() {
-        const state = getPluginAiState();
+    function ensureUi() {
+        const state = getState();
         if (!state.ui || typeof state.ui !== 'object') {
             state.ui = {
                 activityExpanded: false,
@@ -417,121 +355,121 @@
         return state.ui;
     }
 
-    function togglePluginAiUiFlag(key) {
-        const ui = ensurePluginAiUiState();
+    function toggleFlag(key) {
+        const ui = ensureUi();
         ui[key] = !ui[key];
         return ui[key];
     }
 
-    function setPluginAiUiFlag(key, value) {
-        const ui = ensurePluginAiUiState();
-        ui[key] = !!value;
+    function setFlag(key, val) {
+        const ui = ensureUi();
+        ui[key] = !!val;
         return ui[key];
     }
 
-    function setPluginAiLiveActivityOptions(options = {}) {
-        const state = getPluginAiState();
-        state.liveActivityOptions = options && typeof options === 'object' ? { ...options } : {};
+    function setActivityOpts(opts = {}) {
+        const state = getState();
+        state.liveActivityOptions = opts && typeof opts === 'object' ? { ...opts } : {};
         return state.liveActivityOptions;
     }
 
-    function beginPluginAiStreamRequest(threadId = null) {
-        const state = getPluginAiState();
-        const nextId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        state.streamRequestId = nextId;
-        state.streamThreadId = Number(threadId || state.threadId || 0) || null;
-        return nextId;
+    function beginReq(tid = null) {
+        const state = getState();
+        const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        state.streamRequestId = id;
+        state.streamThreadId = Number(tid || state.threadId || 0) || null;
+        return id;
     }
 
-    function isCurrentPluginAiStreamRequest(requestId) {
-        return String(getPluginAiState().streamRequestId || '') === String(requestId || '');
+    function isReq(id) {
+        return String(getState().streamRequestId || '') === String(id || '');
     }
 
-    function endPluginAiStreamRequest(requestId) {
-        const state = getPluginAiState();
-        if (!requestId || isCurrentPluginAiStreamRequest(requestId)) {
+    function endReq(id) {
+        const state = getState();
+        if (!id || isReq(id)) {
             state.streamRequestId = null;
             state.streamThreadId = null;
         }
     }
 
-    function resetPluginAiThreadState(plugin) {
-        const state = getPluginAiState();
+    function resetThread(plugin) {
+        const state = getState();
         state.plugin = String(plugin?.slug || '').trim();
         state.isTheme = !!plugin?.is_theme;
         state.threadId = null;
         state.threads = [];
-        clearPluginAiTransientState(state);
+        clearTransient(state);
         if (typeof window.updatePluginAiSessionUi === 'function') {
             window.updatePluginAiSessionUi();
         }
     }
 
-    function startPluginAiView(plugin) {
-        const token = beginPluginAiView(String(plugin?.slug || '').trim(), !!plugin?.is_theme);
-        resetPluginAiThreadState(plugin);
+    function startView(plugin) {
+        const token = beginView(String(plugin?.slug || '').trim(), !!plugin?.is_theme);
+        resetThread(plugin);
         return token;
     }
 
-    function buildPluginThreadRequest(plugin) {
+    function threadReq(plugin) {
         return {
             plugin_slug: String(plugin?.slug || '').trim(),
             is_theme: !!plugin?.is_theme,
             title: null,
-            last_scan_session_id: getCurrentScanId() || null,
+            last_scan_session_id: scanId() || null,
         };
     }
 
-    function parsePluginAiJsonField(elementId, label, fallback = null) {
-        const raw = String(document.getElementById(elementId)?.value || '').trim();
+    function parseJson(id, label, fallback = null) {
+        const raw = String(document.getElementById(id)?.value || '').trim();
         if (!raw) return fallback;
         try {
             return JSON.parse(raw);
-        } catch (_error) {
+        } catch (_) {
             throw new Error(`${label} must be valid JSON.`);
         }
     }
 
-    function applyRetryPreset(tasks = [], preset = '') {
-        const normalized = String(preset || '').trim();
-        if (!normalized || !Array.isArray(tasks) || !tasks.length) return tasks;
-        const presets = {
+    function applyRetry(tasks = [], preset = '') {
+        const key = String(preset || '').trim();
+        if (!key || !Array.isArray(tasks) || !tasks.length) return tasks;
+        const map = {
             light: { maxRetries: 1, retryDelayMs: 750, retryBackoff: 1.5 },
             normal: { maxRetries: 2, retryDelayMs: 1000, retryBackoff: 2 },
             aggressive: { maxRetries: 3, retryDelayMs: 1500, retryBackoff: 2 },
         };
-        const chosen = presets[normalized];
-        if (!chosen) return tasks;
-        return tasks.map((task) => ({ ...task, ...chosen, ...(task && typeof task === 'object' ? task : {}) }));
+        const cfg = map[key];
+        if (!cfg) return tasks;
+        return tasks.map((task) => ({ ...task, ...cfg, ...(task && typeof task === 'object' ? task : {}) }));
     }
 
-    function readPluginAiRuntimePrefsStorage() {
+    function loadPrefs() {
         try {
-            const raw = window.localStorage?.getItem(PLUGIN_AI_RUNTIME_PREFS_STORAGE_KEY);
-            if (!raw) return { ...DEFAULT_PLUGIN_AI_RUNTIME_PREFS };
+            const raw = window.localStorage?.getItem(PREFS_KEY);
+            if (!raw) return { ...DEFAULT_PREFS };
             const parsed = JSON.parse(raw);
             return parsed && typeof parsed === 'object'
-                ? { ...DEFAULT_PLUGIN_AI_RUNTIME_PREFS, ...parsed }
-                : { ...DEFAULT_PLUGIN_AI_RUNTIME_PREFS };
-        } catch (_error) {
-            return { ...DEFAULT_PLUGIN_AI_RUNTIME_PREFS };
+                ? { ...DEFAULT_PREFS, ...parsed }
+                : { ...DEFAULT_PREFS };
+        } catch (_) {
+            return { ...DEFAULT_PREFS };
         }
     }
 
-    function collectPluginAiRuntimePrefsFromDom() {
-        const strategy = normalizePluginAiStrategy(document.getElementById('plugin-ai-strategy')?.value || DEFAULT_PLUGIN_AI_RUNTIME_PREFS.strategy);
-        const approval_mode = normalizePluginAiApprovalMode(
-            document.getElementById('plugin-ai-approval-mode')?.value || DEFAULT_PLUGIN_AI_RUNTIME_PREFS.approval_mode,
+    function collectPrefs() {
+        const strategy = normStrat(document.getElementById('plugin-ai-strategy')?.value || DEFAULT_PREFS.strategy);
+        const approval = normMode(
+            document.getElementById('plugin-ai-approval-mode')?.value || DEFAULT_PREFS.approval_mode,
             strategy,
         );
         return {
             strategy,
-            loop_mode: String(document.getElementById('plugin-ai-loop-mode')?.value || DEFAULT_PLUGIN_AI_RUNTIME_PREFS.loop_mode).trim(),
+            loop_mode: String(document.getElementById('plugin-ai-loop-mode')?.value || DEFAULT_PREFS.loop_mode).trim(),
             trace_enabled: !!document.getElementById('plugin-ai-trace-enabled')?.checked,
             structured_enabled: !!document.getElementById('plugin-ai-structured-enabled')?.checked,
             output_schema_text: String(document.getElementById('plugin-ai-output-schema')?.value || '').trim(),
             tasks_json_text: String(document.getElementById('plugin-ai-tasks-json')?.value || '').trim(),
-            approval_mode,
+            approval_mode: approval,
             retry_preset: String(document.getElementById('plugin-ai-retry-preset')?.value || '').trim(),
             fanout_json_text: String(document.getElementById('plugin-ai-fanout-json')?.value || '').trim(),
             before_run_json_text: String(document.getElementById('plugin-ai-before-run-json')?.value || '').trim(),
@@ -539,109 +477,109 @@
         };
     }
 
-    function persistPluginAiRuntimePrefs() {
+    function savePrefs() {
         try {
-            const prefs = collectPluginAiRuntimePrefsFromDom();
-            window.localStorage?.setItem(PLUGIN_AI_RUNTIME_PREFS_STORAGE_KEY, JSON.stringify(prefs));
+            const prefs = collectPrefs();
+            window.localStorage?.setItem(PREFS_KEY, JSON.stringify(prefs));
             return prefs;
-        } catch (_error) {
+        } catch (_) {
             return null;
         }
     }
 
-    function applyPluginAiRuntimePrefsToDom(prefs = null) {
-        const safePrefs = prefs && typeof prefs === 'object'
-            ? { ...DEFAULT_PLUGIN_AI_RUNTIME_PREFS, ...prefs }
-            : readPluginAiRuntimePrefsStorage();
-        safePrefs.strategy = normalizePluginAiStrategy(safePrefs.strategy || 'auto');
-        safePrefs.approval_mode = normalizePluginAiApprovalMode(safePrefs.approval_mode || 'manual', safePrefs.strategy);
-        const mappings = [
-            ['plugin-ai-strategy', safePrefs.strategy],
-            ['plugin-ai-loop-mode', safePrefs.loop_mode],
-            ['plugin-ai-output-schema', safePrefs.output_schema_text],
-            ['plugin-ai-tasks-json', safePrefs.tasks_json_text],
-            ['plugin-ai-retry-preset', safePrefs.retry_preset],
-            ['plugin-ai-fanout-json', safePrefs.fanout_json_text],
-            ['plugin-ai-before-run-json', safePrefs.before_run_json_text],
-            ['plugin-ai-after-run-json', safePrefs.after_run_json_text],
+    function applyPrefs(prefs = null) {
+        const safe = prefs && typeof prefs === 'object'
+            ? { ...DEFAULT_PREFS, ...prefs }
+            : loadPrefs();
+        safe.strategy = normStrat(safe.strategy || 'auto');
+        safe.approval_mode = normMode(safe.approval_mode || 'manual', safe.strategy);
+        const map = [
+            ['plugin-ai-strategy', safe.strategy],
+            ['plugin-ai-loop-mode', safe.loop_mode],
+            ['plugin-ai-output-schema', safe.output_schema_text],
+            ['plugin-ai-tasks-json', safe.tasks_json_text],
+            ['plugin-ai-retry-preset', safe.retry_preset],
+            ['plugin-ai-fanout-json', safe.fanout_json_text],
+            ['plugin-ai-before-run-json', safe.before_run_json_text],
+            ['plugin-ai-after-run-json', safe.after_run_json_text],
         ];
-        mappings.forEach(([id, value]) => {
-            const element = document.getElementById(id);
-            if (!element) return;
-            element.value = value ?? '';
+        map.forEach(([id, val]) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.value = val ?? '';
         });
-        safePrefs.approval_mode = syncPluginAiApprovalModeUi(safePrefs.approval_mode || 'manual');
+        safe.approval_mode = syncModeUi(safe.approval_mode || 'manual');
         const traceEl = document.getElementById('plugin-ai-trace-enabled');
-        if (traceEl) traceEl.checked = !!safePrefs.trace_enabled;
-        const structuredEl = document.getElementById('plugin-ai-structured-enabled');
-        if (structuredEl) structuredEl.checked = !!safePrefs.structured_enabled;
-        const state = getPluginAiState();
+        if (traceEl) traceEl.checked = !!safe.trace_enabled;
+        const structEl = document.getElementById('plugin-ai-structured-enabled');
+        if (structEl) structEl.checked = !!safe.structured_enabled;
+        const state = getState();
         state.runtimeOverrides = {
-            strategy: safePrefs.strategy || 'auto',
-            trace_enabled: !!safePrefs.trace_enabled,
+            strategy: safe.strategy || 'auto',
+            trace_enabled: !!safe.trace_enabled,
             output_schema: null,
             tasks: [],
             fanout: null,
-            loop_detection: safePrefs.loop_mode
+            loop_detection: safe.loop_mode
                 ? {
                     maxRepetitions: 3,
                     loopDetectionWindow: 5,
-                    onLoopDetected: safePrefs.loop_mode,
+                    onLoopDetected: safe.loop_mode,
                 }
                 : null,
-            approval_mode: safePrefs.approval_mode || 'manual',
+            approval_mode: safe.approval_mode || 'manual',
         };
-        return safePrefs;
+        return safe;
     }
 
-    function hydratePluginAiRuntimePrefs() {
-        const prefs = applyPluginAiRuntimePrefsToDom(readPluginAiRuntimePrefsStorage());
+    function hydratePrefs() {
+        const prefs = applyPrefs(loadPrefs());
         if (typeof window.refreshPluginAiRuntimeSummary === 'function') {
             window.refreshPluginAiRuntimeSummary();
         }
         return prefs;
     }
 
-    function readPluginAiRuntimeOverrides() {
-        const strategy = normalizePluginAiStrategy(document.getElementById('plugin-ai-strategy')?.value || 'auto');
-        const traceEnabled = !!document.getElementById('plugin-ai-trace-enabled')?.checked;
-        const structuredEnabled = !!document.getElementById('plugin-ai-structured-enabled')?.checked;
-        const loopMode = String(document.getElementById('plugin-ai-loop-mode')?.value || '').trim();
-        const approvalMode = normalizePluginAiApprovalMode(document.getElementById('plugin-ai-approval-mode')?.value || 'manual', strategy);
-        const retryPreset = String(document.getElementById('plugin-ai-retry-preset')?.value || '').trim();
-        const outputSchema = structuredEnabled
-            ? parsePluginAiJsonField('plugin-ai-output-schema', 'Output schema', { type: 'object', properties: { summary: { type: 'string' } } })
+    function readOverrides() {
+        const strategy = normStrat(document.getElementById('plugin-ai-strategy')?.value || 'auto');
+        const trace = !!document.getElementById('plugin-ai-trace-enabled')?.checked;
+        const structured = !!document.getElementById('plugin-ai-structured-enabled')?.checked;
+        const loop = String(document.getElementById('plugin-ai-loop-mode')?.value || '').trim();
+        const approval = normMode(document.getElementById('plugin-ai-approval-mode')?.value || 'manual', strategy);
+        const retry = String(document.getElementById('plugin-ai-retry-preset')?.value || '').trim();
+        const schema = structured
+            ? parseJson('plugin-ai-output-schema', 'Output schema', { type: 'object', properties: { summary: { type: 'string' } } })
             : null;
-        const rawTasks = parsePluginAiJsonField('plugin-ai-tasks-json', 'Tasks JSON', []);
-        const tasks = applyRetryPreset(Array.isArray(rawTasks) ? rawTasks : [], retryPreset);
-        const fanout = parsePluginAiJsonField('plugin-ai-fanout-json', 'Fanout JSON', null);
-        const beforeRun = parsePluginAiJsonField('plugin-ai-before-run-json', 'Before-run hook JSON', null);
-        const afterRun = parsePluginAiJsonField('plugin-ai-after-run-json', 'After-run hook JSON', null);
-        const loopDetection = loopMode
+        const rawTasks = parseJson('plugin-ai-tasks-json', 'Tasks JSON', []);
+        const tasks = applyRetry(Array.isArray(rawTasks) ? rawTasks : [], retry);
+        const fanout = parseJson('plugin-ai-fanout-json', 'Fanout JSON', null);
+        const before = parseJson('plugin-ai-before-run-json', 'Before-run hook JSON', null);
+        const after = parseJson('plugin-ai-after-run-json', 'After-run hook JSON', null);
+        const loopCfg = loop
             ? {
                 maxRepetitions: 3,
                 loopDetectionWindow: 5,
-                onLoopDetected: loopMode,
+                onLoopDetected: loop,
             }
             : null;
-        const runtimeOverrides = {
+        const over = {
             strategy,
-            trace_enabled: traceEnabled,
-            output_schema: outputSchema,
+            trace_enabled: trace,
+            output_schema: schema,
             tasks,
             fanout: fanout && typeof fanout === 'object' ? fanout : null,
-            loop_detection: loopDetection,
-            approval_mode: approvalMode,
-            before_run: beforeRun && typeof beforeRun === 'object' ? beforeRun : null,
-            after_run: afterRun && typeof afterRun === 'object' ? afterRun : null,
+            loop_detection: loopCfg,
+            approval_mode: approval,
+            before_run: before && typeof before === 'object' ? before : null,
+            after_run: after && typeof after === 'object' ? after : null,
         };
-        const state = getPluginAiState();
-        state.runtimeOverrides = runtimeOverrides;
-        return runtimeOverrides;
+        const state = getState();
+        state.runtimeOverrides = over;
+        return over;
     }
 
-    function formatPluginAiStrategyLabel(value) {
-        const normalized = String(value || 'auto').trim().toLowerCase();
+    function stratLabel(val) {
+        const key = String(val || 'auto').trim().toLowerCase();
         const labels = {
             auto: 'Auto',
             agent: 'Agent',
@@ -649,116 +587,116 @@
             tasks: 'Tasks',
             fanout: 'Fan-out',
         };
-        return labels[normalized] || 'Auto';
+        return labels[key] || 'Auto';
     }
 
-    function formatPluginAiApprovalLabel(value) {
-        const normalized = String(value || 'manual').trim().toLowerCase();
+    function approvalLabel(val) {
+        const key = String(val || 'manual').trim().toLowerCase();
         const labels = {
             off: 'Off (YOLO • Dangerous)',
             auto_approve: 'Auto',
             manual: 'Manual',
         };
-        return labels[normalized] || 'Manual';
+        return labels[key] || 'Manual';
     }
 
-    function buildPluginAiStrategyTooltip(value) {
-        const normalized = String(value || 'auto').trim().toLowerCase();
-        const descriptions = {
+    function stratTip(val) {
+        const key = String(val || 'auto').trim().toLowerCase();
+        const desc = {
             auto: 'Auto picks the best execution style for the prompt.',
             agent: 'Single agent uses one focused AI worker.',
             team: 'Team uses multiple collaborating AI roles.',
             tasks: 'Tasks runs a step-by-step task pipeline.',
             fanout: 'Fan-out runs parallel branches and combines results.',
         };
-        return `Strategy: ${formatPluginAiStrategyLabel(normalized)}. ${descriptions[normalized] || descriptions.auto} Click to change.`;
+        return `Strategy: ${stratLabel(key)}. ${desc[key] || desc.auto} Click to change.`;
     }
 
-    function buildPluginAiApprovalTooltip(value, strategy = 'auto') {
-        const normalized = String(value || 'manual').trim().toLowerCase();
-        const normalizedStrategy = normalizePluginAiStrategy(strategy);
-        const descriptions = {
+    function approvalTip(val, strat = 'auto') {
+        const key = String(val || 'manual').trim().toLowerCase();
+        const normS = normStrat(strat);
+        const desc = {
             manual: 'The run pauses and asks for your approval before gated steps continue.',
             auto_approve: 'Approval checks are accepted automatically.',
             off: 'YOLO mode: no approval pause is used. This is dangerous because risky tool calls (write/edit/bash/network/delete) can run immediately without a human checkpoint.',
         };
-        const suffix = normalizedStrategy === 'tasks'
+        const tail = normS === 'tasks'
             ? 'Click to change.'
             : 'Click to change. (Auto approve is available only for Task pipeline.)';
-        return `Approval: ${formatPluginAiApprovalLabel(normalized)}. ${descriptions[normalized] || descriptions.manual} ${suffix}`;
+        return `Approval: ${approvalLabel(key)}. ${desc[key] || desc.manual} ${tail}`;
     }
 
-    function refreshPluginAiRuntimeSummary() {
-        const strategyEl = document.getElementById('plugin-ai-strategy');
-        const approvalEl = document.getElementById('plugin-ai-approval-mode');
-        const strategyChip = document.getElementById('plugin-ai-runtime-strategy-chip');
-        const approvalChip = document.getElementById('plugin-ai-runtime-approval-chip');
-        const strategyValue = normalizePluginAiStrategy(strategyEl?.value || 'auto');
-        const approvalValue = syncPluginAiApprovalModeUi(approvalEl?.value || 'manual');
-        if (strategyChip) {
-            strategyChip.textContent = formatPluginAiStrategyLabel(strategyValue);
-            strategyChip.dataset.strategy = strategyValue;
-            strategyChip.dataset.tooltip = buildPluginAiStrategyTooltip(strategyValue);
-            strategyChip.setAttribute('aria-label', buildPluginAiStrategyTooltip(strategyValue));
+    function refreshSummary() {
+        const stratEl = document.getElementById('plugin-ai-strategy');
+        const appEl = document.getElementById('plugin-ai-approval-mode');
+        const stratChip = document.getElementById('plugin-ai-runtime-strategy-chip');
+        const appChip = document.getElementById('plugin-ai-runtime-approval-chip');
+        const strat = normStrat(stratEl?.value || 'auto');
+        const app = syncModeUi(appEl?.value || 'manual');
+        if (stratChip) {
+            stratChip.textContent = stratLabel(strat);
+            stratChip.dataset.strategy = strat;
+            stratChip.dataset.tooltip = stratTip(strat);
+            stratChip.setAttribute('aria-label', stratTip(strat));
         }
-        if (approvalChip) {
-            approvalChip.textContent = formatPluginAiApprovalLabel(approvalValue);
-            approvalChip.dataset.approval = approvalValue;
-            approvalChip.dataset.tooltip = buildPluginAiApprovalTooltip(approvalValue, strategyValue);
-            approvalChip.setAttribute('aria-label', buildPluginAiApprovalTooltip(approvalValue, strategyValue));
+        if (appChip) {
+            appChip.textContent = approvalLabel(app);
+            appChip.dataset.approval = app;
+            appChip.dataset.tooltip = approvalTip(app, strat);
+            appChip.setAttribute('aria-label', approvalTip(app, strat));
         }
     }
 
-    function cyclePluginAiStrategy() {
-        const strategyEl = document.getElementById('plugin-ai-strategy');
-        if (!strategyEl) return;
-        const strategyOrder = ['auto', 'team', 'agent', 'tasks', 'fanout'];
-        const currentStrategyIndex = Math.max(0, strategyOrder.indexOf(String(strategyEl.value || 'auto').trim()));
-        strategyEl.value = strategyOrder[(currentStrategyIndex + 1) % strategyOrder.length];
-        syncPluginAiApprovalModeUi();
+    function cycleStrat() {
+        const el = document.getElementById('plugin-ai-strategy');
+        if (!el) return;
+        const order = ['auto', 'team', 'agent', 'tasks', 'fanout'];
+        const idx = Math.max(0, order.indexOf(String(el.value || 'auto').trim()));
+        el.value = order[(idx + 1) % order.length];
+        syncModeUi();
         if (typeof window.persistPluginAiRuntimePrefs === 'function') {
             window.persistPluginAiRuntimePrefs();
         }
-        refreshPluginAiRuntimeSummary();
-        strategyEl.dispatchEvent(new Event('change', { bubbles: true }));
+        refreshSummary();
+        el.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    function cyclePluginAiApprovalMode() {
-        const strategyEl = document.getElementById('plugin-ai-strategy');
-        const approvalEl = document.getElementById('plugin-ai-approval-mode');
-        if (!approvalEl) return;
-        const strategyValue = normalizePluginAiStrategy(strategyEl?.value || 'auto');
-        const approvalOrder = getPluginAiAllowedApprovalModes(strategyValue);
-        const currentApprovalIndex = Math.max(0, approvalOrder.indexOf(String(approvalEl.value || 'manual').trim()));
-        approvalEl.value = approvalOrder[(currentApprovalIndex + 1) % approvalOrder.length];
+    function cycleMode() {
+        const stratEl = document.getElementById('plugin-ai-strategy');
+        const appEl = document.getElementById('plugin-ai-approval-mode');
+        if (!appEl) return;
+        const strat = normStrat(stratEl?.value || 'auto');
+        const order = allowedModes(strat);
+        const idx = Math.max(0, order.indexOf(String(appEl.value || 'manual').trim()));
+        appEl.value = order[(idx + 1) % order.length];
         if (typeof window.persistPluginAiRuntimePrefs === 'function') {
             window.persistPluginAiRuntimePrefs();
         }
-        refreshPluginAiRuntimeSummary();
-        approvalEl.dispatchEvent(new Event('change', { bubbles: true }));
+        refreshSummary();
+        appEl.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    function buildPluginAiMessagePayload({ threadId, content }) {
-        const state = getPluginAiState();
+    function buildPayload({ threadId: tid, content }) {
+        const state = getState();
         return {
-            thread_id: threadId,
+            thread_id: tid,
             content,
-            last_scan_session_id: getCurrentScanId() || null,
+            last_scan_session_id: scanId() || null,
             plugin_slug: String(state.plugin || '').trim() || undefined,
             is_theme: !!state.isTheme,
             profile_key: String(state.selectedProfileKey || '').trim() || undefined,
             model: String(state.selectedModel || '').trim() || undefined,
-            ...readPluginAiRuntimeOverrides(),
+            ...readOverrides(),
         };
     }
 
-    function resolvePreferredPluginAiThreadId(threads = []) {
+    function firstThreadId(threads = []) {
         const first = Array.isArray(threads) ? threads[0] : null;
         return first && first.id ? first.id : null;
     }
 
-    function rememberPluginAiThread(data = {}) {
-        const state = getPluginAiState();
+    function saveActiveThread(data = {}) {
+        const state = getState();
         state.threadId = data.id || null;
         state.isTheme = !!data.is_theme;
         state.sourceStatus = {
@@ -767,126 +705,123 @@
             source_path: String(data.source_path || ''),
             workspace_path: String(data.workspace_path || ''),
         };
-        rememberPluginAiSelectedThread(String(data.plugin_slug || state.plugin || '').trim(), state.threadId, !!state.isTheme);
+        saveThread(String(data.plugin_slug || state.plugin || '').trim(), state.threadId, !!state.isTheme);
     }
 
-    function rememberPluginAiThreads(threads = []) {
-        const state = getPluginAiState();
+    function saveThreads(threads = []) {
+        const state = getState();
         state.threads = Array.isArray(threads) ? threads : [];
     }
 
-    function extractCurrentAiConfig() {
+    function getAiConfig() {
         return window.currentAiConfig || {};
     }
 
-    function syncPluginAiProfileSelections() {
-        const state = getPluginAiState();
+    function syncProfiles() {
+        const state = getState();
         const profiles = Array.isArray(state.profiles) ? state.profiles : [];
-        const activeProfile = window.currentAiConfig || null;
-        const preferredProfileKey = String(state.selectedProfileKey || activeProfile?.profile_key || profiles[0]?.profile_key || '').trim();
-        const selectedProfile = profiles.find((item) => String(item.profile_key || '') === preferredProfileKey) || activeProfile || profiles[0] || null;
-        state.selectedProfileKey = selectedProfile ? String(selectedProfile.profile_key || '').trim() : null;
+        const active = window.currentAiConfig || null;
+        const prefKey = String(state.selectedProfileKey || active?.profile_key || profiles[0]?.profile_key || '').trim();
+        const profile = profiles.find((item) => String(item.profile_key || '') === prefKey) || active || profiles[0] || null;
+        state.selectedProfileKey = profile ? String(profile.profile_key || '').trim() : null;
 
-        const models = Array.isArray(selectedProfile?.models) && selectedProfile.models.length
-            ? selectedProfile.models
-            : (selectedProfile?.model ? [String(selectedProfile.model)] : []);
-        const preferredModel = String(state.selectedModel || selectedProfile?.model || models[0] || '').trim();
-        state.selectedModel = models.includes(preferredModel) ? preferredModel : (models[0] || null);
-        return { selectedProfile, models };
+        const models = Array.isArray(profile?.models) && profile.models.length
+            ? profile.models
+            : (profile?.model ? [String(profile.model)] : []);
+        const prefModel = String(state.selectedModel || profile?.model || models[0] || '').trim();
+        state.selectedModel = models.includes(prefModel) ? prefModel : (models[0] || null);
+        return { selectedProfile: profile, models };
     }
 
-    function renderPluginAiComposerProfiles() {
-        const state = getPluginAiState();
-        const combinedSelect = document.getElementById('plugin-ai-profile-model-select');
-        if (!combinedSelect) return;
+    function renderProfiles() {
+        const state = getState();
+        const sel = document.getElementById('plugin-ai-profile-model-select');
+        if (!sel) return;
 
         const profiles = Array.isArray(state.profiles) ? state.profiles : [];
-        const { selectedProfile, models } = syncPluginAiProfileSelections();
-        const selectedProfileKey = String(state.selectedProfileKey || selectedProfile?.profile_key || '').trim();
-        const selectedModel = String(state.selectedModel || '').trim();
+        const { selectedProfile } = syncProfiles();
+        const curKey = String(state.selectedProfileKey || selectedProfile?.profile_key || '').trim();
+        const curModel = String(state.selectedModel || '').trim();
 
-        const options = [];
+        const opts = [];
         profiles.forEach((profile) => {
-            const profileKey = String(profile.profile_key || '').trim();
-            const profileLabel = String(profile.display_name || profile.provider_label || profile.provider || profileKey || 'Profile');
-            const profileModels = Array.isArray(profile.models) && profile.models.length
+            const pKey = String(profile.profile_key || '').trim();
+            const pModels = Array.isArray(profile.models) && profile.models.length
                 ? profile.models
                 : (profile?.model ? [String(profile.model)] : []);
-            profileModels.forEach((model) => {
-                const modelValue = String(model || '').trim();
-                if (!profileKey || !modelValue) return;
-                const value = `${profileKey}::${modelValue}`;
-                const selected = profileKey === selectedProfileKey && modelValue === selectedModel ? ' selected' : '';
-                options.push(`<option value="${escapeOption(value)}"${selected}>${escapeOption(modelValue)}</option>`);
+            pModels.forEach((model) => {
+                const mVal = String(model || '').trim();
+                if (!pKey || !mVal) return;
+                const val = `${pKey}::${mVal}`;
+                const picked = pKey === curKey && mVal === curModel ? ' selected' : '';
+                opts.push(`<option value="${escOpt(val)}"${picked}>${escOpt(mVal)}</option>`);
             });
         });
 
-        combinedSelect.innerHTML = options.length
-            ? options.join('')
-            : '<option value="">No models found</option>';
+        sel.innerHTML = opts.length ? opts.join('') : '<option value="">No models found</option>';
 
-        const activeThreadStreaming = !!state.sending
+        const streaming = !!state.sending
             && Number(state.streamThreadId || 0) === Number(state.threadId || 0)
             && !!String(state.streamRequestId || '').trim();
-        combinedSelect.disabled = options.length === 0 || state.loading || activeThreadStreaming;
+        sel.disabled = opts.length === 0 || state.loading || streaming;
     }
 
-    function updatePluginAiComposerSelections(partial = {}) {
-        const state = getPluginAiState();
-        if (Object.prototype.hasOwnProperty.call(partial, 'profiles')) {
-            state.profiles = Array.isArray(partial.profiles) ? partial.profiles : [];
+    function updateSelections(part = {}) {
+        const state = getState();
+        if (Object.prototype.hasOwnProperty.call(part, 'profiles')) {
+            state.profiles = Array.isArray(part.profiles) ? part.profiles : [];
         }
-        if (Object.prototype.hasOwnProperty.call(partial, 'selectedProfileKey')) {
-            state.selectedProfileKey = partial.selectedProfileKey ? String(partial.selectedProfileKey).trim() : null;
+        if (Object.prototype.hasOwnProperty.call(part, 'selectedProfileKey')) {
+            state.selectedProfileKey = part.selectedProfileKey ? String(part.selectedProfileKey).trim() : null;
         }
-        if (Object.prototype.hasOwnProperty.call(partial, 'selectedModel')) {
-            state.selectedModel = partial.selectedModel ? String(partial.selectedModel).trim() : null;
+        if (Object.prototype.hasOwnProperty.call(part, 'selectedModel')) {
+            state.selectedModel = part.selectedModel ? String(part.selectedModel).trim() : null;
         }
-        renderPluginAiComposerProfiles();
+        renderProfiles();
     }
 
-    window.getPluginAiState = getPluginAiState;
-    window.beginPluginAiView = beginPluginAiView;
-    window.currentPluginMatchesState = currentPluginMatchesState;
-    window.isPluginAiViewCurrent = isPluginAiViewCurrent;
-    window.shouldIgnorePluginAiResponse = shouldIgnorePluginAiResponse;
-    window.clearPluginAiTransientState = clearPluginAiTransientState;
-    window.beginPluginAiStreamRequest = beginPluginAiStreamRequest;
-    window.isCurrentPluginAiStreamRequest = isCurrentPluginAiStreamRequest;
-    window.endPluginAiStreamRequest = endPluginAiStreamRequest;
-    window.setPluginAiLiveActivityOptions = setPluginAiLiveActivityOptions;
-    window.ensurePluginAiUiState = ensurePluginAiUiState;
-    window.togglePluginAiUiFlag = togglePluginAiUiFlag;
-    window.setPluginAiUiFlag = setPluginAiUiFlag;
-    window.rememberPluginAiEventsSnapshot = rememberPluginAiEventsSnapshot;
-    window.getPluginAiEventsSnapshot = getPluginAiEventsSnapshot;
-    window.clearPluginAiEventsSnapshot = clearPluginAiEventsSnapshot;
-    window.rememberPluginAiPendingSnapshot = rememberPluginAiPendingSnapshot;
-    window.getPluginAiPendingSnapshot = getPluginAiPendingSnapshot;
-    window.clearPluginAiPendingSnapshot = clearPluginAiPendingSnapshot;
-    window.rememberPluginAiSelectedThread = rememberPluginAiSelectedThread;
-    window.getPluginAiSelectedThread = getPluginAiSelectedThread;
-    window.rememberPluginAiThreadUiSnapshot = rememberPluginAiThreadUiSnapshot;
-    window.getPluginAiThreadUiSnapshot = getPluginAiThreadUiSnapshot;
-    window.hydratePluginAiThreadUiSnapshot = hydratePluginAiThreadUiSnapshot;
-    window.syncCurrentPluginAiThreadSnapshot = syncCurrentPluginAiThreadSnapshot;
-    window.resetPluginAiThreadState = resetPluginAiThreadState;
-    window.startPluginAiView = startPluginAiView;
-    window.buildPluginThreadRequest = buildPluginThreadRequest;
-    window.readPluginAiRuntimeOverrides = readPluginAiRuntimeOverrides;
-    window.persistPluginAiRuntimePrefs = persistPluginAiRuntimePrefs;
-    window.hydratePluginAiRuntimePrefs = hydratePluginAiRuntimePrefs;
-    window.applyPluginAiRuntimePrefsToDom = applyPluginAiRuntimePrefsToDom;
-    window.refreshPluginAiRuntimeSummary = refreshPluginAiRuntimeSummary;
-    window.syncPluginAiApprovalModeUi = syncPluginAiApprovalModeUi;
-    window.cyclePluginAiStrategy = cyclePluginAiStrategy;
-    window.cyclePluginAiApprovalMode = cyclePluginAiApprovalMode;
-    window.buildPluginAiMessagePayload = buildPluginAiMessagePayload;
-    window.resolvePreferredPluginAiThreadId = resolvePreferredPluginAiThreadId;
-    window.rememberPluginAiThread = rememberPluginAiThread;
-    window.rememberPluginAiThreads = rememberPluginAiThreads;
-    window.extractCurrentAiConfig = extractCurrentAiConfig;
-    window.syncPluginAiProfileSelections = syncPluginAiProfileSelections;
-    window.renderPluginAiComposerProfiles = renderPluginAiComposerProfiles;
-    window.updatePluginAiComposerSelections = updatePluginAiComposerSelections;
+    window.getPluginAiState = getState;
+    window.beginPluginAiView = beginView;
+    window.currentPluginMatchesState = samePlugin;
+    window.isPluginAiViewCurrent = isView;
+    window.shouldIgnorePluginAiResponse = ignoreRes;
+    window.clearPluginAiTransientState = clearTransient;
+    window.beginPluginAiStreamRequest = beginReq;
+    window.isCurrentPluginAiStreamRequest = isReq;
+    window.endPluginAiStreamRequest = endReq;
+    window.setPluginAiLiveActivityOptions = setActivityOpts;
+    window.ensurePluginAiUiState = ensureUi;
+    window.togglePluginAiUiFlag = toggleFlag;
+    window.setPluginAiUiFlag = setFlag;
+    window.rememberPluginAiEventsSnapshot = saveEvents;
+    window.getPluginAiEventsSnapshot = getEvents;
+    window.clearPluginAiEventsSnapshot = clearEvents;
+    window.rememberPluginAiPendingSnapshot = savePending;
+    window.getPluginAiPendingSnapshot = getPending;
+    window.clearPluginAiPendingSnapshot = clearPending;
+    window.rememberPluginAiSelectedThread = saveThread;
+    window.getPluginAiSelectedThread = getThread;
+    window.rememberPluginAiThreadUiSnapshot = saveUiSnap;
+    window.getPluginAiThreadUiSnapshot = getUiSnap;
+    window.hydratePluginAiThreadUiSnapshot = loadUiSnap;
+    window.syncCurrentPluginAiThreadSnapshot = syncSnap;
+    window.resetPluginAiThreadState = resetThread;
+    window.startPluginAiView = startView;
+    window.buildPluginThreadRequest = threadReq;
+    window.readPluginAiRuntimeOverrides = readOverrides;
+    window.persistPluginAiRuntimePrefs = savePrefs;
+    window.hydratePluginAiRuntimePrefs = hydratePrefs;
+    window.applyPluginAiRuntimePrefsToDom = applyPrefs;
+    window.refreshPluginAiRuntimeSummary = refreshSummary;
+    window.syncPluginAiApprovalModeUi = syncModeUi;
+    window.cyclePluginAiStrategy = cycleStrat;
+    window.cyclePluginAiApprovalMode = cycleMode;
+    window.buildPluginAiMessagePayload = buildPayload;
+    window.resolvePreferredPluginAiThreadId = firstThreadId;
+    window.rememberPluginAiThread = saveActiveThread;
+    window.rememberPluginAiThreads = saveThreads;
+    window.extractCurrentAiConfig = getAiConfig;
+    window.syncPluginAiProfileSelections = syncProfiles;
+    window.renderPluginAiComposerProfiles = renderProfiles;
+    window.updatePluginAiComposerSelections = updateSelections;
 })();

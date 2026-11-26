@@ -92,86 +92,86 @@
         return currentScanId;
     };
 
-    let globalTooltipEl = null;
-    let globalTooltipTarget = null;
+    let tipEl = null;
+    let tipTarget = null;
 
-    function ensureGlobalTooltip() {
-        if (globalTooltipEl && document.body?.contains(globalTooltipEl)) return globalTooltipEl;
-        globalTooltipEl = document.createElement('div');
-        globalTooltipEl.className = 'global-tooltip';
-        globalTooltipEl.setAttribute('role', 'tooltip');
-        document.body.appendChild(globalTooltipEl);
-        return globalTooltipEl;
+    function ensureTip() {
+        if (tipEl && document.body?.contains(tipEl)) return tipEl;
+        tipEl = document.createElement('div');
+        tipEl.className = 'global-tooltip';
+        tipEl.setAttribute('role', 'tooltip');
+        document.body.appendChild(tipEl);
+        return tipEl;
     }
 
-    function positionGlobalTooltip(target) {
-        const tooltip = ensureGlobalTooltip();
+    function placeTip(target) {
+        const tooltip = ensureTip();
         const text = target?.getAttribute('data-tooltip');
         if (!text) return;
         tooltip.textContent = text;
         tooltip.classList.add('is-visible');
         const rect = target.getBoundingClientRect();
-        const tooltipRect = tooltip.getBoundingClientRect();
+        const tipRect = tooltip.getBoundingClientRect();
         const margin = 12;
-        let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-        left = Math.max(margin, Math.min(left, window.innerWidth - tooltipRect.width - margin));
-        let top = rect.top - tooltipRect.height - 10;
+        let left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+        left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+        let top = rect.top - tipRect.height - 10;
         if (top < margin) {
             top = rect.bottom + 10;
         }
-        top = Math.max(margin, Math.min(top, window.innerHeight - tooltipRect.height - margin));
+        top = Math.max(margin, Math.min(top, window.innerHeight - tipRect.height - margin));
         tooltip.style.left = `${left}px`;
         tooltip.style.top = `${top}px`;
     }
 
-    function hideGlobalTooltip() {
-        if (!globalTooltipEl) return;
-        globalTooltipEl.classList.remove('is-visible');
+    function hideTip() {
+        if (!tipEl) return;
+        tipEl.classList.remove('is-visible');
     }
 
-    function bindGlobalTooltips() {
+    function bindTips() {
         if (document.body?.dataset.globalTooltipBound === '1') return;
-        const tooltipSelector = '.info-icon[data-tooltip], .plugin-ai-runtime-chip[data-tooltip]';
+        const selector = '.info-icon[data-tooltip], .plugin-ai-runtime-chip[data-tooltip]';
         document.body?.addEventListener('mouseover', (event) => {
-            const target = event.target instanceof Element ? event.target.closest(tooltipSelector) : null;
+            const target = event.target instanceof Element ? event.target.closest(selector) : null;
             if (!target) return;
-            globalTooltipTarget = target;
-            positionGlobalTooltip(target);
+            tipTarget = target;
+            placeTip(target);
         });
         document.body?.addEventListener('mouseout', (event) => {
-            const target = event.target instanceof Element ? event.target.closest(tooltipSelector) : null;
+            const target = event.target instanceof Element ? event.target.closest(selector) : null;
             if (!target) return;
-            if (globalTooltipTarget === target) {
-                globalTooltipTarget = null;
-                hideGlobalTooltip();
+            if (tipTarget === target) {
+                tipTarget = null;
+                hideTip();
             }
         });
         document.body?.addEventListener('focusin', (event) => {
-            const target = event.target instanceof Element ? event.target.closest(tooltipSelector) : null;
+            const target = event.target instanceof Element ? event.target.closest(selector) : null;
             if (!target) return;
-            globalTooltipTarget = target;
-            positionGlobalTooltip(target);
+            tipTarget = target;
+            placeTip(target);
         });
         document.body?.addEventListener('focusout', (event) => {
-            const target = event.target instanceof Element ? event.target.closest(tooltipSelector) : null;
+            const target = event.target instanceof Element ? event.target.closest(selector) : null;
             if (!target) return;
-            if (globalTooltipTarget === target) {
-                globalTooltipTarget = null;
-                hideGlobalTooltip();
+            if (tipTarget === target) {
+                tipTarget = null;
+                hideTip();
             }
         });
         window.addEventListener('scroll', () => {
-            if (globalTooltipTarget) positionGlobalTooltip(globalTooltipTarget);
+            if (tipTarget) placeTip(tipTarget);
         }, true);
         window.addEventListener('resize', () => {
-            if (globalTooltipTarget) positionGlobalTooltip(globalTooltipTarget);
+            if (tipTarget) placeTip(tipTarget);
         });
         if (document.body) {
             document.body.dataset.globalTooltipBound = '1';
         }
     }
 
-    bindGlobalTooltips();
+    bindTips();
 
     window.zetatechRuntime = {
         getCurrentScanId: () => currentScanId,

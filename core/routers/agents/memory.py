@@ -51,7 +51,7 @@ def _file_candidates(event: Dict[str, Any]) -> List[str]:
     return items
 
 
-def build_updated_thread_memory(
+def next_memory(
     *,
     repo,
     thread_id: int,

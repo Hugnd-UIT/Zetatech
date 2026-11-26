@@ -58,7 +58,7 @@ class ReleaseMetadataService:
             "User-Agent": "Zetatech Update Agent",
         }
 
-    def build_release_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def release_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
         html_url = data.get("html_url")
         if html_url:
             parsed = urlparse(str(html_url))
@@ -78,7 +78,7 @@ class ReleaseMetadataService:
     def tag_url(self, tag_name: str) -> str:
         return f"https://github.com/Hugnd-UIT/Zetatech/tree/{quote(tag_name, safe='/')}"
 
-    def _pick_latest_tag(self, tags: List[Dict[str, Any]]) -> Optional[str]:
+    def _pick_tag(self, tags: List[Dict[str, Any]]) -> Optional[str]:
         best_tag: Optional[str] = None
         best_ver: Tuple[int, ...] = ()
         for entry in tags:
@@ -91,7 +91,7 @@ class ReleaseMetadataService:
                 best_ver = ver
         return best_tag
 
-    def empty_release_payload(self) -> Dict[str, Any]:
+    def empty_payload(self) -> Dict[str, Any]:
         return {
             "tag_name": None,
             "name": None,
@@ -114,10 +114,10 @@ class ReleaseMetadataService:
         payload = res.json()
         if not isinstance(payload, list):
             raise ValueError("Unexpected tags API response shape")
-        tag = self._pick_latest_tag(payload)
+        tag = self._pick_tag(payload)
         if not tag:
-            return self.empty_release_payload()
-        return self.build_release_payload(
+            return self.empty_payload()
+        return self.release_payload(
             {
                 "tag_name": tag,
                 "name": tag,
@@ -160,7 +160,7 @@ class UpdateManager:
             allowed_release_hosts=self.ALLOWED_RELEASE_HOSTS,
         )
 
-    def _runtime_metadata_payload(self) -> Dict[str, Any]:
+    def _runtime_meta(self) -> Dict[str, Any]:
         meta = get_runtime_metadata()
         return {
             "current_version": meta.current_version,
@@ -186,10 +186,10 @@ class UpdateManager:
             self._cache_time = now
         return info
 
-    def _empty_release_payload(self) -> Dict[str, Any]:
-        return self._release_metadata.empty_release_payload()
+    def _empty_rel(self) -> Dict[str, Any]:
+        return self._release_metadata.empty_payload()
 
-    def _resolve_release_for_status(self, force: bool) -> Dict[str, Any]:
+    def _resolve_release(self, force: bool) -> Dict[str, Any]:
         fetch = force
         if not force:
             with self._lock:
@@ -209,15 +209,15 @@ class UpdateManager:
                     cached = self._cache
                 if cached:
                     return cached
-                return self._empty_release_payload()
+                return self._empty_rel()
 
         with self._lock:
             cached = self._cache
         if cached:
             return cached
-        return self._empty_release_payload()
+        return self._empty_rel()
 
-    def _build_manual_update_command(self) -> str:
+    def _update_cmd(self) -> str:
         return (
             f"docker pull {self.HELPER_IMAGE}\n"
             f"docker rm -f zetatech >/dev/null 2>&1 || true\n"
@@ -226,7 +226,7 @@ class UpdateManager:
             f"{self.HELPER_IMAGE}"
         )
 
-    def _resolve_status_label(
+    def _status_label(
         self,
         *,
         runtime_status: str,
@@ -242,7 +242,7 @@ class UpdateManager:
             return "update_available"
         return "up_to_date"
 
-    def _resolve_status_message(self, status_label: str, runtime_status: str) -> str:
+    def _status_msg(self, status_label: str, runtime_status: str) -> str:
         if status_label == "update_available":
             return self.MESSAGE_UPDATE_AVAILABLE
         if status_label == "degraded":
@@ -251,21 +251,21 @@ class UpdateManager:
             return self.MESSAGE_DEGRADED
         return self.MESSAGE_UP_TO_DATE
 
-    def _build_status_payload(self, release: Dict[str, Any]) -> Dict[str, Any]:
-        meta = self._runtime_metadata_payload()
+    def _status_payload(self, release: Dict[str, Any]) -> Dict[str, Any]:
+        meta = self._runtime_meta()
         ref = meta["current_tag"]
         if ref == "unknown":
             ref = meta["current_version"]
         latest = release.get("tag_name")
         avail = self._release_metadata.is_newer_release(ref, latest)
         checked = self._cache_time.isoformat().replace("+00:00", "Z") if self._cache_time else None
-        label = self._resolve_status_label(
+        label = self._status_label(
             runtime_status=meta["runtime_status"],
             latest_version=latest,
             update_available=avail,
             release_error=self._last_error,
         )
-        cmd = self._build_manual_update_command() if avail else None
+        cmd = self._update_cmd() if avail else None
         raw_url = release.get("html_url")
         url = self._release_metadata.tag_url(latest) if latest and raw_url else raw_url
 
@@ -281,7 +281,7 @@ class UpdateManager:
             "release_published_at": release.get("published_at"),
             "update_available": avail,
             "status": label,
-            "message": self._resolve_status_message(label, meta["runtime_status"]),
+            "message": self._status_msg(label, meta["runtime_status"]),
             "update_command": cmd,
             "manual_update_required": avail,
             "manual_update_message": self.MESSAGE_MANUAL_UPDATE_ONLY if avail else None,
@@ -290,10 +290,10 @@ class UpdateManager:
         }
 
     def get_status(self, force: bool = False) -> Dict[str, Any]:
-        release = self._resolve_release_for_status(force)
-        return self._build_status_payload(release)
+        release = self._resolve_release(force)
+        return self._status_payload(release)
 
-    def get_manual_update_payload(self) -> Dict[str, Any]:
+    def manual_payload(self) -> Dict[str, Any]:
         status = self.get_status(force=True)
         return {
             "status": status["status"],
