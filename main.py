@@ -18,14 +18,14 @@ class RuntimeMetadata:
     status: str
 
 
-def _normalize_runtime_value(value: str | None) -> str:
-    return (value or "").strip()
+def _norm(val: str | None) -> str:
+    return (val or "").strip()
 
 
 def get_runtime_metadata() -> RuntimeMetadata:
-    version = _normalize_runtime_value(os.getenv(RUNTIME_VERSION_ENV))
-    tag = _normalize_runtime_value(os.getenv(RUNTIME_TAG_ENV))
-    build_id = _normalize_runtime_value(os.getenv(RUNTIME_BUILD_ENV)) or None
+    version = _norm(os.getenv(RUNTIME_VERSION_ENV))
+    tag = _norm(os.getenv(RUNTIME_TAG_ENV))
+    build_id = _norm(os.getenv(RUNTIME_BUILD_ENV)) or None
 
     if version and tag:
         return RuntimeMetadata(

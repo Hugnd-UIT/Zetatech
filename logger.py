@@ -11,10 +11,10 @@ def get_log_file() -> Path:
 
 
 def build_rotating_file_handler() -> RotatingFileHandler | None:
-    log_file = get_log_file()
+    path = get_log_file()
     try:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(path, maxBytes=10 * 1024 * 1024, backupCount=5)
     except OSError:
         return None
     handler.setLevel(logging.DEBUG)
@@ -24,13 +24,13 @@ def build_rotating_file_handler() -> RotatingFileHandler | None:
     return handler
 
 
-def _build_console_handler() -> logging.StreamHandler:
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(
+def _console_handler() -> logging.StreamHandler:
+    stream = logging.StreamHandler(sys.stdout)
+    stream.setLevel(logging.INFO)
+    stream.setFormatter(
         logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S")
     )
-    return console_handler
+    return stream
 
 
 def setup_logger(name: str = "zetatech") -> logging.Logger:
@@ -39,11 +39,11 @@ def setup_logger(name: str = "zetatech") -> logging.Logger:
         return logger
 
     logger.setLevel(logging.INFO)
-    logger.addHandler(_build_console_handler())
+    logger.addHandler(_console_handler())
 
-    file_handler = build_rotating_file_handler()
-    if file_handler is not None:
-        logger.addHandler(file_handler)
+    file = build_rotating_file_handler()
+    if file is not None:
+        logger.addHandler(file)
     else:
         logger.warning("File logging disabled because the log directory is not writable.")
 

@@ -12,8 +12,8 @@ logger = logging.getLogger("zetatech.update.router")
 @router.get("/update")
 async def get_update_status(force: bool = False):
     try:
-        status_payload = await asyncio.to_thread(release.manager.get_status, force)
-        return status_payload
+        data = await asyncio.to_thread(release.manager.get_status, force)
+        return data
     except Exception as exc:
         logger.exception("Failed to fetch update info")
         raise HTTPException(

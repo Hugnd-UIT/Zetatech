@@ -24,30 +24,29 @@ class ConnectionManager:
                     del self.active_connections[session_id]
 
     async def send_to_session(self, session_id: int, message: dict):
-
-        connections_to_send = []
+        targets = []
         async with self.lock:
             if session_id in self.active_connections:
-                connections_to_send = list(self.active_connections[session_id])
+                targets = list(self.active_connections[session_id])
 
-        failed_connections: List[WebSocket] = []
-        for connection in connections_to_send:
+        failed: List[WebSocket] = []
+        for conn in targets:
             try:
-                await connection.send_json(message)
+                await conn.send_json(message)
             except Exception:
-                failed_connections.append(connection)
+                failed.append(conn)
 
-        if not failed_connections:
+        if not failed:
             return
 
         async with self.lock:
-            session_connections = self.active_connections.get(session_id)
-            if not session_connections:
+            items = self.active_connections.get(session_id)
+            if not items:
                 return
-            for failed in failed_connections:
-                if failed in session_connections:
-                    session_connections.remove(failed)
-            if not session_connections:
+            for conn in failed:
+                if conn in items:
+                    items.remove(conn)
+            if not items:
                 del self.active_connections[session_id]
 
 

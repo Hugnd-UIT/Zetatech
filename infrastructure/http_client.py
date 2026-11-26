@@ -9,55 +9,55 @@ from urllib3.util.retry import Retry
 
 from config import MAX_POOL_SIZE
 
-DEFAULT_RETRY_ATTEMPTS = 3
-DEFAULT_BACKOFF_FACTOR = 0.5
-RETRYABLE_STATUS_CODES = (429, 500, 502, 503, 504)
+RETRIES = 3
+BACKOFF = 0.5
+RETRY_CODES = (429, 500, 502, 503, 504)
 
-_session_lock = threading.Lock()
+_lock = threading.Lock()
 _session: Optional[requests.Session] = None
-_configured_pool_size = 0
+_pool = 0
 
 
-def _build_retry_strategy() -> Retry:
+def _retry() -> Retry:
     return Retry(
-        total=DEFAULT_RETRY_ATTEMPTS,
-        connect=DEFAULT_RETRY_ATTEMPTS,
-        read=DEFAULT_RETRY_ATTEMPTS,
-        status=DEFAULT_RETRY_ATTEMPTS,
-        backoff_factor=DEFAULT_BACKOFF_FACTOR,
-        status_forcelist=RETRYABLE_STATUS_CODES,
+        total=RETRIES,
+        connect=RETRIES,
+        read=RETRIES,
+        status=RETRIES,
+        backoff_factor=BACKOFF,
+        status_forcelist=RETRY_CODES,
         allowed_methods=frozenset({"GET", "HEAD", "OPTIONS"}),
         raise_on_status=False,
     )
 
 
-def _build_adapter(pool_size: int) -> HTTPAdapter:
+def _adapter(size: int) -> HTTPAdapter:
     return HTTPAdapter(
-        pool_connections=pool_size,
-        pool_maxsize=pool_size,
-        max_retries=_build_retry_strategy(),
+        pool_connections=size,
+        pool_maxsize=size,
+        max_retries=_retry(),
     )
 
 
-def _configure_session(session: requests.Session, pool_size: int) -> None:
-    adapter = _build_adapter(pool_size)
+def _mount(session: requests.Session, size: int) -> None:
+    adapter = _adapter(size)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
 
 
 def get_session(pool_size: int = MAX_POOL_SIZE) -> requests.Session:
-    global _session, _configured_pool_size
+    global _session, _pool
 
-    safe_pool_size = min(max(pool_size, 1), MAX_POOL_SIZE)
-    with _session_lock:
+    size = min(max(pool_size, 1), MAX_POOL_SIZE)
+    with _lock:
         if _session is None:
             _session = requests.Session()
-            _configure_session(_session, safe_pool_size)
-            _configured_pool_size = safe_pool_size
+            _mount(_session, size)
+            _pool = size
             return _session
 
-        if safe_pool_size > _configured_pool_size:
-            _configure_session(_session, safe_pool_size)
-            _configured_pool_size = safe_pool_size
+        if size > _pool:
+            _mount(_session, size)
+            _pool = size
 
         return _session

@@ -33,13 +33,13 @@ class DatabaseBootstrapper:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) AS c FROM plugin_catalog")
-            catalog_count = int((cursor.fetchone() or {"c": 0})["c"])
-            if catalog_count > 0:
+            catalog = int((cursor.fetchone() or {"c": 0})["c"])
+            if catalog > 0:
                 return False
 
             cursor.execute("SELECT COUNT(*) AS c FROM scan_results")
-            results_count = int((cursor.fetchone() or {"c": 0})["c"])
-            return results_count > 0
+            results = int((cursor.fetchone() or {"c": 0})["c"])
+            return results > 0
 
     def _ensure_scan_results_columns(self) -> None:
         self._ensure_columns(
@@ -85,21 +85,21 @@ class DatabaseBootstrapper:
     def _ensure_columns(self, *, table_name: str, columns: dict[str, str]) -> None:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
-            for column_name, column_definition in columns.items():
-                if self._column_exists(cursor, table_name, column_name):
+            for name, defn in columns.items():
+                if self._column_exists(cursor, table_name, name):
                     continue
                 try:
                     cursor.execute(
-                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
+                        f"ALTER TABLE {table_name} ADD COLUMN {name} {defn}"
                     )
                     conn.commit()
                 except Exception:
                     pass
 
     @staticmethod
-    def _column_exists(cursor, table_name: str, column_name: str) -> bool:
+    def _column_exists(cursor, table_name: str, name: str) -> bool:
         try:
-            cursor.execute(f"SELECT {column_name} FROM {table_name} LIMIT 1")
+            cursor.execute(f"SELECT {name} FROM {table_name} LIMIT 1")
             return True
         except Exception:
             return False

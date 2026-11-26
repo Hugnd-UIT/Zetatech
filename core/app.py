@@ -30,10 +30,10 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 def validate_runtime_persistence() -> Path:
     db_path = ensure_db_dir()
-    runtime_root = db_path.parent
-    logger.info("Using canonical runtime root: %s", runtime_root)
+    root = db_path.parent
+    logger.info("Using canonical runtime root: %s", root)
     logger.info("Critical durable-root validation succeeded for database path: %s", db_path)
-    return runtime_root
+    return root
 
 _AUTH_TOKEN = os.environ.get("ZETATECH_AUTH_TOKEN", "").strip()
 _PUBLIC_PATH_PREFIXES = ("/static", "/assets", "/docs", "/openapi.json", "/redoc")
@@ -74,12 +74,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(prefix) for prefix in _PUBLIC_PATH_PREFIXES):
             return await call_next(request)
 
-        auth_header = request.headers.get("authorization", "")
-        if not auth_header.startswith("Bearer "):
+        header = request.headers.get("authorization", "")
+        if not header.startswith("Bearer "):
             return PlainTextResponse("Unauthorized", status_code=401)
 
-        provided_token = auth_header[7:]
-        if not secrets.compare_digest(provided_token, _AUTH_TOKEN):
+        token = header[7:]
+        if not secrets.compare_digest(token, _AUTH_TOKEN):
             return PlainTextResponse("Forbidden", status_code=403)
 
         return await call_next(request)
@@ -88,17 +88,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
 def websocket_has_valid_auth(websocket: WebSocket) -> bool:
     if not _AUTH_TOKEN:
         return True
-    auth_header = websocket.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
+    header = websocket.headers.get("authorization", "")
+    if not header.startswith("Bearer "):
         return False
-    return secrets.compare_digest(auth_header[7:], _AUTH_TOKEN)
+    return secrets.compare_digest(header[7:], _AUTH_TOKEN)
 
 
 def setup_logging() -> None:
     handlers: list[logging.Handler] = [logging.StreamHandler()]
-    file_handler = build_rotating_file_handler()
-    if file_handler is not None:
-        handlers.insert(0, file_handler)
+    file = build_rotating_file_handler()
+    if file is not None:
+        handlers.insert(0, file)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -106,7 +106,7 @@ def setup_logging() -> None:
         handlers=handlers,
         force=True,
     )
-    if file_handler is None:
+    if file is None:
         logging.getLogger("zetatech").warning(
             "File logging disabled because the log directory is not writable."
         )
@@ -119,12 +119,12 @@ def create_app() -> FastAPI:
     logger.info("Starting Zetatech Server...")
     validate_runtime_persistence()
     bootstrap_default_custom_rules()
-    runtime_metadata = get_runtime_metadata()
+    meta = get_runtime_metadata()
 
     app = FastAPI(
         title="Zetatech Dashboard",
         description="WordPress Plugin & Theme Security Scanner",
-        version=runtime_metadata.current_version,
+        version=meta.current_version,
     )
     configure_application(app)
     return app
