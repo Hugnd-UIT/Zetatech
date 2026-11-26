@@ -1,9 +1,3 @@
-"""
-Zetatech Plugin Downloader
-
-Download and extract plugins for analysis.
-"""
-
 import http.client
 import ipaddress
 import logging
@@ -24,7 +18,6 @@ logger = logging.getLogger("zetatech.downloaders.plugin")
 
 
 class PluginDownloader:
-    """Plugin downloader and extractor."""
 
     MAX_REDIRECTS = 5
     MAX_ZIP_ENTRIES = 20000
@@ -40,7 +33,6 @@ class PluginDownloader:
         self.plugins_dir.mkdir(parents=True, exist_ok=True)
 
     def _sanitize_slug(self, slug: str) -> str:
-        """Sanitize slug to prevent path traversal and unsafe filesystem writes."""
         raw = (slug or "").strip()
         if not raw:
             raise ValueError("Invalid slug: empty")
@@ -51,7 +43,6 @@ class PluginDownloader:
         return raw
 
     def _ensure_within_base(self, target: Path, base: Path) -> None:
-        """Ensure target path is inside base directory."""
         target_resolved = target.resolve()
         base_resolved = base.resolve()
         if os.path.commonpath([str(base_resolved), str(target_resolved)]) != str(
@@ -60,12 +51,6 @@ class PluginDownloader:
             raise ValueError("Path traversal detected")
 
     def _validate_url(self, url: str) -> Tuple[str, List[str]]:
-        """
-        Validate URL to prevent SSRF attacks and return validated IPs.
-
-        Returns:
-            Tuple of (hostname, list_of_validated_ip_strings)
-        """
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
             raise ValueError(f"Invalid URL scheme: {parsed.scheme}")
@@ -136,14 +121,12 @@ class PluginDownloader:
         return hostname, validated_ips
 
     def _select_pinned_ip(self, validated_ips: List[str]) -> str:
-        """Prefer IPv4 for URL/transport compatibility, fall back to IPv6."""
         for ip_str in validated_ips:
             if ipaddress.ip_address(ip_str).version == 4:
                 return ip_str
         return validated_ips[0]
 
     def _open_pinned_response(self, url: str, hostname: str, validated_ips: List[str]):
-        """Open a pinned HTTP(S) response without changing the TLS hostname."""
         parsed = urlparse(url)
         pinned_ip = self._select_pinned_ip(validated_ips)
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
@@ -183,7 +166,6 @@ class PluginDownloader:
         return connection, response
 
     def _validate_zip_archive(self, zip_ref: zipfile.ZipFile) -> None:
-        """Validate ZIP to reduce zip-bomb and archive abuse risks."""
         members = zip_ref.infolist()
         if len(members) > self.MAX_ZIP_ENTRIES:
             raise ValueError("ZIP archive has too many entries")
@@ -280,7 +262,6 @@ class PluginDownloader:
     def download_and_extract(
         self, download_url: str, slug: str, verbose: bool = True
     ) -> Optional[Path]:
-        """Download and extract a plugin, returning the path to extracted files."""
         session = get_session()
         safe_slug = slug
         plugin_dir: Optional[Path] = None

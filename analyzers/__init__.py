@@ -1,5 +1,3 @@
-"""Zetatech Analyzers Package"""
-
 from analyzers.risk import label_risk
 from analyzers.score import score_vps
 

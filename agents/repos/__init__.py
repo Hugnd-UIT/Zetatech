@@ -14,7 +14,6 @@ class AIRepository(
     RunMixin,
     ApprovalMixin,
 ):
-    """Repository for AI provider, thread, message, and run state."""
 
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path

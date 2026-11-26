@@ -1,23 +1,15 @@
-"""
-Zetatech Theme Scanner
-
-Theme fetching and analysis from WordPress.org API.
-"""
-
 import logging
 import time
 import threading
 from typing import List, Dict, Any, Optional, Callable
 from config import RISKY_TAGS
 from infrastructure.http_client import get_session
-from utils.date_utils import calculate_days_ago
+from utils.date_utils import days_ago
 
 logger = logging.getLogger("zetatech.scanners.theme")
 
 
 class ThemeScanner:
-    """WordPress Theme Scanner."""
-
     def __init__(
         self,
         pages: int = 5,
@@ -38,7 +30,6 @@ class ThemeScanner:
         self.stop_event.set()
 
     def fetch_themes(self, page: int = 1, max_retries: int = 3) -> List[Dict[str, Any]]:
-        """Fetch themes from WordPress.org API."""
         session = get_session()
         url = "https://api.wordpress.org/themes/info/1.2/"
         params = {
@@ -76,7 +67,6 @@ class ThemeScanner:
         return []
 
     def process_theme(self, theme: Dict[str, Any]) -> Dict[str, Any]:
-        """Process a single theme and return analysis."""
         name = theme.get("name", "Unknown")
         slug = theme.get("slug", "")
         version = theme.get("version", "?")
@@ -84,7 +74,7 @@ class ThemeScanner:
         updated = theme.get("last_updated", "")
         author = theme.get("author", "Unknown")
 
-        days = calculate_days_ago(updated)
+        days = days_ago(updated)
 
 
         tags = list(theme.get("tags", {}).keys())
@@ -126,7 +116,6 @@ class ThemeScanner:
         }
 
     def scan(self) -> List[Dict[str, Any]]:
-        """Run the theme scan."""
         found = 0
 
         for page in range(1, self.pages + 1):

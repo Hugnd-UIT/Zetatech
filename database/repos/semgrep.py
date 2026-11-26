@@ -5,10 +5,7 @@ from database.models import get_db
 
 
 class SemgrepMixin:
-    """Semgrep repository behavior."""
-
     def create_semgrep_scan(self, slug: str, version: Optional[str] = None) -> int:
-        """Create a new Semgrep scan record."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -28,7 +25,6 @@ class SemgrepMixin:
         summary: Optional[Dict[str, Any]] = None,
         error: Optional[str] = None,
     ):
-        """Update Semgrep scan status and summary."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             updates = ["status = ?"]
@@ -58,7 +54,6 @@ class SemgrepMixin:
             conn.commit()
 
     def save_semgrep_finding(self, scan_id: int, finding: Dict[str, Any]):
-        """Save a single Semgrep finding."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -82,7 +77,6 @@ class SemgrepMixin:
             conn.commit()
 
     def get_semgrep_scan(self, slug: str) -> Optional[Dict[str, Any]]:
-        """Get the latest Semgrep scan for a plugin."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -117,7 +111,6 @@ class SemgrepMixin:
             return scan
 
     def get_semgrep_stats_for_slugs(self, slugs: List[str]) -> Dict[str, Any]:
-        """Aggregate Semgrep statistics for a list of plugin slugs using each slug's latest scan."""
         if not slugs:
             return {
                 "total_findings": 0,
@@ -200,7 +193,6 @@ class SemgrepMixin:
     def get_semgrep_statuses_for_slugs(
         self, slugs: List[str]
     ) -> Dict[str, Dict[str, Any]]:
-        """Get the latest scan status and findings count for a list of slugs."""
         if not slugs:
             return {}
 

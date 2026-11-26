@@ -28,12 +28,10 @@ BULK_SCAN_PAUSE_SECONDS = 0.1
 
 
 def stop_requested(stop_event: Optional[asyncio.Event]) -> bool:
-    """Return whether a cooperative stop has been requested."""
     return bool(stop_event and stop_event.is_set())
 
 
 def mark_semgrep_scan_stopped(*, repo: ScanRepository, scan_id: int) -> None:
-    """Persist a stopped scan state."""
     repo.update_semgrep_scan(scan_id, "failed", error="Stopped by user")
 
 
@@ -42,7 +40,6 @@ async def download_plugin_for_semgrep(
     slug: str,
     download_url: str,
 ) -> str | None:
-    """Download and extract a plugin for Semgrep scanning."""
     downloader = PluginDownloader()
     loop = asyncio.get_running_loop()
     plugin_path = await loop.run_in_executor(
@@ -56,14 +53,12 @@ async def download_plugin_for_semgrep(
 
 
 def prepare_semgrep_output_dir(*, slug: str, scan_id: int) -> Path:
-    """Create the per-scan Semgrep output directory."""
     output_dir = SEMGREP_OUTPUTS_DIR / f"{slug}_{scan_id}"
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
 
 def copy_custom_rules_if_available(output_dir: Path) -> None:
-    """Copy shared custom rules into the per-scan directory when present."""
     if not CUSTOM_RULES_PATH.exists():
         return
     try:
@@ -73,7 +68,6 @@ def copy_custom_rules_if_available(output_dir: Path) -> None:
 
 
 def write_disabled_rules_snapshot(output_dir: Path) -> None:
-    """Persist disabled rule IDs for scan-local filtering."""
     disabled_rules = get_disabled_config().get("rules", [])
     if not disabled_rules:
         return
@@ -85,7 +79,6 @@ def write_disabled_rules_snapshot(output_dir: Path) -> None:
 
 
 async def execute_semgrep_scan(*, output_dir: Path, plugin_path: str, slug: str):
-    """Execute Semgrep against a prepared plugin path."""
     scanner = SemgrepScanner(
         output_dir=str(output_dir),
         use_registry_rules=True,
@@ -96,7 +89,6 @@ async def execute_semgrep_scan(*, output_dir: Path, plugin_path: str, slug: str)
 
 
 def build_semgrep_summary(findings: List[Dict[str, Any]], errors: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Build the persisted summary payload for Semgrep findings."""
     summary = {
         "total_findings": len(findings),
         "breakdown": {"ERROR": 0, "WARNING": 0, "INFO": 0},
@@ -117,7 +109,6 @@ def persist_semgrep_findings(
     stop_event: Optional[asyncio.Event],
     errors: Optional[List[str]] = None,
 ) -> Dict[str, Any] | None:
-    """Persist findings unless a stop was requested during save."""
     for finding in findings:
         if stop_requested(stop_event):
             return None
@@ -126,7 +117,6 @@ def persist_semgrep_findings(
 
 
 def validate_bulk_plugin(plugin: Dict[str, Any]) -> Dict[str, Any] | None:
-    """Extract and validate the plugin metadata required for bulk scanning."""
     raw_slug = plugin.get("slug")
     try:
         plugin_meta = _extract_bulk_plugin_meta(plugin)
@@ -137,7 +127,6 @@ def validate_bulk_plugin(plugin: Dict[str, Any]) -> Dict[str, Any] | None:
 
 
 async def pause_between_bulk_items(stop_event: asyncio.Event) -> None:
-    """Yield briefly between sequential bulk scans to reduce load spikes."""
     for _ in range(BULK_SCAN_PAUSE_ITERATIONS):
         if stop_event.is_set():
             break
@@ -145,5 +134,4 @@ async def pause_between_bulk_items(stop_event: asyncio.Event) -> None:
 
 
 def validate_single_scan_slug(slug: str) -> str:
-    """Validate a single-scan plugin slug."""
     return _validate_slug_or_raise(slug)

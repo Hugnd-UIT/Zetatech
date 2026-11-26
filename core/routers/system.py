@@ -1,7 +1,3 @@
-"""
-System router exposes dashboard metadata and update controls.
-"""
-
 import asyncio
 import logging
 
@@ -15,7 +11,6 @@ logger = logging.getLogger("zetatech.update.router")
 
 @router.get("/update")
 async def get_update_status(force: bool = False):
-    """Return the current version, latest release, and manual update helper state."""
     try:
         status_payload = await asyncio.to_thread(release.manager.get_status, force)
         return status_payload
@@ -29,7 +24,6 @@ async def get_update_status(force: bool = False):
 
 @router.post("/update")
 async def trigger_update():
-    """Return deprecated manual-only update guidance instead of triggering host mutation."""
     try:
         payload = await asyncio.to_thread(release.manager.get_manual_update_payload)
         return payload

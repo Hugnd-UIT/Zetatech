@@ -1,7 +1,3 @@
-"""
-HTTP Client Infrastructure
-"""
-
 from __future__ import annotations
 
 import threading
@@ -23,7 +19,6 @@ _configured_pool_size = 0
 
 
 def _build_retry_strategy() -> Retry:
-    """Create a conservative retry strategy for transient HTTP failures."""
     return Retry(
         total=DEFAULT_RETRY_ATTEMPTS,
         connect=DEFAULT_RETRY_ATTEMPTS,
@@ -37,7 +32,6 @@ def _build_retry_strategy() -> Retry:
 
 
 def _build_adapter(pool_size: int) -> HTTPAdapter:
-    """Create a pooled HTTP adapter with bounded concurrency."""
     return HTTPAdapter(
         pool_connections=pool_size,
         pool_maxsize=pool_size,
@@ -46,18 +40,12 @@ def _build_adapter(pool_size: int) -> HTTPAdapter:
 
 
 def _configure_session(session: requests.Session, pool_size: int) -> None:
-    """Apply pooled adapters to both HTTP and HTTPS transports."""
     adapter = _build_adapter(pool_size)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
 
 
 def get_session(pool_size: int = MAX_POOL_SIZE) -> requests.Session:
-    """Get or create the shared requests session with bounded pooling.
-
-    If a later caller requests a larger pool size, the shared session is upgraded
-    to that size up to the configured security ceiling.
-    """
     global _session, _configured_pool_size
 
     safe_pool_size = min(max(pool_size, 1), MAX_POOL_SIZE)

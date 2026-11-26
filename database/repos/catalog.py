@@ -11,24 +11,20 @@ logger = logging.getLogger("zetatech.database.catalog")
 
 
 def _csv_field(value: Any) -> str:
-    """Normalize list-or-string values for CSV-style storage."""
     if isinstance(value, list):
         return ",".join(str(item) for item in value)
     return str(value or "")
 
 
 def _parse_csv_field(value: Any) -> List[str]:
-    """Parse persisted CSV-style fields back into lists."""
     return str(value).split(",") if value else []
 
 
 def _to_bool(value: Any) -> bool:
-    """Normalize SQLite integer flags into booleans."""
     return bool(value or 0)
 
 
 class CatalogMixin:
-    """Favorites and catalog repository behavior."""
 
     _VALID_CATALOG_SORT_COLUMNS = {
         "last_seen": "pc.last_seen_at",
@@ -41,7 +37,6 @@ class CatalogMixin:
     }
 
     def get_catalog_latest_version(self, slug: str, *, is_theme: bool = False) -> Optional[str]:
-        """Return the latest catalog version for a plugin/theme slug when available."""
         safe_slug = str(slug or "").strip()
         if not safe_slug:
             return None
@@ -65,7 +60,6 @@ class CatalogMixin:
             return str(version).strip() or None if version is not None else None
 
     def add_favorite(self, result_dict: Dict[str, Any]) -> bool:
-        """Add a plugin to favorites."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
 
@@ -118,7 +112,6 @@ class CatalogMixin:
                 return False
 
     def remove_favorite(self, slug: str) -> bool:
-        """Remove a plugin from favorites."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM favorite_plugins WHERE slug = ?", (slug,))
@@ -126,7 +119,6 @@ class CatalogMixin:
             return cursor.rowcount > 0
 
     def get_favorites(self) -> List[Dict[str, Any]]:
-        """Get all favorite plugins."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM favorite_plugins ORDER BY created_at DESC")

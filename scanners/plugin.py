@@ -1,9 +1,3 @@
-"""
-Zetatech Plugin Scanner
-
-Plugin fetching and analysis from WordPress.org API.
-"""
-
 from __future__ import annotations
 
 import threading
@@ -24,7 +18,7 @@ from config import (
 from infrastructure.http_client import get_session
 from logger import setup_logger
 from models import PluginResult, ScanConfig
-from utils.date_utils import calculate_days_ago
+from utils.date_utils import days_ago
 
 logger = setup_logger(__name__)
 
@@ -40,7 +34,6 @@ TRUSTED_AUTHOR_KEYWORDS = ("automattic", "wordpress.org")
 
 
 def analyze_changelog(sections: Dict[str, str]) -> tuple[list[str], list[str]]:
-    """Analyze changelog text for security and feature keywords."""
     changelog = str(sections.get("changelog", "") or "").lower()
     if not changelog:
         return [], []
@@ -52,7 +45,6 @@ def analyze_changelog(sections: Dict[str, str]) -> tuple[list[str], list[str]]:
 
 
 def _plugin_query_params(page: int, browse_type: str) -> Dict[str, Any]:
-    """Build the WordPress.org plugin query payload."""
     return {
         "action": "query_plugins",
         "request[browse]": browse_type,
@@ -76,14 +68,12 @@ def _plugin_query_params(page: int, browse_type: str) -> Dict[str, Any]:
 
 
 def _handle_rate_limit(attempt: int) -> None:
-    """Pause after WordPress API rate limiting."""
     wait_time = RATE_LIMIT_BACKOFF_SECONDS * (attempt + 1)
     logger.error("Rate limited, waiting %ss...", wait_time)
     time.sleep(wait_time)
 
 
 def _handle_network_retry(error: Exception) -> None:
-    """Pause after transient network failures."""
     logger.error("Network error (%s), retrying...", error)
     time.sleep(NETWORK_RETRY_DELAY_SECONDS)
 
@@ -93,7 +83,6 @@ def fetch_plugins(
     browse_type: str,
     max_retries: int = DEFAULT_FETCH_RETRIES,
 ) -> list[Dict[str, Any]]:
-    """Fetch plugins from WP API with retry logic."""
     session = get_session()
     params = _plugin_query_params(page, browse_type)
 
@@ -134,7 +123,6 @@ def _matches_any_tag(
     name: str,
     description: str,
 ) -> list[str]:
-    """Find matching tags across plugin tags, name, and description."""
     return [
         tag for tag in candidates if tag in plugin_tags or tag in name or tag in description
     ]
@@ -146,7 +134,6 @@ def _resolve_user_facing(
     name: str,
     description: str,
 ) -> tuple[bool, bool]:
-    """Resolve user-facing filter pass state and final flag."""
     user_facing_match = _matches_any_tag(USER_FACING_TAGS, plugin_tags, name, description)
     if config.user_facing and not user_facing_match:
         return False, False
@@ -154,7 +141,6 @@ def _resolve_user_facing(
 
 
 def _support_resolution_rate(plugin: Dict[str, Any]) -> int:
-    """Compute support thread resolution rate percent."""
     total_support = int(plugin.get("support_threads", 0) or 0)
     resolved_support = int(plugin.get("support_threads_resolved", 0) or 0)
     if total_support <= 0:
@@ -163,7 +149,6 @@ def _support_resolution_rate(plugin: Dict[str, Any]) -> int:
 
 
 def _is_trusted_author(author_raw: str) -> bool:
-    """Determine whether the plugin author matches trusted publishers."""
     author_lower = author_raw.lower()
     return any(keyword in author_lower for keyword in TRUSTED_AUTHOR_KEYWORDS)
 
@@ -182,7 +167,6 @@ def _build_plugin_result(
     is_user_facing: bool,
     is_trusted: bool,
 ) -> PluginResult:
-    """Build the normalized PluginResult DTO."""
     return PluginResult(
         name=plugin.get("name", "Unknown"),
         slug=slug,
@@ -207,8 +191,6 @@ def _build_plugin_result(
 
 
 class PluginScanner:
-    """High-level plugin scanner with configurable callbacks."""
-
     def __init__(
         self,
         config: ScanConfig,
@@ -224,7 +206,6 @@ class PluginScanner:
         self._results_lock = threading.Lock()
 
     def stop(self) -> None:
-        """Stop the scan."""
         self.stop_event.set()
 
     def _limit_reached(self) -> bool:
@@ -243,7 +224,6 @@ class PluginScanner:
             return True
 
     def _passes_install_filters(self, installs: int) -> bool:
-        """Check install-count filters."""
         if installs < self.config.min_installs:
             return False
         if self.config.max_installs > 0 and installs > self.config.max_installs:
@@ -251,7 +231,6 @@ class PluginScanner:
         return True
 
     def _passes_update_age_filters(self, days_ago: int) -> bool:
-        """Check update-age and abandoned filters."""
         if self.config.min_days > 0 and days_ago < self.config.min_days:
             return False
         if self.config.max_days > 0 and days_ago > self.config.max_days:
@@ -261,12 +240,11 @@ class PluginScanner:
         return True
 
     def process_plugin(self, plugin: Dict[str, Any]) -> Optional[PluginResult]:
-        """Process a single plugin and return a PluginResult if it passes filters."""
         installs = int(plugin.get("active_installs", 0) or 0)
         if not self._passes_install_filters(installs):
             return None
 
-        days_ago = calculate_days_ago(plugin.get("last_updated"))
+        days_ago = days_ago(plugin.get("last_updated"))
         if not self._passes_update_age_filters(days_ago):
             return None
 
@@ -315,7 +293,6 @@ class PluginScanner:
         )
 
     def scan_page(self, page: int) -> list[PluginResult]:
-        """Scan a single page of plugins."""
         if self._should_stop():
             return []
 
@@ -341,7 +318,6 @@ class PluginScanner:
             self.on_progress(current, total)
 
     def _scan_sequentially(self, pages_to_scan: list[int]) -> list[PluginResult]:
-        """Run pages sequentially when a hard result limit is enforced."""
         total_pages = len(pages_to_scan)
         for index, page in enumerate(pages_to_scan, start=1):
             if self._should_stop():
@@ -356,7 +332,6 @@ class PluginScanner:
         total_pages: int,
         executor: ThreadPoolExecutor,
     ) -> list[PluginResult]:
-        """Collect concurrent page scan results and emit progress updates."""
         for index, future in enumerate(as_completed(futures), start=1):
             try:
                 future.result()
@@ -375,7 +350,6 @@ class PluginScanner:
         pages_to_scan: list[int],
         max_threads: int,
     ) -> list[PluginResult]:
-        """Run page scans concurrently for unrestricted scans."""
         with ThreadPoolExecutor(max_workers=max_threads) as executor:
             futures = {
                 executor.submit(self.scan_page, page): page for page in pages_to_scan
@@ -383,7 +357,6 @@ class PluginScanner:
             return self._drain_future_results(futures, len(pages_to_scan), executor)
 
     def scan(self) -> list[PluginResult]:
-        """Run the full scan based on configuration."""
         pages_to_scan = list(range(1, self.config.pages + 1))
         max_threads = (
             AGGRESSIVE_SCAN_THREADS if self.config.aggressive else DEFAULT_SCAN_THREADS
@@ -400,7 +373,6 @@ class PluginScanner:
         return results
 
     def _label_risk(self) -> None:
-        """Apply relative risk labels on top of absolute critical rules."""
         label_risk(
             self.results,
             get_score=lambda item: item.score,

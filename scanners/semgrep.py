@@ -120,7 +120,6 @@ class SemgrepScanner:
         success: bool = False,
         partial: bool = False,
     ) -> SemgrepResult:
-        """Create a normalized Semgrep result payload."""
         return SemgrepResult(
             slug=slug,
             findings=findings or [],
@@ -130,7 +129,6 @@ class SemgrepScanner:
         )
 
     def _load_disabled_rule_ids(self) -> set[str]:
-        """Load disabled custom rule IDs from legacy and current config locations."""
         disabled_ids: set[str] = set()
 
         legacy_disabled_file = self.output_dir / "disabled_rules.json"
@@ -156,7 +154,6 @@ class SemgrepScanner:
         return disabled_ids
 
     def _resolve_custom_rules_file(self) -> Optional[Path]:
-        """Find the best available custom rules file candidate."""
         custom_candidates = [
             self.output_dir / "custom_rules.yaml",
             CANONICAL_CUSTOM_RULES_PATH,
@@ -166,7 +163,6 @@ class SemgrepScanner:
         return next((path for path in custom_candidates if path.exists()), None)
 
     def _validate_custom_rule(self, rule: Dict[str, Any]) -> bool:
-        """Return whether an individual custom rule passes Semgrep validation."""
         if not self.semgrep_command:
             return True
 
@@ -195,7 +191,6 @@ class SemgrepScanner:
                     pass
 
     def _write_filtered_custom_rules(self, rules_data: Dict[str, Any], disabled_ids: set[str]) -> Optional[str]:
-        """Persist a filtered custom rules file with disabled or invalid rules removed."""
         rules = rules_data.get("rules", [])
         if not isinstance(rules, list):
             return None
@@ -232,7 +227,6 @@ class SemgrepScanner:
         return str(filtered_file)
 
     def _filter_custom_rules(self) -> Optional[str]:
-        """Create a temporary custom rules file with disabled rules removed."""
         custom_file = self._resolve_custom_rules_file()
         if not custom_file:
             return None
@@ -249,7 +243,6 @@ class SemgrepScanner:
         return str(custom_file)
 
     def _get_config_args(self) -> List[str]:
-        """Build config arguments for semgrep command."""
         config_values: List[str] = []
 
         filtered_custom = self._filter_custom_rules()
@@ -275,7 +268,6 @@ class SemgrepScanner:
         return configs
 
     def _validate_scan_target(self, plugin_path: str, slug: str) -> SemgrepTarget | SemgrepResult:
-        """Validate user input and build a normalized scan target."""
         if not slug or not isinstance(slug, str):
             return self._result(slug or "unknown", errors=["Invalid slug"])
 
@@ -303,7 +295,6 @@ class SemgrepScanner:
         )
 
     def _build_scan_command(self, target: SemgrepTarget) -> List[str]:
-        """Build the full semgrep subprocess command."""
         command = list(self.semgrep_command or [])
         command.extend(self._get_config_args())
         command.extend(
@@ -318,7 +309,6 @@ class SemgrepScanner:
         return command
 
     def _is_non_fatal_semgrep_error(self, message: str) -> bool:
-        """Return whether a Semgrep error message is non-fatal for the overall scan."""
         normalized = str(message or "").lower()
         non_fatal_markers = [
             "syntax error",
@@ -332,7 +322,6 @@ class SemgrepScanner:
         return any(marker in normalized for marker in non_fatal_markers)
 
     def _parse_output_file(self, output_file: Path, stderr: str) -> SemgrepExecutionResult:
-        """Parse semgrep JSON output file."""
         try:
             with open(output_file, "r") as file_handle:
                 data = json.load(file_handle)
@@ -386,7 +375,6 @@ class SemgrepScanner:
         stderr: str,
         timed_out: bool = False,
     ) -> SemgrepExecutionResult:
-        """Convert subprocess output into normalized findings/errors."""
         if output_file.exists() and output_file.stat().st_size > 0:
             parsed = self._parse_output_file(output_file, stderr)
             if timed_out:
@@ -421,7 +409,6 @@ class SemgrepScanner:
         )
 
     def _execute_scan(self, target: SemgrepTarget) -> SemgrepExecutionResult:
-        """Run the semgrep subprocess and parse its output."""
         if not self.semgrep_command:
             return SemgrepExecutionResult(
                 findings=[],

@@ -708,7 +708,6 @@
             color: #b9c4cd;
         }
 
-
         .favorites-table {
             width: 100%;
             border-collapse: collapse;
@@ -3851,7 +3850,7 @@
     </div>
 
     <div class="layout">
-        <!-- Sidebar / Header -->
+        
         <header class="sidebar" id="sidebar">
             <div class="sidebar-main">
                 <div class="brand">
@@ -3861,7 +3860,7 @@
                     </div>
                 </div>
 
-                <!-- Navigation -->
+                
                 <div class="nav-menu">
                     <button class="nav-item active" id="nav-scan" onclick="switchTab('scan')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3946,7 +3945,7 @@
             </div>
         </header>
 
-        <!-- Main Configuration Area -->
+        
         <main class="config-area" id="scan-view">
             <form id="configForm" onsubmit="return false;">
                 <section class="panel scan-dashboard">
@@ -4136,7 +4135,7 @@
             </form>
         </main>
 
-        <!-- History View -->
+        
         <main class="config-area" id="history-view" style="display: none;">
             <div class="panel">
                 <div class="panel-body">
@@ -4193,7 +4192,7 @@
                                 </tr>
                             </thead>
                             <tbody id="history-list">
-                                <!-- History items will be injected here -->
+                                
                             </tbody>
                         </table>
                     </div>
@@ -4209,7 +4208,7 @@
             </div>
         </main>
 
-        <!-- Plugin Store View -->
+        
         <main class="config-area" id="catalog-view" style="display: none;">
             <div class="panel">
                 <div class="panel-body">
@@ -4280,7 +4279,7 @@
             </div>
         </main>
 
-        <!-- AI Settings View -->
+        
         <main class="config-area" id="ai-settings-view" style="display: none;">
             <div class="panel">
                 <div class="panel-body">
@@ -4364,7 +4363,7 @@
             </div>
         </main>
 
-        <!-- Details View -->
+        
         <main class="config-area" id="scan-details-view" style="display: none;">
             <div class="panel">
                 <div class="panel-body details-shell">
@@ -4426,7 +4425,7 @@
                                 </tr>
                             </thead>
                             <tbody id="details-list">
-                                <!-- Results injected here -->
+                                
                             </tbody>
                         </table>
                     </div>
@@ -4442,7 +4441,7 @@
             </div>
         </main>
 
-        <!-- Favorites View -->
+        
         <main class="config-area" id="favorites-view" style="display: none;">
             <div class="panel">
                 <div class="panel-body">
@@ -4470,7 +4469,7 @@
             </div>
         </main>
 
-        <!-- Plugin Detail View -->
+        
         <main class="config-area" id="plugin-detail-view" style="display: none;">
             <div class="panel">
                 <div class="panel-body plugin-detail-shell">
@@ -4621,7 +4620,7 @@
             </div>
         </main>
 
-        <!-- Semgrep Rules View -->
+        
         <main class="config-area" id="semgrep-view" style="display: none;">
             <div class="panel">
                 <div class="panel-body">
@@ -4629,7 +4628,7 @@
                         <div class="view-header-title">SEMGREP RULES</div>
                         <div class="view-header-desc">Manage active rulesets and custom static analysis rules for deep scans.</div>
                     </div>
-                    <!-- Add New Rule Section -->
+                    
                     <div style="margin-bottom: 25px;">
                         <h3 style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px;">✏️ ADD CUSTOM RULE</h3>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
@@ -4665,13 +4664,13 @@
                         </button>
                     </div>
 
-                    <!-- Rulesets & Custom Rules Lists -->
+                    
                     <div>
                         <div id="semgrep-rulesets-list">
-                            <!-- Rulesets will be injected here -->
+                            
                         </div>
                         <div id="semgrep-custom-rules-list" style="margin-top: 18px;">
-                            <!-- Custom rules will be injected here -->
+                            
                         </div>
                     </div>
                 </div>
@@ -4680,10 +4679,10 @@
 
     </div>
 
-    <!-- Custom Toast/Alert Container -->
+    
     <div id="toast-container" style="position: fixed; top: 44px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px;"></div>
 
-    <!-- Confirmation Modal -->
+    
     <div class="modal-overlay" id="confirm-modal" style="z-index: 2000;">
         <div class="modal" style="max-width: 400px; height: auto;">
             <div class="modal-header" style="padding: 15px 20px;">
@@ -4699,7 +4698,7 @@
         </div>
     </div>
 
-    <!-- Prompt Modal -->
+    
     <div class="modal-overlay" id="prompt-modal" style="z-index: 2001;">
         <div class="modal" style="max-width: 440px; height: auto;">
             <div class="modal-header" style="padding: 15px 20px;">
@@ -4716,7 +4715,7 @@
         </div>
     </div>
 
-    <!-- Plugin details now render in dedicated page: #plugin-detail-view -->
+    
 
     
     <script src="assets/js/core/app-runtime.js?v=1"></script>

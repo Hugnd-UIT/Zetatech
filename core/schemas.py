@@ -1,7 +1,3 @@
-"""
-Pydantic Models for API
-"""
-
 from typing import Optional, List, Dict, Any
 from typing_extensions import Literal
 from pydantic import BaseModel, Field, HttpUrl

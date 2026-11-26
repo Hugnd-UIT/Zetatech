@@ -1,9 +1,3 @@
-"""
-Zetatech Database Models
-
-SQLite database schema and connection handling.
-"""
-
 from contextlib import contextmanager
 import logging
 import os
@@ -639,7 +633,6 @@ def _is_directory_writable(directory: Path) -> bool:
 
 
 def ensure_db_dir(path: Optional[Path] = None) -> Path:
-    """Ensure the database directory exists and return the effective path."""
     target = path or DEFAULT_DB_PATH
     if _is_directory_writable(target.parent):
         return target
@@ -648,13 +641,11 @@ def ensure_db_dir(path: Optional[Path] = None) -> Path:
 
 
 def get_db_path() -> Path:
-    """Get the database path, respecting environment variable if set."""
     env_path = os.environ.get("ZETATECH_DB")
     return Path(env_path) if env_path else DEFAULT_DB_PATH
 
 
 def _resolve_db_path(db_path: Optional[Path]) -> Path:
-    """Resolve the effective database path and ensure its directory exists."""
     if db_path is not None:
         return ensure_db_dir(db_path)
 
@@ -666,7 +657,6 @@ def _resolve_db_path(db_path: Optional[Path]) -> Path:
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
-    """Initialize the database with required tables."""
     resolved_db_path = _resolve_db_path(db_path)
     conn = sqlite3.connect(str(resolved_db_path))
     cursor = conn.cursor()
@@ -682,7 +672,6 @@ def init_db(db_path: Optional[Path] = None) -> None:
 
 @contextmanager
 def get_db(db_path: Optional[Path] = None):
-    """Get a database connection as a context manager."""
     resolved_db_path = _resolve_db_path(db_path)
     if not resolved_db_path.exists():
         init_db(resolved_db_path)

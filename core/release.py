@@ -1,10 +1,3 @@
-"""
-Release status manager for the Zetatech dashboard.
-
-Checks for newer releases and provides manual helper commands for image-based
-updates without mutating the host environment.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -22,12 +15,10 @@ logger = logging.getLogger("zetatech.update")
 
 
 def utc_now() -> datetime:
-    """Return the current timezone-aware UTC datetime."""
     return datetime.now(UTC)
 
 
 class ReleaseMetadataService:
-    """Tag metadata fetching, normalization, and validation."""
 
     TAG_PATTERN = re.compile(r"^[vV]\d+(?:\.\d+)*$")
 

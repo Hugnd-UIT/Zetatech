@@ -1,9 +1,3 @@
-"""
-Zetatech VPS Scorer
-
-Vulnerability Probability Score calculation.
-"""
-
 from typing import Dict, Any, List, Optional
 
 from config import CURRENT_WP_VERSION
@@ -19,18 +13,6 @@ def score_vps(
     flags: List[str],
     code: Optional[CodeAnalysisResult] = None,
 ) -> int:
-    """
-    Enhanced VPS calculation with code analysis integration.
-    High Score = High Probability of Unknown Vulnerabilities (0-day) or Unpatched Code.
-
-    Scoring breakdown:
-    - CODE ROT (Maintenance Latency): Max 40 pts
-    - ATTACK SURFACE (Intrinsic Risk): Max 30 pts
-    - DEVELOPER NEGLECT (Support Health): Max 15 pts
-    - TECHNICAL DEBT (Compatibility): Max 15 pts
-    - REPUTATION (Quality Signal): Max 10 pts
-    - CODE ANALYSIS BONUS: Max 25 pts
-    """
     score = 0
     evidence = 0
 

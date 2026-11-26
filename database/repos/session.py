@@ -11,17 +11,14 @@ SESSION_RESULT_LIMIT = MAX_QUERY_LIMIT * 10 - 1
 
 
 def _parse_json_value(raw: Any) -> Any:
-    """Parse JSON database payloads safely."""
     return json.loads(raw) if raw else None
 
 
 def _parse_csv_list(raw: Any) -> List[str]:
-    """Convert persisted CSV-style text back to a list."""
     return str(raw).split(",") if raw else []
 
 
 def _serialize_code_analysis(result: PluginResult) -> str | None:
-    """Serialize code analysis payload for storage."""
     if not result.code_analysis:
         return None
     return json.dumps(
@@ -37,7 +34,6 @@ def _serialize_code_analysis(result: PluginResult) -> str | None:
 
 
 def _serialize_session_row(row: Dict[str, Any], *, status_override: str | None = None, is_merged: bool = False) -> Dict[str, Any]:
-    """Normalize a scan_sessions row for API consumers."""
     return {
         "id": row["id"],
         "created_at": row["created_at"],
@@ -51,7 +47,6 @@ def _serialize_session_row(row: Dict[str, Any], *, status_override: str | None =
 
 
 def _serialize_result_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize a scan_results row for API consumers."""
     result = {
         "id": row["id"],
         "slug": row["slug"],
@@ -81,7 +76,6 @@ def _serialize_result_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class SessionMixin:
-    """Session and scan result repository behavior."""
 
     _VALID_SORT_COLUMNS = {
         "score": "score",
@@ -93,7 +87,6 @@ class SessionMixin:
     _VALID_SORT_ORDERS = {"ASC", "DESC"}
 
     def create_session(self, config: ScanConfig) -> int:
-        """Create a new scan session and return its ID."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -114,7 +107,6 @@ class SessionMixin:
         high_risk_count: Optional[int] = None,
         error_message: Optional[str] = None,
     ) -> None:
-        """Update session status and statistics."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             updates = ["status = ?"]
@@ -142,7 +134,6 @@ class SessionMixin:
             conn.commit()
 
     def _mark_result_duplicate_if_needed(self, cursor: Any, session_id: int, result: PluginResult) -> None:
-        """Mark results duplicated when the same slug exists in another session."""
         cursor.execute(
             """
             SELECT 1 FROM scan_results
@@ -155,7 +146,6 @@ class SessionMixin:
             result.is_duplicate = True
 
     def save_result(self, session_id: int, result: PluginResult) -> int:
-        """Save a scan result for a session."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             self._mark_result_duplicate_if_needed(cursor, session_id, result)
@@ -202,7 +192,6 @@ class SessionMixin:
             return inserted_id
 
     def get_session(self, session_id: int) -> Optional[Dict[str, Any]]:
-        """Get a scan session by ID."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM scan_sessions WHERE id = ?", (session_id,))
@@ -210,7 +199,6 @@ class SessionMixin:
             return _serialize_session_row(dict(row)) if row else None
 
     def _fetch_recent_session_rows(self, cursor: Any, limit: int) -> List[Dict[str, Any]]:
-        """Fetch recent session rows with overfetch for deduplication."""
         cursor.execute(
             """
             SELECT * FROM scan_sessions
@@ -222,7 +210,6 @@ class SessionMixin:
         return [dict(row) for row in cursor.fetchall()]
 
     def _fetch_slugs_by_session(self, cursor: Any, session_ids: List[int]) -> Dict[int, Set[str]]:
-        """Load all result slugs for a set of sessions in one query."""
         if not session_ids:
             return {}
         placeholders = ",".join(["?"] * len(session_ids))
@@ -245,7 +232,6 @@ class SessionMixin:
         rows: List[Dict[str, Any]],
         slugs_by_session: Dict[int, Set[str]],
     ) -> Dict[Tuple[bool, Tuple[str, ...]], int]:
-        """Count duplicate completed-session signatures for merged presentation."""
         counts: Dict[Tuple[bool, Tuple[str, ...]], int] = {}
         for row in rows:
             sid = int(row["id"])
@@ -258,7 +244,6 @@ class SessionMixin:
         return counts
 
     def get_all_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get scan sessions, deduplicated by identical result slug-set, most recent first."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             rows = self._fetch_recent_session_rows(cursor, limit)
@@ -309,7 +294,6 @@ class SessionMixin:
         sort_order: str = "desc",
         limit: int = DEFAULT_QUERY_LIMIT,
     ) -> List[Dict[str, Any]]:
-        """Get results for a scan session."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             safe_sort_column = self._VALID_SORT_COLUMNS.get(sort_by, "score")
@@ -332,7 +316,6 @@ class SessionMixin:
             return [_serialize_result_row(dict(row)) for row in cursor.fetchall()]
 
     def delete_session(self, session_id: int) -> bool:
-        """Delete a scan session and its results."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -354,7 +337,6 @@ class SessionMixin:
         config_dict: Dict[str, Any],
         exclude_id: int,
     ) -> Optional[int]:
-        """Find the most recent completed session with identical configuration."""
         config_str = json.dumps(config_dict, sort_keys=True)
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
@@ -376,7 +358,6 @@ class SessionMixin:
         return None
 
     def get_result_slugs(self, session_id: int) -> List[str]:
-        """Get list of slugs for a session."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT slug FROM scan_results WHERE session_id = ?", (session_id,))

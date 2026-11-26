@@ -21,6 +21,7 @@ def test_status_reads_runtime_metadata_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_BUILD", "build-123")
+
     def resolve_release(*args, **kwargs):
         del args, kwargs
         return {"tag_name": None, "update_available": False}
@@ -40,6 +41,7 @@ def test_status_returns_up_to_date_without_helper_command(monkeypatch, tmp_path)
     manager = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
+
     def resolve_release(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.1.3", "update_available": False}
@@ -109,6 +111,7 @@ def test_status_returns_helper_command_when_new_release_exists(monkeypatch, tmp_
     manager = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
+
     def resolve_release(*args, **kwargs):
         del args, kwargs
         return {
@@ -155,6 +158,7 @@ def test_status_degrades_when_runtime_metadata_malformed(monkeypatch, tmp_path):
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.delenv("ZETATECH_IMAGE_TAG", raising=False)
     monkeypatch.delenv("ZETATECH_IMAGE_BUILD", raising=False)
+
     def resolve_release(*args, **kwargs):
         del args, kwargs
         return {"tag_name": None, "update_available": False}
@@ -174,6 +178,7 @@ def test_get_status_does_not_write_host_update_request_file(monkeypatch, tmp_pat
     manager = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
+
     def resolve_release(*args, **kwargs):
         del args, kwargs
         return {"tag_name": "v0.2.0", "update_available": True}
@@ -190,6 +195,7 @@ def test_manual_update_payload_is_notify_only(monkeypatch, tmp_path):
     manager = _TestUpdateManager(tmp_path / ".zetatech")
     monkeypatch.setenv("ZETATECH_IMAGE_VERSION", "0.1.3")
     monkeypatch.setenv("ZETATECH_IMAGE_TAG", "v0.1.3")
+
     def get_status(*args, **kwargs):
         del args, kwargs
         return {
@@ -222,6 +228,7 @@ def test_manual_update_payload_is_notify_only(monkeypatch, tmp_path):
 
 def test_manual_update_payload_is_deprecated_even_when_release_lookup_degraded(monkeypatch, tmp_path):
     manager = _TestUpdateManager(tmp_path / ".zetatech")
+
     def get_status(*args, **kwargs):
         del args, kwargs
         return {
@@ -295,6 +302,7 @@ def test_runtime_metadata_falls_back_without_wrapper_runtime_file(monkeypatch, t
     monkeypatch.delenv("ZETATECH_IMAGE_VERSION", raising=False)
     monkeypatch.delenv("ZETATECH_IMAGE_TAG", raising=False)
     monkeypatch.delenv("ZETATECH_IMAGE_BUILD", raising=False)
+
     def resolve_release(*args, **kwargs):
         del args, kwargs
         return {"tag_name": None, "update_available": False}

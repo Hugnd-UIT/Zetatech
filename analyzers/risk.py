@@ -1,7 +1,3 @@
-"""
-Relative risk labeling utilities.
-"""
-
 from typing import Callable, List, TypeVar
 import math
 
@@ -13,14 +9,6 @@ def label_risk(
     get_score: Callable[[T], int],
     set_label: Callable[[T, str], None],
 ) -> None:
-    """
-    Apply percentile-based relative risk labels with an absolute CRITICAL guardrail.
-
-    Labels:
-    - CRITICAL: score >= 65
-    - HIGH/MEDIUM/LOW: distributed across non-critical set
-      (small sample fallback uses absolute buckets)
-    """
     if not items:
         return
 

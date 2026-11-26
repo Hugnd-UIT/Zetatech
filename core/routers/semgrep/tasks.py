@@ -29,7 +29,6 @@ async def run_plugin_semgrep_scan(
     repo: ScanRepository,
     stop_event: Optional[asyncio.Event] = None,
 ):
-    """Background task to run Semgrep on a single plugin."""
     safe_slug = slug
     try:
         safe_slug = validate_single_scan_slug(slug)
@@ -99,7 +98,6 @@ async def run_bulk_semgrep_task(
     repo: ScanRepository,
     stop_event: asyncio.Event,
 ):
-    """Run Semgrep on a list of plugins sequentially to prevent server crash."""
     try:
         for index, plugin in enumerate(plugins):
             if stop_event.is_set():

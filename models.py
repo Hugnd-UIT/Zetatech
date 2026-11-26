@@ -1,16 +1,9 @@
-"""
-Zetatech Data Models
-
-All dataclasses and type definitions for the application.
-"""
-
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum
 
 
 class ScanStatus(Enum):
-    """Scan session status."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -22,7 +15,6 @@ class ScanStatus(Enum):
 
 @dataclass
 class CodeAnalysisResult:
-    """Code analysis result for plugins/themes."""
 
     dangerous_functions: List[str] = field(default_factory=list)
     ajax_endpoints: List[str] = field(default_factory=list)
@@ -34,7 +26,6 @@ class CodeAnalysisResult:
 
 @dataclass
 class ScanConfig:
-    """Scan configuration parameters."""
 
 
     pages: int = 5
@@ -57,7 +48,6 @@ class ScanConfig:
     aggressive: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API responses."""
         return {
             "pages": self.pages,
             "limit": self.limit,
@@ -76,7 +66,6 @@ class ScanConfig:
 
 @dataclass
 class PluginResult:
-    """Structured result for a scanned plugin."""
 
 
     name: str
@@ -111,7 +100,6 @@ class PluginResult:
     trac_link: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API responses and reports."""
         result = {
             "name": self.name,
             "slug": self.slug,

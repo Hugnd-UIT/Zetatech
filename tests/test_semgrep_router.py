@@ -95,6 +95,7 @@ def _patch_semgrep_state(monkeypatch, tmp_path: Path):
 
 
 def _patch_semgrep_background_tasks(monkeypatch):
+
     async def _noop_single(*args, **kwargs):
         del args, kwargs
 

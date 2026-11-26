@@ -5,7 +5,6 @@ from database.models import get_db, init_db
 
 
 class DatabaseBootstrapper:
-    """Initialize database schema and apply lightweight runtime migrations."""
 
     _catalog_backfill_attempted = False
 

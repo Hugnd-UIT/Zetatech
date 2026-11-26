@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Zetatech web launcher."""
 
 import os
 import uvicorn

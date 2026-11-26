@@ -92,7 +92,6 @@ def bootstrap_default_custom_rules() -> None:
 
 
 def get_disabled_config() -> Dict[str, List[str]]:
-    """Load disabled rules and rulesets configuration."""
     default_config = {"rules": [], "rulesets": [], "extra_rulesets": []}
     legacy_default_rulesets = {"cwe-top-25"}
     if DISABLED_CONFIG_PATH.exists():
@@ -132,7 +131,6 @@ def get_disabled_config() -> Dict[str, List[str]]:
 
 
 def save_disabled_config(config: Dict[str, List[str]]):
-    """Save disabled configuration."""
     if not ensure_semgrep_state_dir():
         raise PermissionError("Semgrep persistent state is not writable in the current runtime environment.")
     DISABLED_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -141,7 +139,6 @@ def save_disabled_config(config: Dict[str, List[str]]):
 
 
 def get_active_rulesets() -> List[str]:
-    """Return the registry rulesets that are not disabled globally."""
     config = get_disabled_config()
     disabled = set(config.get("rulesets", []))
     extra_rulesets = config.get("extra_rulesets", [])

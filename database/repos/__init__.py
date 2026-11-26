@@ -1,9 +1,3 @@
-"""
-Zetatech Database Repository
-
-CRUD operations for scan sessions and results.
-"""
-
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -20,7 +14,6 @@ class ScanRepository(
     CatalogMixin,
     SemgrepMixin,
 ):
-    """Repository for scan session and result operations."""
 
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path

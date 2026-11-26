@@ -1,9 +1,3 @@
-"""
-Zetatech: WordPress Plugin & Theme Security Scanner
-
-A reconnaissance tool for identifying vulnerable WordPress plugins and themes.
-"""
-
 from main import __version__, __author__
 
 from config import CURRENT_WP_VERSION

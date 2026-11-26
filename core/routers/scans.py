@@ -1,7 +1,3 @@
-"""
-Scans Router and Service
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -26,14 +22,12 @@ HIGH_RISK_LABELS = {"HIGH", "CRITICAL"}
 
 
 def request_scanner_stop(scanner: Any) -> None:
-    """Stop a scanner instance if it supports cooperative cancellation."""
     stop = getattr(scanner, "stop", None)
     if callable(stop):
         stop()
 
 
 def apply_relative_risk_labels_to_dict_results(results: List[Dict[str, Any]]) -> None:
-    """Apply percentile-based relative risk labels to API result dictionaries."""
     label_risk(
         results,
         get_score=lambda item: int(item.get("score", 0) or 0),
@@ -42,7 +36,6 @@ def apply_relative_risk_labels_to_dict_results(results: List[Dict[str, Any]]) ->
 
 
 def build_scan_config(scan_request) -> ScanConfig:
-    """Normalize incoming scan request values into repository scan config."""
     sort = scan_request.sort
     pages = scan_request.pages
 
@@ -68,7 +61,6 @@ def build_scan_config(scan_request) -> ScanConfig:
 
 
 def _build_theme_plugin_result(result: Dict[str, Any]) -> PluginResult:
-    """Convert a theme scanner payload into PluginResult storage format."""
     return PluginResult(
         slug=result.get("slug", ""),
         name=result.get("name", "Unknown"),
@@ -87,7 +79,6 @@ def _build_theme_plugin_result(result: Dict[str, Any]) -> PluginResult:
 
 
 async def _send_session_event(session_id: int, payload: Dict[str, Any]) -> None:
-    """Send a websocket event to scan listeners."""
     await manager.send_to_session(session_id, payload)
 
 
@@ -96,12 +87,10 @@ def _send_session_event_threadsafe(
     session_id: int,
     payload: Dict[str, Any],
 ) -> None:
-    """Schedule websocket event delivery from a worker thread."""
     asyncio.run_coroutine_threadsafe(_send_session_event(session_id, payload), loop)
 
 
 def _scan_was_cancelled(session_id: int, repo: ScanRepository) -> bool:
-    """Check whether a scan has already been marked cancelled."""
     session_state = repo.get_session(session_id)
     return bool(
         session_state and session_state.get("status") == ScanStatus.CANCELLED.value
@@ -115,7 +104,6 @@ async def _handle_scan_cancellation(
     found_count: int,
     high_risk_count: int,
 ) -> bool:
-    """Persist and emit cancellation state if scan was cancelled."""
     if not _scan_was_cancelled(session_id, repo):
         return False
 
@@ -143,7 +131,6 @@ async def _deduplicate_completed_scan(
     repo: ScanRepository,
     config: ScanConfig,
 ) -> bool:
-    """Merge duplicate completed scans that match previous results/config."""
     prev_session_id = repo.get_latest_session_by_config(config.to_dict(), session_id)
     if not prev_session_id:
         return False
@@ -174,7 +161,6 @@ def _save_plugin_result_and_emit(
     result: PluginResult,
     found_count: int,
 ) -> None:
-    """Persist a plugin result and notify listeners."""
     repo.save_result(session_id, result)
     _send_session_event_threadsafe(
         loop,
@@ -194,7 +180,6 @@ def _emit_progress(
     current: int,
     total: int,
 ) -> None:
-    """Emit scan progress updates."""
     _send_session_event_threadsafe(
         loop,
         session_id,
@@ -208,7 +193,6 @@ def _emit_progress(
 
 
 def _count_high_risk_plugin_results(results: List[PluginResult]) -> int:
-    """Count high-risk plugin results after relative labeling."""
     return sum(
         1
         for result in results
@@ -222,7 +206,6 @@ async def _run_theme_scan(
     config: ScanConfig,
     repo: ScanRepository,
 ) -> tuple[int, int]:
-    """Run theme scanning mode and persist streaming results."""
     found_count = 0
     high_risk_count = 0
     loop = asyncio.get_running_loop()
@@ -259,7 +242,6 @@ async def _run_plugin_scan(
     config: ScanConfig,
     repo: ScanRepository,
 ) -> tuple[int, int]:
-    """Run plugin scanning mode and persist streaming results."""
     found_count = 0
     loop = asyncio.get_running_loop()
     scanner = PluginScanner(config)
@@ -296,7 +278,6 @@ async def _run_scan_mode(
     config: ScanConfig,
     repo: ScanRepository,
 ) -> tuple[int, int]:
-    """Dispatch the configured scan mode."""
     if config.themes:
         return await _run_theme_scan(session_id=session_id, config=config, repo=repo)
     return await _run_plugin_scan(session_id=session_id, config=config, repo=repo)
@@ -310,7 +291,6 @@ async def _finalize_scan_completion(
     found_count: int,
     high_risk_count: int,
 ) -> bool:
-    """Persist completion state, handling cancellation/dedup pathways."""
     if await _handle_scan_cancellation(
         session_id=session_id,
         repo=repo,
@@ -346,7 +326,6 @@ async def _finalize_scan_completion(
 
 
 async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepository) -> None:
-    """Background task to run a scan (plugin or theme)."""
     try:
         repo.update_session_status(session_id, ScanStatus.RUNNING)
         await _send_session_event(session_id, {"type": "start", "session_id": session_id})
@@ -372,7 +351,6 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
 
 
 def list_scan_sessions(*, repo: ScanRepository, limit: int) -> Dict[str, Any]:
-    """Return scan session list payload."""
     return {"sessions": repo.get_all_sessions(limit)}
 
 
@@ -382,7 +360,6 @@ def create_scan_session(
     scan_request,
     background_tasks: BackgroundTasks,
 ) -> Dict[str, Any]:
-    """Create a session and enqueue the background scan task."""
     config = build_scan_config(scan_request)
     session_id = repo.create_session(config)
     background_tasks.add_task(run_scan_task, session_id, config, repo)
@@ -394,7 +371,6 @@ def create_scan_session(
 
 
 def get_scan_session(*, repo: ScanRepository, session_id: int) -> Dict[str, Any]:
-    """Return one scan session or raise 404."""
     session = repo.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Scan session not found")
@@ -409,7 +385,6 @@ def get_scan_session_results(
     sort_order: str,
     limit: int,
 ) -> Dict[str, Any]:
-    """Return scan session results plus Semgrep state."""
     get_scan_session(repo=repo, session_id=session_id)
     results = repo.get_session_results(session_id, sort_by, sort_order, limit)
     apply_relative_risk_labels_to_dict_results(results)
@@ -423,7 +398,6 @@ def get_scan_session_results(
 
 
 def delete_scan_session(*, repo: ScanRepository, session_id: int) -> Dict[str, Any]:
-    """Delete a scan session and stop active scanner if needed."""
     scanner = active_scans.pop(session_id, None)
     if scanner is not None:
         request_scanner_stop(scanner)
@@ -437,7 +411,6 @@ def delete_scan_session(*, repo: ScanRepository, session_id: int) -> Dict[str, A
 @router.get("")
 @limiter.limit("10000/minute")
 async def list_scans(request: Request, limit: int = 50):
-    """List all scan sessions."""
     return list_scan_sessions(repo=repo, limit=limit)
 
 
@@ -446,7 +419,6 @@ async def list_scans(request: Request, limit: int = 50):
 async def create_scan(
     request: Request, scan_request: ScanRequest, background_tasks: BackgroundTasks
 ):
-    """Create and start a new scan."""
     return create_scan_session(
         repo=repo,
         scan_request=scan_request,
@@ -456,7 +428,6 @@ async def create_scan(
 
 @router.get("/{session_id}")
 async def get_scan(session_id: int):
-    """Get scan session details."""
     return get_scan_session(repo=repo, session_id=session_id)
 
 
@@ -467,7 +438,6 @@ async def get_scan_results(
     sort_order: str = "desc",
     limit: int = 100,
 ):
-    """Get results for a scan session."""
     return get_scan_session_results(
         repo=repo,
         session_id=session_id,
@@ -479,5 +449,4 @@ async def get_scan_results(
 
 @router.delete("/{session_id}")
 async def delete_scan(session_id: int):
-    """Delete a scan session."""
     return delete_scan_session(repo=repo, session_id=session_id)

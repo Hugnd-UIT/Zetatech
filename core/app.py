@@ -1,9 +1,3 @@
-"""
-Zetatech FastAPI Application
-
-REST API and WebSocket endpoints for the web dashboard.
-"""
-
 import logging
 import os
 import secrets
@@ -35,7 +29,6 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 def validate_runtime_persistence() -> Path:
-    """Validate critical runtime persistence before serving requests."""
     db_path = ensure_db_dir()
     runtime_root = db_path.parent
     logger.info("Using canonical runtime root: %s", runtime_root)
@@ -48,7 +41,6 @@ _PUBLIC_EXACT_PATHS = {"/", "/health"}
 
 
 def rate_limit_exceeded_handler(request: Request, exc: Exception):
-    """Custom rate limit exceeded handler."""
     return PlainTextResponse(
         "Rate limit exceeded. Please try again later.",
         status_code=429,
@@ -56,8 +48,6 @@ def rate_limit_exceeded_handler(request: Request, exc: Exception):
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Add security headers to all responses."""
-
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -74,8 +64,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Bearer token authentication for API endpoints."""
-
     async def dispatch(self, request: Request, call_next):
         if not _AUTH_TOKEN:
             return await call_next(request)
@@ -107,7 +95,6 @@ def websocket_has_valid_auth(websocket: WebSocket) -> bool:
 
 
 def setup_logging() -> None:
-    """Configure application logging."""
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     file_handler = build_rotating_file_handler()
     if file_handler is not None:
@@ -128,7 +115,6 @@ def setup_logging() -> None:
 
 
 def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
     setup_logging()
     logger.info("Starting Zetatech Server...")
     validate_runtime_persistence()
@@ -145,7 +131,6 @@ def create_app() -> FastAPI:
 
 
 def configure_application(app: FastAPI) -> None:
-    """Apply middleware, routes, startup wiring, and static mounts."""
     app.state.update_manager = release.manager
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
@@ -176,7 +161,6 @@ def configure_application(app: FastAPI) -> None:
 
 
 def warmup_update_manager() -> None:
-    """Warm up release status cache without failing app startup."""
     try:
         release.manager.get_status(force=False)
     except Exception:
@@ -184,7 +168,6 @@ def warmup_update_manager() -> None:
 
 
 def register_routers(app: FastAPI) -> None:
-    """Register API routers."""
     for router in (
         scans.router,
         semgrep.router,
@@ -197,7 +180,6 @@ def register_routers(app: FastAPI) -> None:
 
 
 def mount_static_directories(app: FastAPI, static_dir: Path) -> None:
-    """Mount static and asset directories if present."""
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
@@ -207,7 +189,6 @@ def mount_static_directories(app: FastAPI, static_dir: Path) -> None:
 
 
 def register_root_route(app: FastAPI, static_dir: Path) -> None:
-    """Register the dashboard root page route."""
 
     @app.get("/", response_class=HTMLResponse)
     @limiter.limit("10000/minute")
@@ -223,7 +204,6 @@ def register_root_route(app: FastAPI, static_dir: Path) -> None:
 
 
 def register_scan_websocket(app: FastAPI) -> None:
-    """Register scan progress WebSocket endpoint."""
 
     @app.websocket("/ws/scans/{session_id}")
     async def websocket_endpoint(websocket: WebSocket, session_id: int):
@@ -244,11 +224,6 @@ def register_scan_websocket(app: FastAPI) -> None:
 
 
 def is_allowed_websocket_origin(origin: str | None) -> bool:
-    """Validate WebSocket origin against local-only host policy.
-
-    Rejects connections without an Origin header to prevent
-    non-browser clients from bypassing origin checks.
-    """
     if not origin:
         return False
     try:

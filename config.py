@@ -1,9 +1,3 @@
-"""
-Zetatech Configuration and Constants
-
-All global constants, tag sets, and color definitions.
-"""
-
 from typing import Final, Set
 
 

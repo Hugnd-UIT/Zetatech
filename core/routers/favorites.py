@@ -1,7 +1,3 @@
-"""
-Favorites Router
-"""
-
 from fastapi import APIRouter
 from database.repos import ScanRepository
 from core.schemas import FavoritePluginRequest
