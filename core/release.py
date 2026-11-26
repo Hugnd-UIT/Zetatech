@@ -9,7 +9,7 @@ from urllib.parse import quote, urlparse
 
 import requests
 
-from main import __version__, get_runtime_metadata
+from main import get_runtime_metadata
 
 logger = logging.getLogger("zetatech.update")
 
