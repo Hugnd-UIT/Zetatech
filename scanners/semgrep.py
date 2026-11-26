@@ -378,18 +378,17 @@ class SemgrepScanner:
         if output_file.exists() and output_file.stat().st_size > 0:
             parsed = self._parse_output_file(output_file, stderr)
             if timed_out:
-                timeout_errors = ["Scan timeout"]
-                combined_errors = timeout_errors + parsed.errors
+                errs = ["Scan timeout"] + parsed.errors
                 if parsed.findings:
                     return SemgrepExecutionResult(
                         findings=parsed.findings,
-                        errors=combined_errors,
+                        errors=errs,
                         success=True,
                         partial=True,
                     )
                 return SemgrepExecutionResult(
                     findings=parsed.findings,
-                    errors=combined_errors,
+                    errors=errs,
                     success=False,
                     partial=True,
                 )

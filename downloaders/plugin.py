@@ -230,25 +230,23 @@ class PluginDownloader:
         raise ValueError("Too many redirects")
 
     def _extract_archive(self, *, zip_path: Path, extract_path: Path) -> None:
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            self._validate_zip_archive(zip_ref)
-            extract_base = extract_path.resolve()
-            for member in zip_ref.infolist():
-                member_path = (extract_path / member.filename).resolve()
-                if os.path.commonpath([str(extract_base), str(member_path)]) != str(
-                    extract_base
-                ):
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            self._validate_zip_archive(zf)
+            base = extract_path.resolve()
+            for member in zf.infolist():
+                target = (extract_path / member.filename).resolve()
+                if os.path.commonpath([str(base), str(target)]) != str(base):
                     raise Exception(f"Zip Slip attempt detected: {member.filename}")
-                zip_ref.extract(member, extract_path)
+                zf.extract(member, extract_path)
 
     def _normalize_extracted_directory(self, extract_path: Path) -> None:
         children = list(extract_path.iterdir())
         if len(children) != 1 or not children[0].is_dir():
             return
-        temp_dir = extract_path.parent / "temp"
-        children[0].rename(temp_dir)
+        tmp = extract_path.parent / "temp"
+        children[0].rename(tmp)
         shutil.rmtree(extract_path)
-        temp_dir.rename(extract_path)
+        tmp.rename(extract_path)
 
     def _cleanup_failed_download(self, *, plugin_dir: Optional[Path]) -> None:
         if not plugin_dir or not plugin_dir.exists():
@@ -263,54 +261,54 @@ class PluginDownloader:
         self, download_url: str, slug: str, verbose: bool = True
     ) -> Optional[Path]:
         session = get_session()
-        safe_slug = slug
-        plugin_dir: Optional[Path] = None
-        zip_path: Optional[Path] = None
-        extract_path: Optional[Path] = None
+        safe = slug
+        pdir: Optional[Path] = None
+        zpath: Optional[Path] = None
+        epath: Optional[Path] = None
 
         try:
-            safe_slug = self._sanitize_slug(slug)
-            plugin_dir = self.plugins_dir / safe_slug
-            zip_path = plugin_dir / f"{safe_slug}.zip"
-            extract_path = plugin_dir / "source"
-            self._ensure_within_base(plugin_dir, self.plugins_dir)
-            self._ensure_within_base(extract_path, self.plugins_dir)
-            plugin_dir.mkdir(exist_ok=True)
+            safe = self._sanitize_slug(slug)
+            pdir = self.plugins_dir / safe
+            zpath = pdir / f"{safe}.zip"
+            epath = pdir / "source"
+            self._ensure_within_base(pdir, self.plugins_dir)
+            self._ensure_within_base(epath, self.plugins_dir)
+            pdir.mkdir(exist_ok=True)
 
-            if extract_path.exists():
-                shutil.rmtree(extract_path, ignore_errors=True)
-            if zip_path.exists():
-                zip_path.unlink()
+            if epath.exists():
+                shutil.rmtree(epath, ignore_errors=True)
+            if zpath.exists():
+                zpath.unlink()
 
             if verbose:
-                logger.info("Downloading plugin source", extra={"slug": safe_slug})
+                logger.info("Downloading plugin source", extra={"slug": safe})
             self._download_zip_with_validated_redirects(
                 session=session,
                 download_url=download_url,
-                zip_path=zip_path,
+                zip_path=zpath,
             )
 
             if verbose:
-                logger.info("Extracting plugin source", extra={"slug": safe_slug})
-            self._extract_archive(zip_path=zip_path, extract_path=extract_path)
+                logger.info("Extracting plugin source", extra={"slug": safe})
+            self._extract_archive(zip_path=zpath, extract_path=epath)
 
-            zip_path.unlink(missing_ok=True)
-            self._normalize_extracted_directory(extract_path)
+            zpath.unlink(missing_ok=True)
+            self._normalize_extracted_directory(epath)
 
             if verbose:
-                file_count = sum(1 for candidate in extract_path.rglob("*") if candidate.is_file())
+                count = sum(1 for item in epath.rglob("*") if item.is_file())
                 logger.info(
                     "Extracted plugin source",
-                    extra={"slug": safe_slug, "file_count": file_count},
+                    extra={"slug": safe, "file_count": count},
                 )
 
-            return extract_path
+            return epath
 
         except zipfile.BadZipFile:
             if verbose:
                 logger.warning("Invalid ZIP file for plugin", extra={"slug": slug})
-            if zip_path and zip_path.exists():
-                zip_path.unlink()
+            if zpath and zpath.exists():
+                zpath.unlink()
             return None
         except Exception as exc:
             if verbose:
@@ -319,5 +317,5 @@ class PluginDownloader:
                     extra={"slug": slug},
                     exc_info=exc,
                 )
-            self._cleanup_failed_download(plugin_dir=plugin_dir)
+            self._cleanup_failed_download(plugin_dir=pdir)
             return None
