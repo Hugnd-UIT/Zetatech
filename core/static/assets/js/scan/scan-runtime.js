@@ -12,11 +12,11 @@
     }
 
     function buildScanRequestData(form) {
-        const pagesValue = preparePagesValueBeforeScan();
+        const pages = preparePagesValueBeforeScan();
         const formData = new FormData(form);
 
         return {
-            pages: pagesValue,
+            pages,
             limit: parseInt(formData.get('limit'), 10) || 0,
             min_installs: parseInt(formData.get('min_installs'), 10) || 0,
             max_installs: parseInt(formData.get('max_installs'), 10) || 0,
@@ -437,21 +437,21 @@
     }
 
     function buildPluginModalViewModel(plugin) {
-        const artifactType = plugin.is_theme ? 'theme' : 'plugin';
-        const artifactVersion = plugin.version || 'latest';
-        const downloadUrl = plugin.download_link || `https://downloads.wordpress.org/${artifactType}/${plugin.slug}.${artifactVersion}.zip`;
-        const pluginSlug = String(plugin.slug || '');
-        const pluginScore = parseInt(plugin.score || 0, 10) || 0;
+        const type = plugin.is_theme ? 'theme' : 'plugin';
+        const ver = plugin.version || 'latest';
+        const url = plugin.download_link || `https://downloads.wordpress.org/${type}/${plugin.slug}.${ver}.zip`;
+        const slug = String(plugin.slug || '');
+        const score = parseInt(plugin.score || 0, 10) || 0;
 
         return {
-            pluginSlug,
-            pluginSlugJs: JSON.stringify(pluginSlug),
-            downloadUrl,
-            downloadUrlJs: JSON.stringify(String(downloadUrl || '')),
+            pluginSlug: slug,
+            pluginSlugJs: JSON.stringify(slug),
+            downloadUrl: url,
+            downloadUrlJs: JSON.stringify(String(url || '')),
             tagsHtml: buildPluginTagsHtml(plugin),
             isFav: isFavoriteSlug(plugin.slug),
-            pluginScore,
-            pluginScoreColor: getRiskColorForScore(pluginScore),
+            pluginScore: score,
+            pluginScoreColor: getRiskColorForScore(score),
             semgrepFindings: String((plugin.semgrep && plugin.semgrep.findings_count) || plugin.latest_semgrep_findings || 0),
         };
     }
@@ -511,12 +511,12 @@
     function preloadPluginSemgrepAvailability() {
         fetch('/api/semgrep/rules')
             .then((res) => res.json())
-            .then((rulesData) => {
-                const activeRulesets = (rulesData.rulesets || []).filter((r) => r.enabled).length;
-                const activeCustomRules = (rulesData.custom_rules || []).filter((r) => r.enabled).length;
+            .then((rules) => {
+                const sets = (rules.rulesets || []).filter((r) => r.enabled).length;
+                const custom = (rules.custom_rules || []).filter((r) => r.enabled).length;
                 const btn = document.getElementById('btn-deep-scan');
 
-                if (btn && activeRulesets === 0 && activeCustomRules === 0) {
+                if (btn && sets === 0 && custom === 0) {
                     btn.disabled = true;
                     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;"><path d="M12 15v.01M12 12v.01M12 9v.01M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg> DISABLED';
                     btn.title = 'Enable rulesets in Semgrep Settings to use this feature';
@@ -527,48 +527,48 @@
     }
 
     function loadSemgrepResultsIntoModal(scanData) {
-        const container = document.getElementById('semgrep-results-container');
-        if (!container) return;
+        const box = document.getElementById('semgrep-results-container');
+        if (!box) return;
 
         const findings = Array.isArray(scanData && scanData.findings) ? scanData.findings : null;
         const summary = (scanData && scanData.summary && typeof scanData.summary === 'object') ? scanData.summary : {};
-        const totalFindings = Number(summary.total_findings || 0);
-        const completedAt = scanData && scanData.completed_at ? String(scanData.completed_at) : '';
-        const isCompleted = String((scanData && scanData.status) || '').toLowerCase() === 'completed';
-        const summaryErrors = Array.isArray(summary.errors) ? summary.errors.filter(Boolean) : [];
+        const total = Number(summary.total_findings || 0);
+        const doneAt = scanData && scanData.completed_at ? String(scanData.completed_at) : '';
+        const done = String((scanData && scanData.status) || '').toLowerCase() === 'completed';
+        const errs = Array.isArray(summary.errors) ? summary.errors.filter(Boolean) : [];
 
-        if (!scanData || !isCompleted || findings === null) {
-            container.innerHTML = '<div class="plugin-semgrep-empty">Semgrep result is incomplete or unavailable right now. Please retry the scan or refresh this plugin view.</div>';
+        if (!scanData || !done || findings === null) {
+            box.innerHTML = '<div class="plugin-semgrep-empty">Semgrep result is incomplete or unavailable right now. Please retry the scan or refresh this plugin view.</div>';
             setDeepScanButtonState('rescan');
             return;
         }
 
-        if (findings.length === 0 && totalFindings === 0) {
-            const completedLabel = completedAt ? ` Last completed: <strong>${escapeHtml(completedAt)}</strong>.` : '';
-            const warningHtml = summaryErrors.length
-                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${summaryErrors.slice(0, 5).map((error) => `• ${escapeHtml(String(error))}`).join('<br>')}</div>`
+        if (findings.length === 0 && total === 0) {
+            const label = doneAt ? ` Last completed: <strong>${escapeHtml(doneAt)}</strong>.` : '';
+            const warn = errs.length
+                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((error) => `• ${escapeHtml(String(error))}`).join('<br>')}</div>`
                 : '';
-            container.innerHTML = `${warningHtml}<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${completedLabel}</div>`;
+            box.innerHTML = `${warn}<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${label}</div>`;
             setDeepScanButtonState('rescan');
             return;
         }
 
         const breakdown = (summary && summary.breakdown) ? summary.breakdown : {};
-        const warningHtml = summaryErrors.length
-            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${summaryErrors.slice(0, 5).map((error) => `• ${escapeHtml(String(error))}`).join('<br>')}</div>`
+        const warn = errs.length
+            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((error) => `• ${escapeHtml(String(error))}`).join('<br>')}</div>`
             : '';
 
-        let html = `${warningHtml}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${breakdown.ERROR || 0}</span>, WARNING: <span class="sev-warning">${breakdown.WARNING || 0}</span>)</div>`;
+        let html = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${breakdown.ERROR || 0}</span>, WARNING: <span class="sev-warning">${breakdown.WARNING || 0}</span>)</div>`;
 
         html += findings.map((f) => {
             const sev = String(f.severity || 'INFO').toUpperCase();
-            const sevClass = sev === 'ERROR' ? 'error' : (sev === 'WARNING' ? 'warning' : 'info');
-            const filePath = `${escapeHtml(String(f.file_path || ''))}${f.line_number ? `:${f.line_number}` : ''}`;
+            const cls = sev === 'ERROR' ? 'error' : (sev === 'WARNING' ? 'warning' : 'info');
+            const path = `${escapeHtml(String(f.file_path || ''))}${f.line_number ? `:${f.line_number}` : ''}`;
             return `
-                <article class="plugin-semgrep-item ${sevClass}">
+                <article class="plugin-semgrep-item ${cls}">
                     <header class="plugin-semgrep-item-head">
                         <span class="plugin-semgrep-rule">${escapeHtml(sev)}: ${escapeHtml(String(f.rule_id || 'unknown-rule'))}</span>
-                        <span class="plugin-semgrep-file">${filePath}</span>
+                        <span class="plugin-semgrep-file">${path}</span>
                     </header>
                     <p class="plugin-semgrep-message">${escapeHtml(String(f.message || 'No description provided.'))}</p>
                     ${f.code_snippet ? `<pre class="plugin-semgrep-code"><code>${escapeHtml(String(f.code_snippet || ''))}</code></pre>` : ''}
@@ -576,7 +576,7 @@
             `;
         }).join('');
 
-        container.innerHTML = html;
+        box.innerHTML = html;
         setDeepScanButtonState('rescan');
     }
 

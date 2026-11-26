@@ -3,53 +3,53 @@
 window.showConfirm = function(message) {
     return new Promise((resolve) => {
         const modal = document.getElementById('confirm-modal');
-        const msgEl = document.getElementById('confirm-message');
-        const btnYes = document.getElementById('btn-confirm-yes');
-        const btnCancel = document.getElementById('btn-confirm-cancel');
+        const msg = document.getElementById('confirm-message');
+        const yes = document.getElementById('btn-confirm-yes');
+        const cancel = document.getElementById('btn-confirm-cancel');
 
-        if (!modal || !msgEl || !btnYes || !btnCancel) {
+        if (!modal || !msg || !yes || !cancel) {
             resolve(window.confirm(message));
             return;
         }
 
-        msgEl.textContent = message;
+        msg.textContent = message;
         modal.classList.add('active');
 
-        function handleYes() {
+        function onYes() {
             cleanup();
             resolve(true);
         }
 
-        function handleCancel() {
+        function onCancel() {
             cleanup();
             resolve(false);
         }
 
-        function handleKeydown(event) {
+        function onKey(event) {
             if (event.key === 'Escape') {
                 event.preventDefault();
-                handleCancel();
+                onCancel();
             }
         }
 
         function cleanup() {
             modal.classList.remove('active');
-            btnYes.removeEventListener('click', handleYes);
-            btnCancel.removeEventListener('click', handleCancel);
-            modal.removeEventListener('click', handleOverlayClick);
-            document.removeEventListener('keydown', handleKeydown);
+            yes.removeEventListener('click', onYes);
+            cancel.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onOverlay);
+            document.removeEventListener('keydown', onKey);
         }
 
-        function handleOverlayClick(event) {
+        function onOverlay(event) {
             if (event.target === modal) {
-                handleCancel();
+                onCancel();
             }
         }
 
-        btnYes.addEventListener('click', handleYes);
-        btnCancel.addEventListener('click', handleCancel);
-        modal.addEventListener('click', handleOverlayClick);
-        document.addEventListener('keydown', handleKeydown);
+        yes.addEventListener('click', onYes);
+        cancel.addEventListener('click', onCancel);
+        modal.addEventListener('click', onOverlay);
+        document.addEventListener('keydown', onKey);
     });
 };
 
@@ -57,47 +57,47 @@ window.showPrompt = function({ title = 'Enter text', message = '', defaultValue 
     return new Promise((resolve) => {
         const modal = document.getElementById('prompt-modal');
         const titleEl = document.getElementById('prompt-title');
-        const msgEl = document.getElementById('prompt-message');
-        const inputEl = document.getElementById('prompt-input');
-        const btnYes = document.getElementById('btn-prompt-yes');
-        const btnCancel = document.getElementById('btn-prompt-cancel');
+        const msg = document.getElementById('prompt-message');
+        const input = document.getElementById('prompt-input');
+        const yes = document.getElementById('btn-prompt-yes');
+        const cancel = document.getElementById('btn-prompt-cancel');
 
-        if (!modal || !titleEl || !msgEl || !inputEl || !btnYes || !btnCancel) {
+        if (!modal || !titleEl || !msg || !input || !yes || !cancel) {
             resolve(window.prompt(message || title, defaultValue));
             return;
         }
 
         titleEl.textContent = title;
-        msgEl.textContent = message;
-        inputEl.value = String(defaultValue ?? '');
-        btnYes.textContent = confirmText;
-        btnCancel.textContent = cancelText;
+        msg.textContent = message;
+        input.value = String(defaultValue ?? '');
+        yes.textContent = confirmText;
+        cancel.textContent = cancelText;
         modal.classList.add('active');
 
-        function handleConfirm() {
-            const value = String(inputEl.value || '');
+        function onConfirm() {
+            const val = String(input.value || '');
             cleanup();
-            resolve(value);
+            resolve(val);
         }
 
-        function handleCancel() {
+        function onCancel() {
             cleanup();
             resolve(null);
         }
 
-        function handleKeydown(event) {
+        function onKey(event) {
             if (event.key === 'Escape') {
                 event.preventDefault();
-                handleCancel();
+                onCancel();
             } else if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                handleConfirm();
+                onConfirm();
             }
         }
 
-        function handleOverlayClick(event) {
+        function onOverlay(event) {
             if (event.target === modal) {
-                handleCancel();
+                onCancel();
             }
         }
 

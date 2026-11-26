@@ -43,14 +43,14 @@ class ReleaseMetadataService:
         return tuple(nums)
 
     def is_newer_release(self, current_version: Optional[str], latest_version: Optional[str]) -> bool:
-        current_tuple = self.normalized_version(current_version)
-        latest_tuple = self.normalized_version(latest_version)
-        if not latest_tuple:
+        cur = self.normalized_version(current_version)
+        lat = self.normalized_version(latest_version)
+        if not lat:
             return False
-        length = max(len(current_tuple), len(latest_tuple))
-        current_tuple += (0,) * (length - len(current_tuple))
-        latest_tuple += (0,) * (length - len(latest_tuple))
-        return latest_tuple > current_tuple
+        size = max(len(cur), len(lat))
+        cur += (0,) * (size - len(cur))
+        lat += (0,) * (size - len(lat))
+        return lat > cur
 
     def release_headers(self) -> Dict[str, str]:
         return {
@@ -80,15 +80,15 @@ class ReleaseMetadataService:
 
     def _pick_latest_tag(self, tags: List[Dict[str, Any]]) -> Optional[str]:
         best_tag: Optional[str] = None
-        best_version: Tuple[int, ...] = ()
+        best_ver: Tuple[int, ...] = ()
         for entry in tags:
             name = str(entry.get("name") or "").strip()
             if not self.TAG_PATTERN.fullmatch(name):
                 continue
-            version = self.normalized_version(name)
-            if version > best_version:
+            ver = self.normalized_version(name)
+            if ver > best_ver:
                 best_tag = name
-                best_version = version
+                best_ver = ver
         return best_tag
 
     def empty_release_payload(self) -> Dict[str, Any]:
@@ -105,25 +105,25 @@ class ReleaseMetadataService:
         parsed = urlparse(self.release_api_url)
         if parsed.hostname not in self.allowed_release_hosts:
             raise ValueError(f"Unsupported release API host: {parsed.hostname}")
-        response = requests.get(
+        res = requests.get(
             self.release_api_url,
             headers=self.tag_headers(),
             timeout=15,
         )
-        response.raise_for_status()
-        payload = response.json()
+        res.raise_for_status()
+        payload = res.json()
         if not isinstance(payload, list):
             raise ValueError("Unexpected tags API response shape")
-        latest_tag = self._pick_latest_tag(payload)
-        if not latest_tag:
+        tag = self._pick_latest_tag(payload)
+        if not tag:
             return self.empty_release_payload()
         return self.build_release_payload(
             {
-                "tag_name": latest_tag,
-                "name": latest_tag,
+                "tag_name": tag,
+                "name": tag,
                 "body": "",
                 "published_at": None,
-                "html_url": self.tag_url(latest_tag),
+                "html_url": self.tag_url(tag),
             }
         )
 
@@ -161,12 +161,12 @@ class UpdateManager:
         )
 
     def _runtime_metadata_payload(self) -> Dict[str, Any]:
-        metadata = get_runtime_metadata()
+        meta = get_runtime_metadata()
         return {
-            "current_version": metadata.current_version,
-            "current_tag": metadata.current_tag,
-            "build_id": metadata.build_id,
-            "runtime_status": metadata.status,
+            "current_version": meta.current_version,
+            "current_tag": meta.current_tag,
+            "build_id": meta.build_id,
+            "runtime_status": meta.status,
         }
 
     def _fetch_release(self, force: bool = False) -> Dict[str, Any]:
@@ -180,41 +180,41 @@ class UpdateManager:
             ):
                 return self._cache
 
-        release_info = self._release_metadata.fetch_release()
+        info = self._release_metadata.fetch_release()
         with self._lock:
-            self._cache = release_info
+            self._cache = info
             self._cache_time = now
-        return release_info
+        return info
 
     def _empty_release_payload(self) -> Dict[str, Any]:
         return self._release_metadata.empty_release_payload()
 
     def _resolve_release_for_status(self, force: bool) -> Dict[str, Any]:
-        should_fetch = force
+        fetch = force
         if not force:
             with self._lock:
                 if not self._startup_auto_check_done:
                     self._startup_auto_check_done = True
-                    should_fetch = True
+                    fetch = True
 
-        if should_fetch:
+        if fetch:
             try:
-                release = self._fetch_release(force)
+                rel = self._fetch_release(force)
                 self._last_error = None
-                return release
+                return rel
             except Exception as exc:
                 self._last_error = f"{type(exc).__name__}: {exc}"
                 logger.warning("Unable to refresh release info: %s", exc)
                 with self._lock:
-                    cached_release = self._cache
-                if cached_release:
-                    return cached_release
+                    cached = self._cache
+                if cached:
+                    return cached
                 return self._empty_release_payload()
 
         with self._lock:
-            cached_release = self._cache
-        if cached_release:
-            return cached_release
+            cached = self._cache
+        if cached:
+            return cached
         return self._empty_release_payload()
 
     def _build_manual_update_command(self) -> str:
@@ -252,40 +252,40 @@ class UpdateManager:
         return self.MESSAGE_UP_TO_DATE
 
     def _build_status_payload(self, release: Dict[str, Any]) -> Dict[str, Any]:
-        runtime_metadata = self._runtime_metadata_payload()
-        current_release_ref = runtime_metadata["current_tag"]
-        if current_release_ref == "unknown":
-            current_release_ref = runtime_metadata["current_version"]
-        latest_version = release.get("tag_name")
-        update_available = self._release_metadata.is_newer_release(current_release_ref, latest_version)
-        checked_at = self._cache_time.isoformat().replace("+00:00", "Z") if self._cache_time else None
-        status_label = self._resolve_status_label(
-            runtime_status=runtime_metadata["runtime_status"],
-            latest_version=latest_version,
-            update_available=update_available,
+        meta = self._runtime_metadata_payload()
+        ref = meta["current_tag"]
+        if ref == "unknown":
+            ref = meta["current_version"]
+        latest = release.get("tag_name")
+        avail = self._release_metadata.is_newer_release(ref, latest)
+        checked = self._cache_time.isoformat().replace("+00:00", "Z") if self._cache_time else None
+        label = self._resolve_status_label(
+            runtime_status=meta["runtime_status"],
+            latest_version=latest,
+            update_available=avail,
             release_error=self._last_error,
         )
-        helper_command = self._build_manual_update_command() if update_available else None
-        raw_release_url = release.get("html_url")
-        release_url = self._release_metadata.tag_url(latest_version) if latest_version and raw_release_url else raw_release_url
+        cmd = self._build_manual_update_command() if avail else None
+        raw_url = release.get("html_url")
+        url = self._release_metadata.tag_url(latest) if latest and raw_url else raw_url
 
         return {
-            "current_version": runtime_metadata["current_version"],
-            "current_tag": runtime_metadata["current_tag"],
-            "build_id": runtime_metadata["build_id"],
-            "runtime_status": runtime_metadata["runtime_status"],
-            "latest_version": latest_version,
-            "release_name": release.get("name") or latest_version,
+            "current_version": meta["current_version"],
+            "current_tag": meta["current_tag"],
+            "build_id": meta["build_id"],
+            "runtime_status": meta["runtime_status"],
+            "latest_version": latest,
+            "release_name": release.get("name") or latest,
             "release_notes": release.get("body") or "",
-            "release_url": release_url,
+            "release_url": url,
             "release_published_at": release.get("published_at"),
-            "update_available": update_available,
-            "status": status_label,
-            "message": self._resolve_status_message(status_label, runtime_metadata["runtime_status"]),
-            "update_command": helper_command,
-            "manual_update_required": update_available,
-            "manual_update_message": self.MESSAGE_MANUAL_UPDATE_ONLY if update_available else None,
-            "checked_at": checked_at,
+            "update_available": avail,
+            "status": label,
+            "message": self._resolve_status_message(label, meta["runtime_status"]),
+            "update_command": cmd,
+            "manual_update_required": avail,
+            "manual_update_message": self.MESSAGE_MANUAL_UPDATE_ONLY if avail else None,
+            "checked_at": checked,
             "last_error": self._last_error,
         }
 

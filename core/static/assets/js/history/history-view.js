@@ -103,58 +103,58 @@ window.renderHistoryRows = function(sessions) {
         return;
     }
 
-    const maxPluginsFound = safeSessions.reduce((max, session) => {
-        const sessionCount = parseInt(session.total_found || 0, 10) || 0;
-        return Math.max(max, sessionCount);
+    const maxFound = safeSessions.reduce((top, session) => {
+        const count = parseInt(session.total_found || 0, 10) || 0;
+        return Math.max(top, count);
     }, 1);
 
-    const maxHighRiskCount = safeSessions.reduce((max, session) => {
-        const riskCount = parseInt(session.high_risk_count || 0, 10) || 0;
-        return Math.max(max, riskCount);
+    const maxHigh = safeSessions.reduce((top, session) => {
+        const count = parseInt(session.high_risk_count || 0, 10) || 0;
+        return Math.max(top, count);
     }, 1);
 
     list.innerHTML = pagedSessions.map(s => {
-        const scanId = parseInt(s.id, 10);
-        const totalFound = parseInt(s.total_found || 0, 10) || 0;
-        const highRiskCount = parseInt(s.high_risk_count || 0, 10) || 0;
-        const foundRatio = maxPluginsFound > 0 ? Math.min(100, Math.round((totalFound / maxPluginsFound) * 100)) : 0;
-        const foundLevel = foundRatio >= 70 ? 'high' : (foundRatio >= 35 ? 'medium' : 'low');
-        const riskLevel = highRiskCount >= 20 ? 'high' : (highRiskCount >= 5 ? 'medium' : 'low');
-        const riskRatio = maxHighRiskCount > 0 ? Math.min(100, Math.round((highRiskCount / maxHighRiskCount) * 100)) : 0;
-        const config = s.config || {};
-        const isThemeSession = Boolean(config.themes);
-        const modeLabel = isThemeSession ? 'THEME' : 'PLUGIN';
-        const modeClass = isThemeSession ? 'theme' : 'plugin';
-        const statusClass = String(s.status || 'unknown').toLowerCase();
-        const statusLabel = statusClass === 'merged' ? 'MERGED' : statusClass.toUpperCase();
+        const sid = parseInt(s.id, 10);
+        const found = parseInt(s.total_found || 0, 10) || 0;
+        const high = parseInt(s.high_risk_count || 0, 10) || 0;
+        const fPct = maxFound > 0 ? Math.min(100, Math.round((found / maxFound) * 100)) : 0;
+        const fLvl = fPct >= 70 ? 'high' : (fPct >= 35 ? 'medium' : 'low');
+        const rLvl = high >= 20 ? 'high' : (high >= 5 ? 'medium' : 'low');
+        const rPct = maxHigh > 0 ? Math.min(100, Math.round((high / maxHigh) * 100)) : 0;
+        const cfg = s.config || {};
+        const theme = Boolean(cfg.themes);
+        const modeLbl = theme ? 'THEME' : 'PLUGIN';
+        const modeCls = theme ? 'theme' : 'plugin';
+        const sCls = String(s.status || 'unknown').toLowerCase();
+        const sLbl = sCls === 'merged' ? 'MERGED' : sCls.toUpperCase();
 
         return `
-            <tr class="history-row" tabindex="0" onclick="viewScan(${scanId})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewScan(${scanId});}">
+            <tr class="history-row" tabindex="0" onclick="viewScan(${sid})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewScan(${sid});}">
                 <td class="history-col-id">#${escapeHtml(String(s.id))}</td>
-                <td class="history-col-status"><span class="status-badge ${escapeHtml(statusClass)}">${escapeHtml(statusLabel)}</span></td>
+                <td class="history-col-status"><span class="status-badge ${escapeHtml(sCls)}">${escapeHtml(sLbl)}</span></td>
                 <td class="history-col-found">
-                    <div class="history-found-cell" title="${totalFound} plugins found (relative density ${foundRatio}%)">
-                        <span class="history-found-count">${escapeHtml(String(totalFound))}</span>
+                    <div class="history-found-cell" title="${found} plugins found (relative density ${fPct}%)">
+                        <span class="history-found-count">${escapeHtml(String(found))}</span>
                         <span class="history-found-label">plugins</span>
-                        <span class="history-found-track"><span class="history-found-fill ${foundLevel}" style="width: ${foundRatio}%;"></span></span>
+                        <span class="history-found-track"><span class="history-found-fill ${fLvl}" style="width: ${fPct}%;"></span></span>
                     </div>
                 </td>
                 <td class="history-col-risk">
-                    <div class="history-risk-cell" title="${highRiskCount} high risk (relative to max ${maxHighRiskCount}: ${riskRatio}%)">
-                        <span class="history-risk-pill ${riskLevel}">${escapeHtml(String(highRiskCount))}</span>
-                        <span class="history-risk-meter"><span class="history-risk-fill ${riskLevel}" style="width: ${riskRatio}%;"></span></span>
+                    <div class="history-risk-cell" title="${high} high risk (relative to max ${maxHigh}: ${rPct}%)">
+                        <span class="history-risk-pill ${rLvl}">${escapeHtml(String(high))}</span>
+                        <span class="history-risk-meter"><span class="history-risk-fill ${rLvl}" style="width: ${rPct}%;"></span></span>
                     </div>
                 </td>
                 <td class="history-col-date"><span class="history-date-stamp">${escapeHtml(new Date(s.created_at || s.start_time).toLocaleString())}</span></td>
                 <td class="history-col-semgrep">
-                    <div id="history-semgrep-${scanId}" class="history-semgrep-cell empty" title="Semgrep status pending">
-                        <span id="history-semgrep-count-${scanId}" class="history-semgrep-pill">--</span>
-                        <span class="history-semgrep-meter"><span id="history-semgrep-fill-${scanId}" class="history-semgrep-fill" style="width: 0%;"></span></span>
-                        <span id="history-semgrep-state-${scanId}" class="history-semgrep-state">WAIT</span>
+                    <div id="history-semgrep-${sid}" class="history-semgrep-cell empty" title="Semgrep status pending">
+                        <span id="history-semgrep-count-${sid}" class="history-semgrep-pill">--</span>
+                        <span class="history-semgrep-meter"><span id="history-semgrep-fill-${sid}" class="history-semgrep-fill" style="width: 0%;"></span></span>
+                        <span id="history-semgrep-state-${sid}" class="history-semgrep-state">WAIT</span>
                     </div>
                 </td>
                 <td class="history-col-mode">
-                    <span class="history-mode-chip ${modeClass}">${escapeHtml(modeLabel)}</span>
+                    <span class="history-mode-chip ${modeCls}">${escapeHtml(modeLbl)}</span>
                 </td>
                 <td class="history-col-actions">
                     <div class="history-actions">
@@ -162,7 +162,7 @@ window.renderHistoryRows = function(sessions) {
                             <span>Open</span>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                         </span>
-                        <button onclick="event.stopPropagation(); deleteScan(${scanId})" class="action-btn history-action-delete" title="Delete Scan" aria-label="Delete scan #${scanId}">
+                        <button onclick="event.stopPropagation(); deleteScan(${sid})" class="action-btn history-action-delete" title="Delete Scan" aria-label="Delete scan #${sid}">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                         </button>
                     </div>

@@ -12,9 +12,9 @@
         restoreViewFromUrl();
         window.addEventListener('popstate', restoreViewFromUrl);
 
-        const updateButton = document.getElementById('update-action-btn');
-        if (updateButton) {
-            updateButton.addEventListener('click', initiateSystemUpdate);
+        const btn = document.getElementById('update-action-btn');
+        if (btn) {
+            btn.addEventListener('click', initiateSystemUpdate);
         }
 
         startSystemStatusPolling();

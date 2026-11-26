@@ -40,22 +40,22 @@ async def download_plugin_for_semgrep(
     slug: str,
     download_url: str,
 ) -> str | None:
-    downloader = PluginDownloader()
+    dl = PluginDownloader()
     loop = asyncio.get_running_loop()
-    plugin_path = await loop.run_in_executor(
+    path = await loop.run_in_executor(
         None,
-        downloader.download_and_extract,
+        dl.download_and_extract,
         str(download_url),
         slug,
         False,
     )
-    return str(plugin_path) if plugin_path is not None else None
+    return str(path) if path is not None else None
 
 
 def prepare_semgrep_output_dir(*, slug: str, scan_id: int) -> Path:
-    output_dir = SEMGREP_OUTPUTS_DIR / f"{slug}_{scan_id}"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return output_dir
+    out = SEMGREP_OUTPUTS_DIR / f"{slug}_{scan_id}"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
 
 
 def copy_custom_rules_if_available(output_dir: Path) -> None:
@@ -68,12 +68,12 @@ def copy_custom_rules_if_available(output_dir: Path) -> None:
 
 
 def write_disabled_rules_snapshot(output_dir: Path) -> None:
-    disabled_rules = get_disabled_config().get("rules", [])
-    if not disabled_rules:
+    rules = get_disabled_config().get("rules", [])
+    if not rules:
         return
     try:
-        with open(output_dir / "disabled_rules.json", "w") as file_handle:
-            json.dump(disabled_rules, file_handle)
+        with open(output_dir / "disabled_rules.json", "w") as f:
+            json.dump(rules, f)
     except Exception:
         logger.warning("Failed to write disabled rules for Semgrep scan.")
 

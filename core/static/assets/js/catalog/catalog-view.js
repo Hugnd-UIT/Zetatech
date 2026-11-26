@@ -69,48 +69,48 @@
             return;
         }
 
-        const highCount = rows.filter(r => (parseInt(r && (r.latest_score ?? r.max_score_ever) || 0, 10) || 0) >= 40).length;
-        const midCount = rows.filter(r => {
+        const high = rows.filter(r => (parseInt(r && (r.latest_score ?? r.max_score_ever) || 0, 10) || 0) >= 40).length;
+        const mid = rows.filter(r => {
             const score = parseInt(r && (r.latest_score ?? r.max_score_ever) || 0, 10) || 0;
             return score >= 20 && score < 40;
         }).length;
-        const lowCount = Math.max(0, total - highCount - midCount);
+        const low = Math.max(0, total - high - mid);
 
-        let issueCount = 0;
-        let cleanCount = 0;
-        let waitingCount = 0;
-        let failedCount = 0;
-        let runningCount = 0;
+        let issue = 0;
+        let clean = 0;
+        let wait = 0;
+        let fail = 0;
+        let run = 0;
 
         rows.forEach((r) => {
-            const semgrep = r && r.semgrep ? r.semgrep : null;
-            if (!semgrep) {
-                waitingCount += 1;
+            const sem = r && r.semgrep ? r.semgrep : null;
+            if (!sem) {
+                wait += 1;
                 return;
             }
 
-            const status = String(semgrep.status || '').toLowerCase();
+            const status = String(sem.status || '').toLowerCase();
             if (status === 'completed') {
-                const findings = parseInt(semgrep.findings_count || 0, 10) || 0;
-                if (findings > 0) issueCount += 1;
-                else cleanCount += 1;
+                const count = parseInt(sem.findings_count || 0, 10) || 0;
+                if (count > 0) issue += 1;
+                else clean += 1;
                 return;
             }
             if (status === 'failed') {
-                failedCount += 1;
+                fail += 1;
                 return;
             }
             if (status === 'running' || status === 'pending') {
-                runningCount += 1;
+                run += 1;
                 return;
             }
 
-            waitingCount += 1;
+            wait += 1;
         });
 
-        const scannedCount = issueCount + cleanCount + failedCount;
-        const remainingCount = Math.max(0, total - scannedCount);
-        const toPct = (value, sum) => {
+        const scanned = issue + clean + fail;
+        const left = Math.max(0, total - scanned);
+        const pct = (value, sum) => {
             if (!sum || sum <= 0) return 0;
             return Math.max(0, Math.min(100, Math.round((value / sum) * 100)));
         };
@@ -124,32 +124,32 @@
             </div>
             <div class="details-stat-card details-stat-card-progress">
                 <div class="details-stat-label">Semgrep progress</div>
-                <div class="details-stat-value">${scannedCount} / ${total}</div>
-                <div class="details-stat-sub">Processed / Total • ${remainingCount} remaining</div>
+                <div class="details-stat-value">${scanned} / ${total}</div>
+                <div class="details-stat-sub">Processed / Total • ${left} remaining</div>
                 <div class="details-stat-track">
-                    <span class="details-stat-fill details-fill-primary" style="width:${toPct(scannedCount, total)}%"></span>
-                    <span class="details-stat-fill details-fill-wait" style="width:${toPct(remainingCount, total)}%"></span>
+                    <span class="details-stat-fill details-fill-primary" style="width:${pct(scanned, total)}%"></span>
+                    <span class="details-stat-fill details-fill-wait" style="width:${pct(left, total)}%"></span>
                 </div>
             </div>
             <div class="details-stat-card">
                 <div class="details-stat-label">Risk split</div>
-                <div class="details-stat-value">${highCount} / ${midCount} / ${lowCount}</div>
+                <div class="details-stat-value">${high} / ${mid} / ${low}</div>
                 <div class="details-stat-sub">High / Medium / Low</div>
                 <div class="details-stat-track">
-                    <span class="details-stat-fill details-fill-high" style="width:${toPct(highCount, total)}%"></span>
-                    <span class="details-stat-fill details-fill-mid" style="width:${toPct(midCount, total)}%"></span>
-                    <span class="details-stat-fill details-fill-low" style="width:${toPct(lowCount, total)}%"></span>
+                    <span class="details-stat-fill details-fill-high" style="width:${pct(high, total)}%"></span>
+                    <span class="details-stat-fill details-fill-mid" style="width:${pct(mid, total)}%"></span>
+                    <span class="details-stat-fill details-fill-low" style="width:${pct(low, total)}%"></span>
                 </div>
             </div>
             <div class="details-stat-card">
                 <div class="details-stat-label">Semgrep</div>
-                <div class="details-stat-value">${issueCount} / ${cleanCount} / ${runningCount}</div>
+                <div class="details-stat-value">${issue} / ${clean} / ${run}</div>
                 <div class="details-stat-sub">Issue / Clean / Running</div>
                 <div class="details-stat-track">
-                    <span class="details-stat-fill details-fill-issue" style="width:${toPct(issueCount, total)}%"></span>
-                    <span class="details-stat-fill details-fill-clean" style="width:${toPct(cleanCount, total)}%"></span>
-                    <span class="details-stat-fill details-fill-wait" style="width:${toPct(waitingCount, total)}%"></span>
-                    <span class="details-stat-fill details-fill-fail" style="width:${toPct(failedCount, total)}%"></span>
+                    <span class="details-stat-fill details-fill-issue" style="width:${pct(issue, total)}%"></span>
+                    <span class="details-stat-fill details-fill-clean" style="width:${pct(clean, total)}%"></span>
+                    <span class="details-stat-fill details-fill-wait" style="width:${pct(wait, total)}%"></span>
+                    <span class="details-stat-fill details-fill-fail" style="width:${pct(fail, total)}%"></span>
                 </div>
             </div>
         `;
@@ -174,72 +174,72 @@
             return;
         }
 
-        const maxInstalls = pagedItems.reduce((max, item) => {
-            const installs = parseInt(item.latest_installations || 0, 10) || 0;
-            return Math.max(max, installs);
+        const max = pagedItems.reduce((top, item) => {
+            const count = parseInt(item.latest_installations || 0, 10) || 0;
+            return Math.max(top, count);
         }, 1);
 
         list.innerHTML = pagedItems.map((item) => {
             const slug = String(item.slug || 'unknown-plugin');
-            const isTheme = !!item.is_theme;
-            const modeClass = isTheme ? 'theme' : 'plugin';
-            const modeLabel = isTheme ? 'THEME' : 'PLUGIN';
-            const latestScore = parseInt(item.latest_score || 0, 10) || 0;
-            const maxScore = parseInt(item.max_score_ever || 0, 10) || 0;
-            const score = Math.max(latestScore, maxScore);
-            const scoreClass = getRiskClassForResult(score);
-            const scoreRatio = Math.max(0, Math.min(100, score));
+            const theme = !!item.is_theme;
+            const cls = theme ? 'theme' : 'plugin';
+            const mode = theme ? 'THEME' : 'PLUGIN';
+            const latest = parseInt(item.latest_score || 0, 10) || 0;
+            const peak = parseInt(item.max_score_ever || 0, 10) || 0;
+            const score = Math.max(latest, peak);
+            const sCls = getRiskClassForResult(score);
+            const sPct = Math.max(0, Math.min(100, score));
             const installs = parseInt(item.latest_installations || 0, 10) || 0;
-            const rawInstallsRatio = maxInstalls > 0 ? Math.min(100, Math.round((installs / maxInstalls) * 100)) : 0;
-            const installsRatio = installs > 0 ? Math.max(4, rawInstallsRatio) : 0;
-            const installsLevel = installsRatio >= 70 ? 'high' : (installsRatio >= 35 ? 'medium' : 'low');
-            const updatedLabel = getUpdatedLabel(parseDaysSinceUpdate(item.latest_days_since_update));
+            const rawPct = max > 0 ? Math.min(100, Math.round((installs / max) * 100)) : 0;
+            const iPct = installs > 0 ? Math.max(4, rawPct) : 0;
+            const iLvl = iPct >= 70 ? 'high' : (iPct >= 35 ? 'medium' : 'low');
+            const updated = getUpdatedLabel(parseDaysSinceUpdate(item.latest_days_since_update));
 
-            const semgrep = item.semgrep || null;
-            const semgrepCount = semgrep ? (parseInt(semgrep.findings_count || 0, 10) || 0) : (parseInt(item.latest_semgrep_findings || 0, 10) || 0);
-            const semgrepStatus = semgrep ? String(semgrep.status || '').toLowerCase() : '';
-            let semgrepTone = 'empty';
-            let semgrepState = 'WAIT';
-            let semgrepProgress = 0;
-            if (semgrepStatus === 'completed') {
-                semgrepTone = semgrepCount > 0 ? 'alert' : 'complete';
-                semgrepState = semgrepCount > 0 ? 'ISSUE' : 'CLEAN';
-                semgrepProgress = 100;
-            } else if (semgrepStatus === 'running' || semgrepStatus === 'pending') {
-                semgrepTone = 'running';
-                semgrepState = 'SCANNING';
-                semgrepProgress = 35;
-            } else if (semgrepStatus === 'failed') {
-                semgrepTone = 'alert';
-                semgrepState = 'FAIL';
-                semgrepProgress = 100;
+            const sem = item.semgrep || null;
+            const sCount = sem ? (parseInt(sem.findings_count || 0, 10) || 0) : (parseInt(item.latest_semgrep_findings || 0, 10) || 0);
+            const sStat = sem ? String(sem.status || '').toLowerCase() : '';
+            let sTone = 'empty';
+            let sState = 'WAIT';
+            let sProg = 0;
+            if (sStat === 'completed') {
+                sTone = sCount > 0 ? 'alert' : 'complete';
+                sState = sCount > 0 ? 'ISSUE' : 'CLEAN';
+                sProg = 100;
+            } else if (sStat === 'running' || sStat === 'pending') {
+                sTone = 'running';
+                sState = 'SCANNING';
+                sProg = 35;
+            } else if (sStat === 'failed') {
+                sTone = 'alert';
+                sState = 'FAIL';
+                sProg = 100;
             }
 
-            const latestSession = parseInt(item.last_seen_session_id || 0, 10) || 0;
-            const wpLink = isTheme ? `https://wordpress.org/themes/${slug}/` : `https://wordpress.org/plugins/${slug}/`;
-            const lastSeen = item.last_seen_at ? new Date(item.last_seen_at).toLocaleString() : '';
+            const sid = parseInt(item.last_seen_session_id || 0, 10) || 0;
+            const link = theme ? `https://wordpress.org/themes/${slug}/` : `https://wordpress.org/plugins/${slug}/`;
+            const seen = item.last_seen_at ? new Date(item.last_seen_at).toLocaleString() : '';
 
-            const pluginJson = JSON.stringify({
+            const json = JSON.stringify({
                 slug,
                 name: slug,
                 version: item.latest_version || 'n/a',
                 score,
                 installations: installs,
                 days_since_update: parseInt(item.latest_days_since_update || 0, 10) || 0,
-                is_theme: isTheme,
-                wp_org_link: wpLink,
-                trac_link: isTheme ? `https://themes.trac.wordpress.org/log/${slug}/` : `https://plugins.trac.wordpress.org/log/${slug}/`,
+                is_theme: theme,
+                wp_org_link: link,
+                trac_link: theme ? `https://themes.trac.wordpress.org/log/${slug}/` : `https://plugins.trac.wordpress.org/log/${slug}/`,
             });
 
             return `
-                <tr class="history-row details-results-row" tabindex="0" onclick='openCatalogPlugin(${pluginJson}, ${latestSession})' onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCatalogPlugin(${pluginJson}, ${latestSession});}">
+                <tr class="history-row details-results-row" tabindex="0" onclick='openCatalogPlugin(${json}, ${sid})' onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCatalogPlugin(${json}, ${sid});}">
                     <td class="details-col-slug"><span class="details-slug">${escapeHtml(slug)}</span></td>
                     <td class="details-col-version"><span class="history-semgrep-pill">${escapeHtml(String(item.latest_version || 'n/a'))}</span></td>
-                    <td class="details-col-score"><div class="history-risk-cell" title="Risk ${score} (latest ${latestScore}, max ${maxScore})"><span class="history-risk-pill ${scoreClass}">${score}</span><span class="history-risk-meter"><span class="history-risk-fill ${scoreClass}" style="width:${scoreRatio}%;"></span></span></div></td>
-                    <td class="details-col-updated"><span class="history-date-stamp">${escapeHtml(updatedLabel)}</span></td>
-                    <td class="details-col-installs"><div class="history-found-cell" title="${installs.toLocaleString()} installs / last seen ${escapeHtml(lastSeen)}"><span class="history-found-count">${escapeHtml(formatInstallCount(installs))}</span><span class="history-found-label">installs</span><span class="history-found-track"><span class="history-found-fill ${installsLevel}" style="width:${installsRatio}%;"></span></span></div></td>
-                    <td class="details-col-semgrep"><div class="history-semgrep-cell ${semgrepTone}"><span class="history-semgrep-pill">${escapeHtml(String(semgrepCount || '--'))}</span><span class="history-semgrep-meter"><span class="history-semgrep-fill" style="width:${semgrepProgress}%;"></span></span><span class="history-semgrep-state">${escapeHtml(semgrepState)}</span></div></td>
-                    <td class="details-col-actions"><div class="details-row-actions"><span class="history-mode-chip ${modeClass}">${escapeHtml(modeLabel)}</span><a href="${escapeHtml(wpLink)}" target="_blank" rel="noreferrer noopener" onclick="event.stopPropagation();" class="action-btn details-wp-btn" aria-label="Open on WordPress.org" title="Open on WordPress.org"><span class="wp-logo-icon" aria-hidden="true"></span></a><button onclick='event.stopPropagation(); openCatalogPlugin(${pluginJson}, ${latestSession})' class="action-btn details-open-btn">Details</button></div></td>
+                    <td class="details-col-score"><div class="history-risk-cell" title="Risk ${score} (latest ${latest}, max ${peak})"><span class="history-risk-pill ${sCls}">${score}</span><span class="history-risk-meter"><span class="history-risk-fill ${sCls}" style="width:${sPct}%;"></span></span></div></td>
+                    <td class="details-col-updated"><span class="history-date-stamp">${escapeHtml(updated)}</span></td>
+                    <td class="details-col-installs"><div class="history-found-cell" title="${installs.toLocaleString()} installs / last seen ${escapeHtml(seen)}"><span class="history-found-count">${escapeHtml(formatInstallCount(installs))}</span><span class="history-found-label">installs</span><span class="history-found-track"><span class="history-found-fill ${iLvl}" style="width:${iPct}%;"></span></span></div></td>
+                    <td class="details-col-semgrep"><div class="history-semgrep-cell ${sTone}"><span class="history-semgrep-pill">${escapeHtml(String(sCount || '--'))}</span><span class="history-semgrep-meter"><span class="history-semgrep-fill" style="width:${sProg}%;"></span></span><span class="history-semgrep-state">${escapeHtml(sState)}</span></div></td>
+                    <td class="details-col-actions"><div class="details-row-actions"><span class="history-mode-chip ${cls}">${escapeHtml(mode)}</span><a href="${escapeHtml(link)}" target="_blank" rel="noreferrer noopener" onclick="event.stopPropagation();" class="action-btn details-wp-btn" aria-label="Open on WordPress.org" title="Open on WordPress.org"><span class="wp-logo-icon" aria-hidden="true"></span></a><button onclick='event.stopPropagation(); openCatalogPlugin(${json}, ${sid})' class="action-btn details-open-btn">Details</button></div></td>
                 </tr>
             `;
         }).join('');

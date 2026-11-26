@@ -10,31 +10,31 @@ STRUCTURED_MARKERS = {
 }
 
 
-def _contains_any(text: str, phrases: set[str]) -> bool:
-    lowered = text.casefold()
-    return any(str(phrase).casefold() in lowered for phrase in phrases if str(phrase).strip())
+def _has_any(text: str, phrases: set[str]) -> bool:
+    low = text.casefold()
+    return any(str(phrase).casefold() in low for phrase in phrases if str(phrase).strip())
 
 
 def summarize_recent_thread_context(repo, thread_id: int, limit: int = 6) -> str:
-    messages = repo.list_messages(thread_id)
-    if not messages:
+    msgs = repo.list_messages(thread_id)
+    if not msgs:
         return ""
 
     lines: List[str] = []
-    for message in messages[-limit:]:
-        role = str(message.get("role") or "unknown")
-        content = str(message.get("content") or "").strip()
-        if not content:
+    for msg in msgs[-limit:]:
+        role = str(msg.get("role") or "unknown")
+        body = str(msg.get("content") or "").strip()
+        if not body:
             continue
-        compact = " ".join(content.split())
-        if len(compact) > 300:
-            compact = f"{compact[:297]}..."
-        lines.append(f"- {role}: {compact}")
+        short = " ".join(body.split())
+        if len(short) > 300:
+            short = f"{short[:297]}..."
+        lines.append(f"- {role}: {short}")
     return "\n".join(lines)
 
 
-def _build_workspace_intent(*, reason: str, content: str) -> Dict[str, Any]:
-    lowered = str(content or "").casefold()
+def _workspace_intent(*, reason: str, content: str) -> Dict[str, Any]:
+    low = str(content or "").casefold()
     return {
         "intent": "workspace_chat",
         "needs_tools": True,
@@ -46,8 +46,8 @@ def _build_workspace_intent(*, reason: str, content: str) -> Dict[str, Any]:
         "execution_mode": "raw_open_multi_agent",
         "team_mode": "single_agent",
         "strategy": "agent",
-        "security_focus": _contains_any(lowered, SECURITY_MARKERS),
-        "structured_output_requested": _contains_any(lowered, STRUCTURED_MARKERS),
+        "security_focus": _has_any(low, SECURITY_MARKERS),
+        "structured_output_requested": _has_any(low, STRUCTURED_MARKERS),
         "should_ask_clarification": False,
         "composition_source": "raw_open_multi_agent",
     }
@@ -56,8 +56,7 @@ def _build_workspace_intent(*, reason: str, content: str) -> Dict[str, Any]:
 def classify_message_intent(*, content: str, repo, thread_id: int) -> Dict[str, Any]:
     del repo, thread_id
 
-
-    return _build_workspace_intent(
+    return _workspace_intent(
         reason="workspace_default",
         content=content,
     )

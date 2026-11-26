@@ -27,7 +27,6 @@ from core.routers.agents.serialize import (
     serialize_settings_dashboard,
     serialize_thread,
 )
-from core.routers.agents.runtime import prepare_thread_run_context
 from core.routers.agents.service import execute_ai_message
 from core.schemas import (
     AIMessageCreateRequest,
@@ -50,15 +49,15 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 repo = AIRepository()
 
 
-def _build_settings_dashboard():
+def _dashboard():
     profiles = repo.list_providers()
-    active_profile = repo.get_active_provider()
-    return serialize_settings_dashboard(repo, active_profile, profiles)
+    active = repo.get_active_provider()
+    return serialize_settings_dashboard(repo, active, profiles)
 
 
 @router.get("/settings", response_model=AISettingsDashboardResponse)
 def get_settings():
-    return _build_settings_dashboard()
+    return _dashboard()
 
 
 @router.post("/settings")
@@ -78,7 +77,7 @@ def save_settings(payload: AISettingsRequest):
 
 @router.post("/settings/test", response_model=AISettingsTestResponse)
 def test_settings_profile(payload: AISettingsTestRequest):
-    candidate = repo.upsert_provider_settings(
+    cand = repo.upsert_provider_settings(
         provider=payload.provider,
         profile_key=payload.profile_key,
         display_name=payload.display_name,
@@ -88,23 +87,23 @@ def test_settings_profile(payload: AISettingsTestRequest):
         base_url=str(payload.base_url) if payload.base_url else None,
         is_active=False,
     )
-    api_key = str(candidate.get("api_key") or payload.api_key or "").strip()
-    base_url = str(payload.base_url) if payload.base_url else candidate.get("base_url")
-    if not api_key:
+    key = str(cand.get("api_key") or payload.api_key or "").strip()
+    url = str(payload.base_url) if payload.base_url else cand.get("base_url")
+    if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="API key is required to test the AI connection.")
 
-    message = run_provider_connection_test(
+    msg = run_provider_connection_test(
         provider=payload.provider,
-        api_key=api_key,
+        api_key=key,
         model=payload.model,
-        base_url=base_url,
+        base_url=url,
     )
     return {
         "ok": True,
-        "message": message,
+        "message": msg,
         "provider": payload.provider,
         "model": payload.model,
-        "profile_key": candidate.get("profile_key"),
+        "profile_key": cand.get("profile_key"),
     }
 
 
@@ -147,16 +146,16 @@ def list_thread_messages(thread_id: int, plugin_slug: str, is_theme: bool = Fals
 
 
     repo.fail_stale_thread_runs(thread_id, max_age_seconds=1800)
-    messages = [serialize_message(message) for message in repo.list_messages(thread_id)]
-    latest_run = repo.get_latest_run(thread_id)
-    has_pending_run = str(latest_run.get("status") or "").lower() in {"pending", "running"} if latest_run else False
-    team_events = list_latest_thread_team_events(repo, thread_id)
-    pending_approval = repo.get_thread_pending_approval(thread_id)
+    msgs = [serialize_message(m) for m in repo.list_messages(thread_id)]
+    latest = repo.get_latest_run(thread_id)
+    pending = str(latest.get("status") or "").lower() in {"pending", "running"} if latest else False
+    team = list_latest_thread_team_events(repo, thread_id)
+    approval = repo.get_thread_pending_approval(thread_id)
     return {
-        "messages": messages,
-        "has_pending_run": has_pending_run,
-        "team_events": team_events,
-        "pending_approval": serialize_run_approval(pending_approval),
+        "messages": msgs,
+        "has_pending_run": pending,
+        "team_events": team,
+        "pending_approval": serialize_run_approval(approval),
     }
 
 
@@ -201,14 +200,14 @@ def prepare_thread_source(thread_id: int, payload: AIPluginThreadRequest):
             detail="AI thread not found.",
         )
 
-    source_dir = ensure_thread_source_dir(
+    src = ensure_thread_source_dir(
         db_path=repo.db_path,
         plugin_slug=payload.plugin_slug,
         is_theme=payload.is_theme,
         last_scan_session_id=payload.last_scan_session_id,
         root_path=Path.cwd(),
     )
-    if source_dir is None:
+    if src is None:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Unable to prepare source for this plugin.",
@@ -216,7 +215,7 @@ def prepare_thread_source(thread_id: int, payload: AIPluginThreadRequest):
 
     repo.update_thread_memory(
         thread_id,
-        last_source_path=str(source_dir.resolve()),
+        last_source_path=str(src.resolve()),
     )
     updated = repo.get_thread(thread_id)
     if updated is None:
@@ -270,18 +269,18 @@ def decide_run_approval(run_id: int, payload: AIRunApprovalDecisionRequest):
     if str(approval.get("status") or "") != "pending":
         return serialize_run_approval(approval)
 
-    control_path = str(approval.get("control_path") or "").strip()
-    if not control_path:
+    ctrl_path = str(approval.get("control_path") or "").strip()
+    if not ctrl_path:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Approval control path is missing.")
 
-    workspace_path = str(run.get("workspace_path") or "").strip()
-    if not workspace_path:
+    ws_path = str(run.get("workspace_path") or "").strip()
+    if not ws_path:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Run workspace is missing.")
 
-    control_file = Path(control_path).resolve()
-    expected_approvals_dir = resolve_runtime_paths().approvals_dir.resolve()
+    ctrl_file = Path(ctrl_path).resolve()
+    base_dir = resolve_runtime_paths().approvals_dir.resolve()
     try:
-        if os.path.commonpath([str(expected_approvals_dir), str(control_file)]) != str(expected_approvals_dir):
+        if os.path.commonpath([str(base_dir), str(ctrl_file)]) != str(base_dir):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid approval control path.",
@@ -292,8 +291,8 @@ def decide_run_approval(run_id: int, payload: AIRunApprovalDecisionRequest):
             detail="Invalid approval control path.",
         ) from exc
 
-    control_file.parent.mkdir(parents=True, exist_ok=True)
-    control_file.write_text(json.dumps({"decision": payload.decision}), encoding="utf-8")
+    ctrl_file.parent.mkdir(parents=True, exist_ok=True)
+    ctrl_file.write_text(json.dumps({"decision": payload.decision}), encoding="utf-8")
     updated = repo.upsert_run_approval(
         run_id,
         int(run.get("thread_id") or 0),

@@ -62,19 +62,19 @@ class RunMixin:
         tool_results: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            message_id = insert_message(
-                cursor,
+            cur = conn.cursor()
+            mid = insert_message(
+                cur,
                 thread_id,
                 "assistant",
                 content,
                 tool_calls,
                 tool_results,
             )
-            touch_thread_row(cursor, thread_id)
-            finalize_run(cursor, run_id, "failed", error_message or content)
+            touch_thread_row(cur, thread_id)
+            finalize_run(cur, run_id, "failed", error_message or content)
             conn.commit()
-            return decode_message_row(fetch_message(cursor, message_id))
+            return decode_message_row(fetch_message(cur, mid))
 
     def get_run(self, run_id: int) -> Optional[Dict[str, Any]]:
         with get_db(self.db_path) as conn:

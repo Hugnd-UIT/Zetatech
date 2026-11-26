@@ -212,20 +212,20 @@ class SessionMixin:
     def _fetch_slugs_by_session(self, cursor: Any, session_ids: List[int]) -> Dict[int, Set[str]]:
         if not session_ids:
             return {}
-        placeholders = ",".join(["?"] * len(session_ids))
+        marks = ",".join(["?"] * len(session_ids))
         cursor.execute(
             f"""
             SELECT session_id, slug
             FROM scan_results
-            WHERE session_id IN ({placeholders})
+            WHERE session_id IN ({marks})
         """,
             session_ids,
         )
-        slugs_by_session: Dict[int, Set[str]] = {}
+        map: Dict[int, Set[str]] = {}
         for row in cursor.fetchall():
             sid = int(row["session_id"])
-            slugs_by_session.setdefault(sid, set()).add(str(row["slug"]))
-        return slugs_by_session
+            map.setdefault(sid, set()).add(str(row["slug"]))
+        return map
 
     def _build_completed_signature_counts(
         self,
@@ -235,52 +235,52 @@ class SessionMixin:
         counts: Dict[Tuple[bool, Tuple[str, ...]], int] = {}
         for row in rows:
             sid = int(row["id"])
-            slug_signature = tuple(sorted(slugs_by_session.get(sid, set())))
-            has_results = bool(slug_signature)
-            if row["status"] not in {ScanStatus.COMPLETED.value, ScanStatus.MERGED.value} or not has_results:
+            sig_slugs = tuple(sorted(slugs_by_session.get(sid, set())))
+            has_res = bool(sig_slugs)
+            if row["status"] not in {ScanStatus.COMPLETED.value, ScanStatus.MERGED.value} or not has_res:
                 continue
-            signature = (has_results, slug_signature)
-            counts[signature] = counts.get(signature, 0) + 1
+            sig = (has_res, sig_slugs)
+            counts[sig] = counts.get(sig, 0) + 1
         return counts
 
     def get_all_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            rows = self._fetch_recent_session_rows(cursor, limit)
+            cur = conn.cursor()
+            rows = self._fetch_recent_session_rows(cur, limit)
             if not rows:
                 return []
 
-            slugs_by_session = self._fetch_slugs_by_session(
-                cursor,
+            by_sid = self._fetch_slugs_by_session(
+                cur,
                 [int(row["id"]) for row in rows],
             )
-            signature_counts = self._build_completed_signature_counts(rows, slugs_by_session)
+            counts = self._build_completed_signature_counts(rows, by_sid)
 
             sessions: List[Dict[str, Any]] = []
-            seen_signatures: Set[Tuple[bool, Tuple[str, ...]]] = set()
+            seen: Set[Tuple[bool, Tuple[str, ...]]] = set()
             for row in rows:
                 sid = int(row["id"])
-                slug_signature = tuple(sorted(slugs_by_session.get(sid, set())))
-                has_results = bool(slug_signature)
-                signature = (has_results, slug_signature)
-                is_completed_with_results = (
+                sig_slugs = tuple(sorted(by_sid.get(sid, set())))
+                has_res = bool(sig_slugs)
+                sig = (has_res, sig_slugs)
+                done = (
                     row["status"] in {ScanStatus.COMPLETED.value, ScanStatus.MERGED.value}
-                    and has_results
+                    and has_res
                 )
-                if is_completed_with_results:
-                    if signature in seen_signatures:
+                if done:
+                    if sig in seen:
                         continue
-                    seen_signatures.add(signature)
+                    seen.add(sig)
 
-                is_merged = row["status"] == ScanStatus.MERGED.value or (
-                    is_completed_with_results and signature_counts.get(signature, 0) > 1
+                merged = row["status"] == ScanStatus.MERGED.value or (
+                    done and counts.get(sig, 0) > 1
                 )
-                status_value = ScanStatus.MERGED.value if is_merged else row["status"]
+                state = ScanStatus.MERGED.value if merged else row["status"]
                 sessions.append(
                     _serialize_session_row(
                         row,
-                        status_override=status_value,
-                        is_merged=is_merged,
+                        status_override=state,
+                        is_merged=merged,
                     )
                 )
                 if len(sessions) >= limit:
@@ -295,52 +295,52 @@ class SessionMixin:
         limit: int = DEFAULT_QUERY_LIMIT,
     ) -> List[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            safe_sort_column = self._VALID_SORT_COLUMNS.get(sort_by, "score")
-            requested_sort_order = str(sort_order or "").upper()
-            safe_sort_order = (
+            cur = conn.cursor()
+            col = self._VALID_SORT_COLUMNS.get(sort_by, "score")
+            req_dir = str(sort_order or "").upper()
+            dir = (
                 "DESC"
-                if requested_sort_order in self._VALID_SORT_ORDERS and requested_sort_order == "DESC"
+                if req_dir in self._VALID_SORT_ORDERS and req_dir == "DESC"
                 else "ASC"
             )
-            safe_limit = max(1, min(int(limit or DEFAULT_QUERY_LIMIT), SESSION_RESULT_LIMIT))
-            cursor.execute(
+            lim = max(1, min(int(limit or DEFAULT_QUERY_LIMIT), SESSION_RESULT_LIMIT))
+            cur.execute(
                 f"""
                 SELECT * FROM scan_results
                 WHERE session_id = ?
-                ORDER BY {safe_sort_column} {safe_sort_order}
+                ORDER BY {col} {dir}
                 LIMIT ?
             """,
-                (session_id, safe_limit),
+                (session_id, lim),
             )
-            return [_serialize_result_row(dict(row)) for row in cursor.fetchall()]
+            return [_serialize_result_row(dict(row)) for row in cur.fetchall()]
 
     def delete_session(self, session_id: int) -> bool:
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
+            cur = conn.cursor()
+            cur.execute(
                 "SELECT catalog_id FROM plugin_catalog_sessions WHERE session_id = ?",
                 (session_id,),
             )
-            affected_catalog_ids = [int(row["catalog_id"]) for row in cursor.fetchall()]
-            cursor.execute("DELETE FROM plugin_catalog_sessions WHERE session_id = ?", (session_id,))
-            cursor.execute("DELETE FROM scan_results WHERE session_id = ?", (session_id,))
-            cursor.execute("DELETE FROM scan_sessions WHERE id = ?", (session_id,))
-            session_deleted = cursor.rowcount > 0
-            for catalog_id in set(affected_catalog_ids):
-                self._refresh_catalog_entry(cursor, catalog_id)
+            cat_ids = [int(row["catalog_id"]) for row in cur.fetchall()]
+            cur.execute("DELETE FROM plugin_catalog_sessions WHERE session_id = ?", (session_id,))
+            cur.execute("DELETE FROM scan_results WHERE session_id = ?", (session_id,))
+            cur.execute("DELETE FROM scan_sessions WHERE id = ?", (session_id,))
+            deleted = cur.rowcount > 0
+            for cid in set(cat_ids):
+                self._refresh_catalog_entry(cur, cid)
             conn.commit()
-            return session_deleted
+            return deleted
 
     def get_latest_session_by_config(
         self,
         config_dict: Dict[str, Any],
         exclude_id: int,
     ) -> Optional[int]:
-        config_str = json.dumps(config_dict, sort_keys=True)
+        cfg_str = json.dumps(config_dict, sort_keys=True)
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
+            cur = conn.cursor()
+            cur.execute(
                 """
                 SELECT id, config_json FROM scan_sessions
                 WHERE status IN ('completed', 'merged') AND id != ?
@@ -348,12 +348,12 @@ class SessionMixin:
             """,
                 (exclude_id,),
             )
-            for row in cursor.fetchall():
+            for row in cur.fetchall():
                 try:
-                    row_config = json.loads(row["config_json"])
+                    row_cfg = json.loads(row["config_json"])
                 except Exception:
                     continue
-                if json.dumps(row_config, sort_keys=True) == config_str:
+                if json.dumps(row_cfg, sort_keys=True) == cfg_str:
                     return int(row["id"])
         return None
 

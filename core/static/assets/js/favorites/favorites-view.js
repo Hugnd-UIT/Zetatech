@@ -37,35 +37,35 @@
             setCurrentScanResults(data.favorites || []);
             renderRecentFavorites(getCurrentScanResults());
 
-            const maxInstalls = getCurrentScanResults().reduce((max, item) => {
-                const installs = parseInt(item.installations || 0, 10) || 0;
-                return Math.max(max, installs);
+            const max = getCurrentScanResults().reduce((top, item) => {
+                const count = parseInt(item.installations || 0, 10) || 0;
+                return Math.max(top, count);
             }, 1);
 
             list.innerHTML = getCurrentScanResults().map((r, index) => {
                 const slug = String(r.slug || 'unknown-plugin');
-                const slugJs = JSON.stringify(slug);
+                const arg = JSON.stringify(slug);
                 const score = parseInt(r.score || 0, 10) || 0;
-                const scoreLevel = getRiskClassForResult(score);
-                const scoreRatio = Math.max(0, Math.min(100, score));
+                const level = getRiskClassForResult(score);
+                const sPct = Math.max(0, Math.min(100, score));
                 const installs = parseInt(r.installations || 0, 10) || 0;
-                const installsRatio = maxInstalls > 0 ? Math.min(100, Math.round((installs / maxInstalls) * 100)) : 0;
+                const iPct = max > 0 ? Math.min(100, Math.round((installs / max) * 100)) : 0;
                 const days = parseDaysSinceUpdate(r.days_since_update);
-                const updatedClass = getUpdatedChipClass(days);
-                const updatedLabel = getUpdatedLabel(days);
-                const version = String(r.version || 'n/a');
-                const modeClass = r.is_theme ? 'theme' : 'plugin';
-                const modeLabel = modeClass.toUpperCase();
+                const uCls = getUpdatedChipClass(days);
+                const uLbl = getUpdatedLabel(days);
+                const ver = String(r.version || 'n/a');
+                const mCls = r.is_theme ? 'theme' : 'plugin';
+                const mLbl = mCls.toUpperCase();
 
                 return `
                     <tr class="favorites-row" tabindex="0" onclick="openPluginModal(${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPluginModal(${index});}">
                         <td class="favorites-col-slug"><div class="favorites-slug">${escapeHtml(slug)}</div></td>
-                        <td class="favorites-col-version"><span class="favorites-version-chip">${escapeHtml(version)}</span></td>
-                        <td class="favorites-col-installs"><div class="favorites-installs" title="${installs.toLocaleString()} installs"><span class="favorites-installs-count">${escapeHtml(formatInstallCount(installs))}</span><span class="favorites-installs-track"><span class="favorites-installs-fill" style="width: ${installsRatio}%;"></span></span></div></td>
-                        <td class="favorites-col-score"><div class="favorites-score" title="Risk score ${score}"><span class="favorites-score-pill ${scoreLevel}">${score}</span><span class="favorites-score-meter"><span class="favorites-score-fill ${scoreLevel}" style="width: ${scoreRatio}%;"></span></span></div></td>
-                        <td class="favorites-col-updated"><span class="favorites-updated-chip ${updatedClass}">${escapeHtml(updatedLabel)}</span></td>
-                        <td class="favorites-col-mode"><span class="history-mode-chip ${modeClass}">${escapeHtml(modeLabel)}</span></td>
-                        <td class="favorites-col-actions"><div class="favorites-actions"><span class="favorites-action-open" aria-hidden="true"><span>Open</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span><button onclick='event.stopPropagation(); removeFromFavorites(${slugJs})' class="action-btn favorites-action-delete" title="Remove Favorite" aria-label="Remove favorite ${escapeHtml(slug)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div></td>
+                        <td class="favorites-col-version"><span class="favorites-version-chip">${escapeHtml(ver)}</span></td>
+                        <td class="favorites-col-installs"><div class="favorites-installs" title="${installs.toLocaleString()} installs"><span class="favorites-installs-count">${escapeHtml(formatInstallCount(installs))}</span><span class="favorites-installs-track"><span class="favorites-installs-fill" style="width: ${iPct}%;"></span></span></div></td>
+                        <td class="favorites-col-score"><div class="favorites-score" title="Risk score ${score}"><span class="favorites-score-pill ${level}">${score}</span><span class="favorites-score-meter"><span class="favorites-score-fill ${level}" style="width: ${sPct}%;"></span></span></div></td>
+                        <td class="favorites-col-updated"><span class="favorites-updated-chip ${uCls}">${escapeHtml(uLbl)}</span></td>
+                        <td class="favorites-col-mode"><span class="history-mode-chip ${mCls}">${escapeHtml(mLbl)}</span></td>
+                        <td class="favorites-col-actions"><div class="favorites-actions"><span class="favorites-action-open" aria-hidden="true"><span>Open</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span><button onclick='event.stopPropagation(); removeFromFavorites(${arg})' class="action-btn favorites-action-delete" title="Remove Favorite" aria-label="Remove favorite ${escapeHtml(slug)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div></td>
                     </tr>
                 `;
             }).join('');

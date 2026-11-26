@@ -2,34 +2,34 @@
     async function renamePluginAiThread(threadId) {
         const state = window.getPluginAiState();
         const thread = Array.isArray(state.threads) ? state.threads.find((item) => Number(item.id || 0) === Number(threadId || 0)) : null;
-        const fallbackIndex = Math.max(0, Array.isArray(state.threads) ? state.threads.findIndex((item) => Number(item.id || 0) === Number(threadId || 0)) : 0);
-        const currentTitle = String(thread?.title || '').trim() || `Chat ${fallbackIndex + 1}`;
-        const nextTitle = await window.showPrompt({
+        const idx = Math.max(0, Array.isArray(state.threads) ? state.threads.findIndex((item) => Number(item.id || 0) === Number(threadId || 0)) : 0);
+        const cur = String(thread?.title || '').trim() || `Chat ${idx + 1}`;
+        const raw = await window.showPrompt({
             title: 'Rename chat',
             message: 'Enter a new name for this chat.',
-            defaultValue: currentTitle,
+            defaultValue: cur,
             confirmText: 'Save',
             cancelText: 'Cancel',
         });
-        if (nextTitle == null) return;
-        const normalized = String(nextTitle || '').trim();
-        if (!normalized) {
+        if (raw == null) return;
+        const title = String(raw || '').trim();
+        if (!title) {
             window.showToast('Chat name cannot be empty.', 'warn');
             return;
         }
 
-        const response = await fetch(`/api/ai/threads/${threadId}`, {
+        const res = await fetch(`/api/ai/threads/${threadId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 plugin_slug: String(state.plugin || '').trim(),
                 is_theme: !!state.isTheme,
-                title: normalized,
+                title,
             }),
         });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            throw new Error(data.detail || `HTTP ${response.status}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.detail || `HTTP ${res.status}`);
         }
         window.replacePluginAiThreadInState(data);
         window.showToast('Chat name updated.', 'success');
@@ -37,10 +37,10 @@
 
     async function deletePluginAiThread(threadId) {
         const state = window.getPluginAiState();
-        const confirmed = await window.showConfirm('Delete this chat? This action cannot be undone.');
-        if (!confirmed) return;
+        const ok = await window.showConfirm('Delete this chat? This action cannot be undone.');
+        if (!ok) return;
 
-        const response = await fetch(`/api/ai/threads/${threadId}`, {
+        const res = await fetch(`/api/ai/threads/${threadId}`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -48,16 +48,16 @@
                 is_theme: !!state.isTheme,
             }),
         });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            throw new Error(data.detail || `HTTP ${response.status}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.detail || `HTTP ${res.status}`);
         }
 
         window.removePluginAiThreadFromState(threadId);
         if (Number(state.threadId || 0) === Number(threadId || 0)) {
-            const nextThread = Array.isArray(state.threads) && state.threads.length ? state.threads[0] : null;
-            if (nextThread?.id) {
-                state.threadId = Number(nextThread.id);
+            const next = Array.isArray(state.threads) && state.threads.length ? state.threads[0] : null;
+            if (next?.id) {
+                state.threadId = Number(next.id);
                 await window.switchPluginAiThread(state.threadId);
             } else {
                 state.threadId = null;
@@ -465,12 +465,12 @@
                     ? finalPayload.pending_approval
                     : null;
                 if (finalPayload.assistant_message && finalPayload.agents && Array.isArray(finalPayload.agents)) {
-                    const latestStructured = finalPayload.agents.find((agent) => agent && typeof agent === 'object' && agent.structured)?.structured;
-                    if (latestStructured && Array.isArray(state.messages) && state.messages.length) {
-                        const lastIndex = state.messages.length - 1;
-                        state.messages[lastIndex] = {
-                            ...state.messages[lastIndex],
-                            structured: latestStructured,
+                    const struct = finalPayload.agents.find((agent) => agent && typeof agent === 'object' && agent.structured)?.structured;
+                    if (struct && Array.isArray(state.messages) && state.messages.length) {
+                        const last = state.messages.length - 1;
+                        state.messages[last] = {
+                            ...state.messages[last],
+                            structured: struct,
                         };
                     }
                 }
@@ -530,27 +530,27 @@
             window.setPluginAiRequestFailure(error);
             window.setPluginAiRequestErrorToast(error);
         } finally {
-            const latestState = window.getPluginAiState();
-            const ownsActiveStream = window.isCurrentPluginAiStreamRequest(streamRequestId)
-                || Number(latestState.streamThreadId || 0) === Number(threadId || 0);
-            if (ownsActiveStream) {
+            const latest = window.getPluginAiState();
+            const owns = window.isCurrentPluginAiStreamRequest(streamRequestId)
+                || Number(latest.streamThreadId || 0) === Number(threadId || 0);
+            if (owns) {
                 window.endPluginAiStreamRequest(streamRequestId);
-                latestState.sending = false;
-                latestState.pendingSnapshotRetryInFlight = false;
+                latest.sending = false;
+                latest.pendingSnapshotRetryInFlight = false;
             }
-            const isActiveThread = Number(latestState.threadId || 0) === Number(threadId || 0);
+            const active = Number(latest.threadId || 0) === Number(threadId || 0);
             if (typeof window.syncCurrentPluginAiThreadSnapshot === 'function') {
                 window.syncCurrentPluginAiThreadSnapshot({
                     threadId,
-                    messages: latestState.messages,
-                    events: latestState.events,
-                    liveActivity: latestState.liveActivity,
-                    sending: latestState.sending,
+                    messages: latest.messages,
+                    events: latest.events,
+                    liveActivity: latest.liveActivity,
+                    sending: latest.sending,
                 });
             }
-            const canCompose = !!latestState.threadId && !latestState.loading && (!latestState.sending || !isActiveThread);
-            window.updatePluginAiComposerState(canCompose);
-            if (window.isPluginAiViewCurrent(slug, viewToken) && isActiveThread && !latestState.sending) {
+            const compose = !!latest.threadId && !latest.loading && (!latest.sending || !active);
+            window.updatePluginAiComposerState(compose);
+            if (window.isPluginAiViewCurrent(slug, viewToken) && active && !latest.sending) {
                 window.setPluginAiBadge(window.buildPluginAiThreadBadge());
                 if (typeof window.startPluginAiThreadSyncPoll === 'function') {
                     window.startPluginAiThreadSyncPoll({ slug, threadId, viewToken });

@@ -23,12 +23,12 @@
             };
         }
 
-        const scannedCount = parseInt(stats.scanned_count || 0, 10) || 0;
-        const totalPlugins = parseInt(stats.total_plugins || 0, 10) || 0;
-        const totalFindings = parseInt(stats.total_findings || 0, 10) || 0;
+        const scanned = parseInt(stats.scanned_count || 0, 10) || 0;
+        const total = parseInt(stats.total_plugins || 0, 10) || 0;
+        const findings = parseInt(stats.total_findings || 0, 10) || 0;
         const progress = Math.max(0, Math.min(100, parseInt(stats.progress || 0, 10) || 0));
-        const safeTotal = totalPlugins > 0 ? totalPlugins : Math.max(scannedCount, 0);
-        const pair = safeTotal > 0 ? `${scannedCount}/${safeTotal}` : '--/--';
+        const safe = total > 0 ? total : Math.max(scanned, 0);
+        const pair = safe > 0 ? `${scanned}/${safe}` : '--/--';
 
         if (stats.is_running) {
             return {
@@ -40,24 +40,24 @@
             };
         }
 
-        if (scannedCount === 0) {
+        if (scanned === 0) {
             return {
                 cls: 'empty',
                 state: 'WAIT',
-                count: safeTotal > 0 ? `0/${safeTotal}` : '0/0',
+                count: safe > 0 ? `0/${safe}` : '0/0',
                 progress: 0,
                 title: 'Semgrep has not run for this session yet.'
             };
         }
 
-        if (progress >= 100 || (safeTotal > 0 && scannedCount >= safeTotal)) {
-            if (totalFindings > 0) {
+        if (progress >= 100 || (safe > 0 && scanned >= safe)) {
+            if (findings > 0) {
                 return {
                     cls: 'alert',
                     state: 'ISSUE',
-                    count: String(totalFindings),
+                    count: String(findings),
                     progress: 100,
-                    title: `${totalFindings} findings detected (${pair} analyzed).`
+                    title: `${findings} findings detected (${pair} analyzed).`
                 };
             }
             return {
@@ -74,7 +74,7 @@
             state: 'PART',
             count: pair,
             progress,
-            title: `Partial semgrep progress (${pair}, ${totalFindings} findings).`
+            title: `Partial semgrep progress (${pair}, ${findings} findings).`
         };
     }
 

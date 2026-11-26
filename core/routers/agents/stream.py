@@ -37,7 +37,7 @@ def stream_ai_message_events(
     run_agent_bridge_stream: Callable[[Dict[str, Any]], Iterator[Dict[str, Any]]],
 ):
     try:
-        active_provider = resolve_active_provider(repo=repo, payload=payload)
+        prov = resolve_active_provider(repo=repo, payload=payload)
     except HTTPException as exc:
         yield json.dumps(
             {"type": "error", "data": {"detail": str(exc.detail)}},
@@ -45,87 +45,87 @@ def stream_ai_message_events(
         ) + "\n"
         return
 
-    workspace_root = None
-    source_dir = None
+    root = None
+    src = None
     run = None
-    user_message = None
-    runtime_events = []
-    bridge_events = []
-    bridge_result = {"events": [], "result": {}}
+    user_msg = None
+    evts = []
+    stream_evts = []
+    res = {"events": [], "result": {}}
 
     try:
-        execution = prepare_message_execution(repo=repo, payload=payload, active_provider=active_provider)
-        workspace = prepare_execution_workspace(
+        exec_ctx = prepare_message_execution(repo=repo, payload=payload, active_provider=prov)
+        ws = prepare_execution_workspace(
             repo=repo,
-            thread=execution["thread"],
-            last_scan_session_id=execution["last_scan_session_id"],
+            thread=exec_ctx["thread"],
+            last_scan_session_id=exec_ctx["last_scan_session_id"],
             path_cwd=path_cwd,
             resolve_existing_thread_source_path=resolve_existing_thread_source_path,
             build_plugin_context_for_source=build_plugin_context_for_source,
-            runtime_events=runtime_events,
-            intent_info=execution["intent_info"],
+            runtime_events=evts,
+            intent_info=exec_ctx["intent_info"],
         )
-        source_dir = workspace["source_dir"]
-        workspace_root = workspace["workspace_root"]
-        runtime_events.append(
+        src = ws["source_dir"]
+        root = ws["workspace_root"]
+        evts.append(
             {
                 "type": "intent_resolved",
                 "data": {
-                    "decision_trace": summarize_intent_decision(execution["intent_info"]),
+                    "decision_trace": summarize_intent_decision(exec_ctx["intent_info"]),
                 },
             }
         )
 
-        for event in runtime_events:
+        for event in evts:
             yield json.dumps(
                 {"type": "runtime_event", "data": event},
                 ensure_ascii=False,
             ) + "\n"
 
-        user_message, run = create_user_message_and_run(
+        user_msg, run = create_user_message_and_run(
             repo=repo,
             thread_id=payload.thread_id,
             content=payload.content,
-            active_provider=active_provider,
-            workspace_source_path=workspace["workspace_source_path"],
+            active_provider=prov,
+            workspace_source_path=ws["workspace_source_path"],
         )
         yield json.dumps(
-            {"type": "user_message", "data": serialize_message(user_message)},
+            {"type": "user_message", "data": serialize_message(user_msg)},
             ensure_ascii=False,
         ) + "\n"
 
-        approval_control_path = arm_manual_run_approval_if_needed(
+        ctrl = arm_manual_run_approval_if_needed(
             repo=repo,
             payload=payload,
             run_id=run["id"],
-            workspace_root=workspace_root,
+            workspace_root=root,
         )
 
-        bridge_payload = build_bridge_request(
-            active_provider=active_provider,
+        req = build_bridge_request(
+            active_provider=prov,
             payload=payload,
-            context=workspace["context"],
-            workspace_root=workspace_root,
-            source_dir=source_dir,
-            execution_mode=execution["execution_mode"],
-            team_mode=execution["team_mode"],
-            strategy=execution["strategy"],
+            context=ws["context"],
+            workspace_root=root,
+            source_dir=src,
+            execution_mode=exec_ctx["execution_mode"],
+            team_mode=exec_ctx["team_mode"],
+            strategy=exec_ctx["strategy"],
             context_summary=build_effective_context_summary(
-                intent_info=execution["intent_info"],
-                context_summary=execution["context_summary"],
+                intent_info=exec_ctx["intent_info"],
+                context_summary=exec_ctx["context_summary"],
             ),
-            approval_control_path=approval_control_path,
+            approval_control_path=ctrl,
         )
 
-        for event in run_agent_bridge_stream(bridge_payload):
+        for event in run_agent_bridge_stream(req):
             if event.get("type") == "approval_requested" and run is not None:
-                event_data = event.get("data") or {}
-                if isinstance(event_data, dict):
+                data = event.get("data") or {}
+                if isinstance(data, dict):
                     repo.upsert_run_approval(
                         run["id"],
                         payload.thread_id,
                         status="pending",
-                        request_payload=event_data,
+                        request_payload=data,
                     )
                     yield json.dumps(
                         {
@@ -135,40 +135,40 @@ def stream_ai_message_events(
                         ensure_ascii=False,
                     ) + "\n"
             if event.get("type") == "run_completed":
-                event_data = event.get("data") or {}
-                if isinstance(event_data, dict):
-                    bridge_result = {
+                data = event.get("data") or {}
+                if isinstance(data, dict):
+                    res = {
                         "output": str(
-                            event_data.get("content") or event_data.get("output") or ""
+                            data.get("content") or data.get("output") or ""
                         ),
-                        "events": bridge_events,
-                        "result": event_data,
+                        "events": stream_evts,
+                        "result": data,
                     }
                 else:
-                    bridge_result = {
-                        "output": str(event_data),
-                        "events": bridge_events,
-                        "result": {"content": str(event_data)},
+                    res = {
+                        "output": str(data),
+                        "events": stream_evts,
+                        "result": {"content": str(data)},
                     }
                 yield json.dumps(
-                    {"type": "run_completed", "data": bridge_result["result"]},
+                    {"type": "run_completed", "data": res["result"]},
                     ensure_ascii=False,
                 ) + "\n"
                 continue
 
-            bridge_events.append(event)
+            stream_evts.append(event)
             yield json.dumps(
                 {"type": "bridge_event", "data": event},
                 ensure_ascii=False,
             ) + "\n"
 
-        assistant_message, team_events, persisted_tasks = persist_completed_run(
+        bot_msg, team, tasks = persist_completed_run(
             repo=repo,
             thread_id=payload.thread_id,
             run_id=run["id"],
-            bridge_result=bridge_result,
-            source_dir=source_dir,
-            runtime_events=runtime_events,
+            bridge_result=res,
+            source_dir=src,
+            runtime_events=evts,
         )
         if run is not None:
             auto_approve_pending_run_approval(
@@ -179,31 +179,31 @@ def stream_ai_message_events(
         update_thread_memory_from_run(
             repo=repo,
             payload=payload,
-            assistant_message=assistant_message,
-            source_dir=source_dir,
-            runtime_events=runtime_events,
-            run_events=bridge_events,
-            run_tasks=persisted_tasks,
+            assistant_message=bot_msg,
+            source_dir=src,
+            runtime_events=evts,
+            run_events=stream_evts,
+            run_tasks=tasks,
         )
-        final_payload = build_final_response(
+        final = build_final_response(
             repo=repo,
             payload=payload,
-            user_message=user_message,
-            assistant_message=assistant_message,
+            user_message=user_msg,
+            assistant_message=bot_msg,
             run=run,
-            team_events=team_events,
-            persisted_tasks=persisted_tasks,
-            bridge_result=bridge_result,
+            team_events=team,
+            persisted_tasks=tasks,
+            bridge_result=res,
         )
-        final_payload["pending_approval"] = serialize_run_approval(repo.get_thread_pending_approval(payload.thread_id))
-        yield json.dumps({"type": "final", "data": final_payload}, ensure_ascii=False) + "\n"
+        final["pending_approval"] = serialize_run_approval(repo.get_thread_pending_approval(payload.thread_id))
+        yield json.dumps({"type": "final", "data": final}, ensure_ascii=False) + "\n"
     except asyncio.CancelledError:
         if run is not None:
             try:
                 repo.fail_run_with_assistant_message(
                     run_id=run["id"],
                     thread_id=payload.thread_id,
-                    content="Yanıt akışı bağlantı kesildiği için yarıda kaldı. Mesajı tekrar gönderebilirsin.",
+                    content="Response stream interrupted because the client disconnected. You can resend the message.",
                     error_message="Run interrupted by client disconnect.",
                     tool_calls=[],
                     tool_results=[],
@@ -223,13 +223,13 @@ def stream_ai_message_events(
                     run=run,
                     thread_id=payload.thread_id,
                 )
-            except HTTPException as mapped_exc:
+            except HTTPException as mapped:
                 yield json.dumps(
                     {
                         "type": "error",
                         "data": {
-                            "detail": str(mapped_exc.detail),
-                            "status": mapped_exc.status_code,
+                            "detail": str(mapped.detail),
+                            "status": mapped.status_code,
                         },
                     },
                     ensure_ascii=False,
@@ -243,7 +243,7 @@ def stream_ai_message_events(
             return
     finally:
         cleanup_workspace(
-            source_dir=source_dir,
-            workspace_root=workspace_root,
+            source_dir=src,
+            workspace_root=root,
             cleanup_run_workspace=cleanup_run_workspace,
         )

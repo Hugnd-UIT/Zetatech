@@ -29,41 +29,41 @@ async def run_plugin_semgrep_scan(
     repo: ScanRepository,
     stop_event: Optional[asyncio.Event] = None,
 ):
-    safe_slug = slug
+    safe = slug
     try:
-        safe_slug = validate_single_scan_slug(slug)
+        safe = validate_single_scan_slug(slug)
         if stop_requested(stop_event):
             mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)
             return
 
         repo.update_semgrep_scan(scan_id, "running")
-        plugin_path = await download_plugin_for_semgrep(
-            slug=safe_slug,
+        path = await download_plugin_for_semgrep(
+            slug=safe,
             download_url=download_url,
         )
-        if not plugin_path:
+        if not path:
             raise Exception("Failed to download plugin")
 
         if stop_requested(stop_event):
             mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)
             return
 
-        output_dir = prepare_semgrep_output_dir(slug=safe_slug, scan_id=scan_id)
-        copy_custom_rules_if_available(output_dir)
+        out = prepare_semgrep_output_dir(slug=safe, scan_id=scan_id)
+        copy_custom_rules_if_available(out)
 
-        write_disabled_rules_snapshot(output_dir)
+        write_disabled_rules_snapshot(out)
 
-        result = await execute_semgrep_scan(
-            output_dir=output_dir,
-            plugin_path=str(plugin_path),
-            slug=safe_slug,
+        res = await execute_semgrep_scan(
+            output_dir=out,
+            plugin_path=str(path),
+            slug=safe,
         )
         summary = persist_semgrep_findings(
             repo=repo,
             scan_id=scan_id,
-            findings=result.findings,
+            findings=res.findings,
             stop_event=stop_event,
-            errors=result.errors,
+            errors=res.errors,
         )
         if summary is None:
             mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)
@@ -73,23 +73,23 @@ async def run_plugin_semgrep_scan(
             mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)
             return
 
-        if not result.success and not result.findings:
-            raise Exception(f"Semgrep failed: {', '.join(result.errors)}")
+        if not res.success and not res.findings:
+            raise Exception(f"Semgrep failed: {', '.join(res.errors)}")
 
-        error_message = ", ".join(result.errors) if result.errors else None
-        status = "completed" if result.success else "failed"
+        err = ", ".join(res.errors) if res.errors else None
+        status = "completed" if res.success else "failed"
         repo.update_semgrep_scan(
             scan_id,
             status,
             summary=summary,
-            error=error_message,
+            error=err,
         )
     except Exception as exc:
         if stop_requested(stop_event):
             mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)
             return
         repo.update_semgrep_scan(scan_id, "failed", error=str(exc))
-        logger.error("Semgrep scan error for %s: %s", safe_slug, exc, exc_info=True)
+        logger.error("Semgrep scan error for %s: %s", safe, exc, exc_info=True)
 
 
 async def run_bulk_semgrep_task(
@@ -99,26 +99,26 @@ async def run_bulk_semgrep_task(
     stop_event: asyncio.Event,
 ):
     try:
-        for index, plugin in enumerate(plugins):
+        for idx, plugin in enumerate(plugins):
             if stop_event.is_set():
-                logger.info("Bulk scan stopped by user at [%s/%s]", index, len(plugins))
+                logger.info("Bulk scan stopped by user at [%s/%s]", idx, len(plugins))
                 break
 
-            plugin_meta = validate_bulk_plugin(plugin)
-            if not plugin_meta:
+            meta = validate_bulk_plugin(plugin)
+            if not meta:
                 continue
 
-            slug = plugin_meta["slug"]
-            version = plugin_meta["version"]
-            download_url = plugin_meta["download_url"]
-            logger.info("Bulk scan [%s/%s]: %s", index + 1, len(plugins), slug)
+            slug = meta["slug"]
+            ver = meta["version"]
+            url = meta["download_url"]
+            logger.info("Bulk scan [%s/%s]: %s", idx + 1, len(plugins), slug)
 
             try:
-                scan_id = repo.create_semgrep_scan(slug, version=version)
+                scan_id = repo.create_semgrep_scan(slug, version=ver)
                 await run_plugin_semgrep_scan(
                     scan_id,
                     slug,
-                    download_url,
+                    url,
                     repo,
                     stop_event,
                 )

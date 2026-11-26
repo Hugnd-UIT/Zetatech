@@ -37,13 +37,13 @@ class CatalogMixin:
     }
 
     def get_catalog_latest_version(self, slug: str, *, is_theme: bool = False) -> Optional[str]:
-        safe_slug = str(slug or "").strip()
-        if not safe_slug:
+        safe = str(slug or "").strip()
+        if not safe:
             return None
 
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
+            cur = conn.cursor()
+            cur.execute(
                 """
                 SELECT latest_version
                 FROM plugin_catalog
@@ -51,29 +51,28 @@ class CatalogMixin:
                 ORDER BY id ASC
                 LIMIT 1
                 """,
-                (safe_slug, 1 if is_theme else 0),
+                (safe, 1 if is_theme else 0),
             )
-            row = cursor.fetchone()
+            row = cur.fetchone()
             if not row:
                 return None
-            version = row["latest_version"]
-            return str(version).strip() or None if version is not None else None
+            ver = row["latest_version"]
+            return str(ver).strip() or None if ver is not None else None
 
     def add_favorite(self, result_dict: Dict[str, Any]) -> bool:
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
+            cur = conn.cursor()
 
-            r_tags = _csv_field(result_dict.get("risk_tags", []))
-            s_flags = _csv_field(result_dict.get("security_flags", []))
-            f_flags = _csv_field(result_dict.get("feature_flags", []))
-
+            rtags = _csv_field(result_dict.get("risk_tags", []))
+            sflags = _csv_field(result_dict.get("security_flags", []))
+            fflags = _csv_field(result_dict.get("feature_flags", []))
 
             ca_json = None
             if result_dict.get("code_analysis"):
                 ca_json = json.dumps(result_dict.get("code_analysis"))
 
             try:
-                cursor.execute(
+                cur.execute(
                     """
                     INSERT INTO favorite_plugins (
                         slug, name, version, score, installations, days_since_update,
@@ -99,9 +98,9 @@ class CatalogMixin:
                         1 if result_dict.get("author_trusted") else 0,
                         1 if result_dict.get("is_risky_category") else 0,
                         1 if result_dict.get("is_user_facing") else 0,
-                        r_tags,
-                        s_flags,
-                        f_flags,
+                        rtags,
+                        sflags,
+                        fflags,
                         ca_json,
                     ),
                 )
@@ -113,17 +112,17 @@ class CatalogMixin:
 
     def remove_favorite(self, slug: str) -> bool:
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM favorite_plugins WHERE slug = ?", (slug,))
+            cur = conn.cursor()
+            cur.execute("DELETE FROM favorite_plugins WHERE slug = ?", (slug,))
             conn.commit()
-            return cursor.rowcount > 0
+            return cur.rowcount > 0
 
     def get_favorites(self) -> List[Dict[str, Any]]:
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM favorite_plugins ORDER BY created_at DESC")
-            results = []
-            for row in cursor.fetchall():
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM favorite_plugins ORDER BY created_at DESC")
+            items = []
+            for row in cur.fetchall():
                 d = dict(row)
                 d["author_trusted"] = _to_bool(d.get("author_trusted"))
                 d["is_risky_category"] = _to_bool(d.get("is_risky_category"))
@@ -134,12 +133,11 @@ class CatalogMixin:
                 d["security_flags"] = _parse_csv_field(d.get("security_flags"))
                 d["feature_flags"] = _parse_csv_field(d.get("feature_flags"))
 
-
                 if d.get("code_analysis_json"):
                     d["code_analysis"] = json.loads(d["code_analysis_json"])
 
-                results.append(d)
-            return results
+                items.append(d)
+            return items
 
     def get_catalog_plugins(
         self,
@@ -155,33 +153,33 @@ class CatalogMixin:
         except Exception:
             pass
 
-        safe_sort_column = self._VALID_CATALOG_SORT_COLUMNS.get(
+        col = self._VALID_CATALOG_SORT_COLUMNS.get(
             sort_by, "pc.last_seen_at"
         )
-        safe_order = "DESC" if str(order or "").upper() == "DESC" else "ASC"
-        safe_limit = max(1, min(int(limit or DEFAULT_QUERY_LIMIT), MAX_QUERY_LIMIT))
-        safe_offset = max(0, int(offset or 0))
-        query_text = str(q or "").strip().lower()
+        dir = "DESC" if str(order or "").upper() == "DESC" else "ASC"
+        lim = max(1, min(int(limit or DEFAULT_QUERY_LIMIT), MAX_QUERY_LIMIT))
+        off = max(0, int(offset or 0))
+        term = str(q or "").strip().lower()
 
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            where_clause = ""
+            cur = conn.cursor()
+            where = ""
             params: List[Any] = []
-            if query_text:
-                where_clause = "WHERE LOWER(pc.slug) LIKE ?"
-                params.append(f"%{query_text}%")
+            if term:
+                where = "WHERE LOWER(pc.slug) LIKE ?"
+                params.append(f"%{term}%")
 
-            cursor.execute(
+            cur.execute(
                 f"""
                 SELECT COUNT(*) AS c
                 FROM plugin_catalog pc
-                {where_clause}
+                {where}
                 """,
                 params,
             )
-            total = int((cursor.fetchone() or {"c": 0})["c"])
+            total = int((cur.fetchone() or {"c": 0})["c"])
 
-            cursor.execute(
+            cur.execute(
                 f"""
                 SELECT
                     pc.id,
@@ -201,87 +199,87 @@ class CatalogMixin:
                     pc.created_at,
                     pc.updated_at
                 FROM plugin_catalog pc
-                {where_clause}
-                ORDER BY {safe_sort_column} {safe_order}
+                {where}
+                ORDER BY {col} {dir}
                 LIMIT ? OFFSET ?
                 """,
-                params + [safe_limit, safe_offset],
+                params + [lim, off],
             )
 
-            rows = [dict(r) for r in cursor.fetchall()]
+            rows = [dict(r) for r in cur.fetchall()]
 
             if rows:
                 slugs = [
                     str(item.get("slug") or "") for item in rows if item.get("slug")
                 ]
-                semgrep_statuses = self.get_semgrep_statuses_for_slugs(slugs)
+                statuses = self.get_semgrep_statuses_for_slugs(slugs)
                 for item in rows:
-                    semgrep = semgrep_statuses.get(str(item.get("slug") or ""))
-                    item["semgrep"] = semgrep
-                    if semgrep:
+                    sem = statuses.get(str(item.get("slug") or ""))
+                    item["semgrep"] = sem
+                    if sem:
                         item["latest_semgrep_findings"] = int(
-                            semgrep.get("findings_count") or 0
+                            sem.get("findings_count") or 0
                         )
 
             if include_sessions and rows:
-                catalog_ids = [int(r["id"]) for r in rows]
-                placeholders = ",".join(["?"] * len(catalog_ids))
-                cursor.execute(
+                ids = [int(r["id"]) for r in rows]
+                marks = ",".join(["?"] * len(ids))
+                cur.execute(
                     f"""
                     SELECT catalog_id, session_id, seen_at
                     FROM plugin_catalog_sessions
-                    WHERE catalog_id IN ({placeholders})
+                    WHERE catalog_id IN ({marks})
                     ORDER BY seen_at DESC
                     """,
-                    catalog_ids,
+                    ids,
                 )
-                sessions_by_catalog: Dict[int, List[Dict[str, Any]]] = {}
-                for row in cursor.fetchall():
+                by_cat: Dict[int, List[Dict[str, Any]]] = {}
+                for row in cur.fetchall():
                     cid = int(row["catalog_id"])
-                    sessions_by_catalog.setdefault(cid, []).append(
+                    by_cat.setdefault(cid, []).append(
                         {
                             "session_id": row["session_id"],
                             "seen_at": row["seen_at"],
                         }
                     )
                 for item in rows:
-                    item["sessions"] = sessions_by_catalog.get(int(item["id"]), [])
+                    item["sessions"] = by_cat.get(int(item["id"]), [])
 
-            now_utc = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc)
 
-            def _elapsed_days_since(ts: Any) -> int:
+            def _days_since(ts: Any) -> int:
                 if not ts:
                     return 0
                 try:
-                    normalized = str(ts).replace("Z", "+00:00")
-                    dt = datetime.fromisoformat(normalized)
+                    norm = str(ts).replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(norm)
                     if dt.tzinfo is None:
                         dt = dt.replace(tzinfo=timezone.utc)
-                    delta = now_utc - dt.astimezone(timezone.utc)
+                    delta = now - dt.astimezone(timezone.utc)
                     return max(0, int(delta.total_seconds() // 86400))
                 except Exception:
                     return 0
 
             for item in rows:
                 item["is_theme"] = bool(item.get("is_theme"))
-                base_days = item.get("latest_days_since_update")
-                if base_days is None:
+                base = item.get("latest_days_since_update")
+                if base is None:
                     continue
                 try:
-                    base_days_int = max(0, int(base_days))
+                    base_int = max(0, int(base))
                 except Exception:
-                    base_days_int = 0
+                    base_int = 0
 
-                dynamic_days = base_days_int + _elapsed_days_since(
+                days = base_int + _days_since(
                     item.get("last_seen_at")
                 )
-                item["latest_days_since_update_snapshot"] = base_days_int
-                item["latest_days_since_update"] = dynamic_days
+                item["latest_days_since_update_snapshot"] = base_int
+                item["latest_days_since_update"] = days
 
             return {
                 "total": total,
-                "limit": safe_limit,
-                "offset": safe_offset,
+                "limit": lim,
+                "offset": off,
                 "items": rows,
             }
 
@@ -354,30 +352,30 @@ class CatalogMixin:
                     trac_link=row["trac_link"] or "",
                 )
 
-                before_changes = conn.total_changes
+                prev = conn.total_changes
                 self._upsert_catalog_entry(
                     cursor,
                     int(row["session_id"]),
                     row["session_created_at"] or "",
                     result,
                 )
-                after_changes = conn.total_changes
-                if after_changes > before_changes:
+                curr = conn.total_changes
+                if curr > prev:
                     rebuilt += 1
                     linked += 1
 
             conn.commit()
 
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) AS c FROM plugin_catalog")
-            catalog_count = int((cursor.fetchone() or {"c": 0})["c"])
-            cursor.execute("SELECT COUNT(*) AS c FROM plugin_catalog_sessions")
-            link_count = int((cursor.fetchone() or {"c": 0})["c"])
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) AS c FROM plugin_catalog")
+            cat_count = int((cur.fetchone() or {"c": 0})["c"])
+            cur.execute("SELECT COUNT(*) AS c FROM plugin_catalog_sessions")
+            link_count = int((cur.fetchone() or {"c": 0})["c"])
 
         return {
             "status": "ok",
-            "catalog_count": catalog_count,
+            "catalog_count": cat_count,
             "link_count": link_count,
             "processed_rows": rebuilt,
             "linked_rows": linked,
@@ -389,12 +387,12 @@ class CatalogMixin:
         is_theme: Optional[bool] = None,
         limit: int = DEFAULT_QUERY_LIMIT,
     ) -> List[Dict[str, Any]]:
-        safe_limit = max(
+        lim = max(
             1,
             min(int(limit or DEFAULT_QUERY_LIMIT), MAX_CATALOG_SESSION_LIMIT),
         )
         with get_db(self.db_path) as conn:
-            cursor = conn.cursor()
+            cur = conn.cursor()
 
             where = "WHERE pc.slug = ?"
             params: List[Any] = [slug]
@@ -402,7 +400,7 @@ class CatalogMixin:
                 where += " AND pc.is_theme = ?"
                 params.append(1 if is_theme else 0)
 
-            cursor.execute(
+            cur.execute(
                 f"""
                 SELECT
                     pcs.session_id,
@@ -421,6 +419,6 @@ class CatalogMixin:
                 ORDER BY pcs.seen_at DESC
                 LIMIT ?
                 """,
-                params + [safe_limit],
+                params + [lim],
             )
-            return [dict(row) for row in cursor.fetchall()]
+            return [dict(row) for row in cur.fetchall()]

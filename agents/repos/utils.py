@@ -154,11 +154,11 @@ def count_thread_scope(cursor, plugin_slug: str, is_theme: bool) -> int:
 
 
 def build_thread_title(plugin_slug: str, title: Optional[str], sequence: int) -> str:
-    explicit_title = str(title or "").strip()
-    position = max(1, int(sequence or 1))
-    if explicit_title:
-        return explicit_title if position <= 1 else f"{explicit_title} Chat {position}"
-    return f"Chat {position}"
+    label = str(title or "").strip()
+    pos = max(1, int(sequence or 1))
+    if label:
+        return label if pos <= 1 else f"{label} Chat {pos}"
+    return f"Chat {pos}"
 
 
 def fetch_thread_by_id(cursor, thread_id: int):
@@ -176,15 +176,15 @@ def ensure_thread_for_scope(
     existing = fetch_latest_thread(cursor, plugin_slug, is_theme)
     if existing is not None:
         return existing
-    sequence = count_thread_scope(cursor, plugin_slug, is_theme) + 1
-    thread_id = insert_thread(
+    seq = count_thread_scope(cursor, plugin_slug, is_theme) + 1
+    tid = insert_thread(
         cursor,
         plugin_slug,
         is_theme,
-        build_thread_title(plugin_slug, title, sequence),
+        build_thread_title(plugin_slug, title, seq),
         last_scan_session_id,
     )
-    return fetch_thread_by_id(cursor, thread_id)
+    return fetch_thread_by_id(cursor, tid)
 
 
 def create_thread_record(
@@ -194,15 +194,15 @@ def create_thread_record(
     title: Optional[str],
     last_scan_session_id: Optional[int],
 ):
-    sequence = count_thread_scope(cursor, plugin_slug, is_theme) + 1
-    thread_id = insert_thread(
+    seq = count_thread_scope(cursor, plugin_slug, is_theme) + 1
+    tid = insert_thread(
         cursor,
         plugin_slug,
         is_theme,
-        build_thread_title(plugin_slug, title, sequence),
+        build_thread_title(plugin_slug, title, seq),
         last_scan_session_id,
     )
-    return fetch_thread_by_id(cursor, thread_id)
+    return fetch_thread_by_id(cursor, tid)
 
 
 def list_threads(cursor, plugin_slug: str, is_theme: bool):

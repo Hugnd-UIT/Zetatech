@@ -66,38 +66,38 @@ function renderSystemStatus(data) {
     }
     renderServerUpdateAlert(data);
 
-    const updateCallout = document.getElementById("update-callout");
-    const updateButton = document.getElementById("update-action-btn");
-    const updateDescription = document.getElementById("update-description");
-    const updateVersion = document.getElementById("update-latest-version");
-    const releaseLink = document.getElementById("update-release-link");
-    const updateProgress = document.getElementById("update-progress");
+    const callout = document.getElementById("update-callout");
+    const btn = document.getElementById("update-action-btn");
+    const desc = document.getElementById("update-description");
+    const verEl = document.getElementById("update-latest-version");
+    const link = document.getElementById("update-release-link");
+    const prog = document.getElementById("update-progress");
 
-    const hasLatestVersion = !!(data.latest_version && String(data.latest_version).trim());
-    if (data.update_available && hasLatestVersion) {
-        if (updateCallout) updateCallout.hidden = false;
-        if (updateVersion) {
-            updateVersion.textContent = formatVersionLabel(data.latest_version) || "New version";
+    const hasLatest = !!(data.latest_version && String(data.latest_version).trim());
+    if (data.update_available && hasLatest) {
+        if (callout) callout.hidden = false;
+        if (verEl) {
+            verEl.textContent = formatVersionLabel(data.latest_version) || "New version";
         }
-        if (updateDescription) {
-            updateDescription.textContent =
+        if (desc) {
+            desc.textContent =
                 truncateText(data.release_notes) ||
                 data.message ||
                 "Pull the latest image and rerun the container manually.";
         }
-        if (releaseLink) {
-            releaseLink.href = data.release_url || "#";
+        if (link) {
+            link.href = data.release_url || "#";
         }
-        if (updateButton) {
-            updateButton.disabled = false;
-            updateButton.textContent = "COPY UPDATE COMMAND";
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "COPY UPDATE COMMAND";
         }
-    } else if (updateCallout) {
-        updateCallout.hidden = true;
+    } else if (callout) {
+        callout.hidden = true;
     }
 
-    if (updateProgress) {
-        updateProgress.hidden = true;
+    if (prog) {
+        prog.hidden = true;
     }
 
     if (data.last_error && data.last_error !== runtime.getLastSystemErrorMessage()) {
@@ -127,35 +127,35 @@ function startSystemStatusPolling() {
 }
 
 async function initiateSystemUpdate() {
-    const systemStatus = runtime.getSystemStatus();
-    if (!systemStatus || !systemStatus.update_available) {
+    const status = runtime.getSystemStatus();
+    if (!status || !status.update_available) {
         showToast("No newer update is available right now.", "info");
         return;
     }
 
-    const latestVersion =
-        formatVersionLabel(systemStatus.latest_version) || "the latest version";
-    const confirmMessage = `${latestVersion} is available. Zetatech no longer runs host-side update scripts automatically. Do you want to copy the manual Docker update command?`;
-    const userConfirmed = await window.showConfirm(confirmMessage);
-    if (!userConfirmed) return;
+    const latest =
+        formatVersionLabel(status.latest_version) || "the latest version";
+    const prompt = `${latest} is available. Zetatech no longer runs host-side update scripts automatically. Do you want to copy the manual Docker update command?`;
+    const ok = await window.showConfirm(prompt);
+    if (!ok) return;
 
     try {
         const resp = await fetch("/api/system/update", {
             method: "POST",
         });
         if (!resp.ok) {
-            const errorText = await resp.text();
-            throw new Error(errorText || "Update request failed.");
+            const err = await resp.text();
+            throw new Error(err || "Update request failed.");
         }
 
         const payload = await resp.json();
-        const updateCommand = String(payload.update_command || "").trim();
-        if (!updateCommand) {
+        const cmd = String(payload.update_command || "").trim();
+        if (!cmd) {
             showToast(payload.message || "Manual update instructions are unavailable right now.", "info");
             return;
         }
 
-        await navigator.clipboard.writeText(updateCommand);
+        await navigator.clipboard.writeText(cmd);
         showToast(payload.message || "Manual Docker update command copied to clipboard.", "success");
         loadSystemStatus(true);
     } catch (err) {

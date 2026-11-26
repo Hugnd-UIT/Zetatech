@@ -129,37 +129,37 @@ def test_summarize_recent_thread_context_returns_recent_messages(tmp_path):
 
 def test_list_thread_messages_keeps_long_running_runs_pending(monkeypatch, tmp_path):
     db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
-    user_message = repository.create_message(thread_id=thread["id"], role="user", content="Run a full scan")
-    repository.create_run(
+    repo = AIRepository(db_path=db_path)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    msg = repo.create_message(thread_id=thread["id"], role="user", content="Run a full scan")
+    repo.create_run(
         thread_id=thread["id"],
         provider="anthropic",
         provider_label="Anthropic",
         model="claude",
         status="running",
-        message_id=user_message["id"],
+        message_id=msg["id"],
         workspace_path=str(tmp_path),
     )
 
     client = _create_test_client(monkeypatch, db_path)
-    response = client.get(
+    res = client.get(
         f"/api/ai/threads/{thread['id']}/messages",
         params={"plugin_slug": "akismet", "is_theme": False},
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["has_pending_run"] is True
-    assert payload["messages"][0]["role"] == "user"
+    assert res.status_code == 200
+    data = res.json()
+    assert data["has_pending_run"] is True
+    assert data["messages"][0]["role"] == "user"
 
 
 def test_list_thread_messages_hides_stale_pending_approval_for_completed_run(monkeypatch, tmp_path):
     db_path = tmp_path / "ai_router.db"
-    repository = AIRepository(db_path=db_path)
-    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    repo = AIRepository(db_path=db_path)
+    thread = repo.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    run = repository.create_run(
+    run = repo.create_run(
         thread_id=thread["id"],
         provider="anthropic",
         provider_label="Anthropic",
@@ -167,25 +167,25 @@ def test_list_thread_messages_hides_stale_pending_approval_for_completed_run(mon
         status="running",
         workspace_path=str(tmp_path),
     )
-    repository.upsert_run_approval(
+    repo.upsert_run_approval(
         run_id=run["id"],
         thread_id=thread["id"],
         status="pending",
         mode="manual",
         request_payload={"nextTasks": [{"id": "task-1", "title": "Inspect workspace"}]},
     )
-    repository.finish_run(run["id"], "completed")
+    repo.finish_run(run["id"], "completed")
 
     client = _create_test_client(monkeypatch, db_path)
-    response = client.get(
+    res = client.get(
         f"/api/ai/threads/{thread['id']}/messages",
         params={"plugin_slug": "akismet", "is_theme": False},
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["has_pending_run"] is False
-    assert payload["pending_approval"] is None
+    assert res.status_code == 200
+    data = res.json()
+    assert data["has_pending_run"] is False
+    assert data["pending_approval"] is None
 
 
 def test_create_message_workspace_default_prepares_workspace_even_for_short_prompt(monkeypatch, tmp_path):

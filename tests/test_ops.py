@@ -76,25 +76,25 @@ def test_reusable_validation_workflow_runs_shared_validation_chain():
     step_names = [step["name"] for step in steps]
 
     assert set(inputs) == {
-        "image_version",
-        "image_tag",
-        "image_build",
-        "run_smoke",
-        "release_mode",
+        "version",
+        "tag",
+        "build",
+        "test",
+        "release",
     }
-    assert set(outputs) == {"validated_image_ref", "runtime_contract_ok"}
+    assert set(outputs) == {"image", "result"}
     assert step_names == [
         "Checkout repository",
-        "Resolve validated image reference",
+        "Resolve image reference",
         "Set up Python",
-        "Set up Node.js",
+        "Set up Node",
         "Install Python dependencies",
         "Install Node dependencies",
-        "Build Node runner",
+        "Build Node",
         "Run Node tests",
         "Run Python tests",
-        "Build Docker image",
-        "Smoke test Docker image",
+        "Build image",
+        "Test image",
         "Emit smoke result for callers",
     ]
     assert steps[7]["run"] == CANONICAL_NODE_TEST_COMMAND
@@ -133,11 +133,11 @@ def test_ci_workflow_calls_reusable_validation_with_ci_metadata():
 
     assert validate_job["uses"] == "./.github/workflows/ops.yml"
     assert validate_job["with"] == {
-        "image_version": "ci",
-        "image_tag": "${{ github.ref_name }}",
-        "image_build": "${{ github.sha }}",
-        "run_smoke": True,
-        "release_mode": False,
+        "version": "ci",
+        "tag": "${{ github.ref_name }}",
+        "build": "${{ github.sha }}",
+        "test": True,
+        "release": False,
     }
 
 
@@ -155,9 +155,9 @@ def test_reusable_validation_smoke_waits_for_health_before_update_contract():
     smoke_step = workflow["jobs"]["validate"]["steps"][-2]
     run_script = smoke_step["run"]
 
-    assert "wait_for_http http://127.0.0.1:18080/health" in run_script
+    assert "wait http://127.0.0.1:18080/health" in run_script
     assert "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update.json" in run_script
-    assert run_script.index("wait_for_http http://127.0.0.1:18080/health") < run_script.index(
+    assert run_script.index("wait http://127.0.0.1:18080/health") < run_script.index(
         "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update.json"
     )
 
@@ -168,12 +168,12 @@ def test_reusable_validation_smoke_uses_documented_runtime_mounts():
     run_script = smoke_step["run"]
 
     assert 'docker run -d --name "$name" -p 18080:8080 \\' in run_script
-    assert '-v zetatech-validation-data:/home/appuser/.zetatech \\' in run_script
-    assert '-v zetatech-validation-plugins:/app/Plugins \\' in run_script
-    assert '-v zetatech-validation-semgrep:/app/semgrep_results \\' in run_script
-    assert "docker volume create zetatech-validation-data" in run_script
-    assert "docker volume create zetatech-validation-plugins" in run_script
-    assert "docker volume create zetatech-validation-semgrep" in run_script
+    assert '-v zetatech-data:/home/appuser/.zetatech \\' in run_script
+    assert '-v zetatech-plugin:/app/Plugins \\' in run_script
+    assert '-v zetatech-semgrep:/app/semgrep_results \\' in run_script
+    assert "docker volume create zetatech-data" in run_script
+    assert "docker volume create zetatech-plugin" in run_script
+    assert "docker volume create zetatech-semgrep" in run_script
 
 
 def test_reusable_validation_smoke_verifies_mounted_paths_are_writable():
@@ -181,16 +181,16 @@ def test_reusable_validation_smoke_verifies_mounted_paths_are_writable():
     smoke_step = workflow["jobs"]["validate"]["steps"][-2]
     run_script = smoke_step["run"]
 
-    assert "verify_writable_mounts()" in run_script
-    assert "verify_writable_mounts zetatech-validation-smoke" in run_script
-    assert "verify_writable_mounts zetatech-validation-smoke-recreated" in run_script
+    assert "check()" in run_script
+    assert "check zetatech-smoke" in run_script
+    assert "check zetatech-smoke-recreated" in run_script
     assert "touch /home/appuser/.zetatech/write-test" in run_script
     assert "touch /app/Plugins/write-test" in run_script
     assert "touch /app/semgrep_results/write-test" in run_script
-    assert run_script.index("verify_writable_mounts zetatech-validation-smoke") < run_script.index(
+    assert run_script.index("check zetatech-smoke") < run_script.index(
         "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update.json"
     )
-    assert run_script.index("verify_writable_mounts zetatech-validation-smoke-recreated") < run_script.index(
+    assert run_script.index("check zetatech-smoke-recreated") < run_script.index(
         "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update-recreated.json"
     )
 
@@ -200,10 +200,10 @@ def test_reusable_validation_smoke_verifies_restart_and_recreate_persistence_con
     smoke_step = workflow["jobs"]["validate"]["steps"][-2]
     run_script = smoke_step["run"]
 
-    assert "docker exec zetatech-validation-smoke python - <<'PY'" in run_script
-    assert "docker restart zetatech-validation-smoke >/dev/null" in run_script
-    assert "docker rm -f zetatech-validation-smoke >/dev/null" in run_script
-    assert "run_container zetatech-validation-smoke-recreated" in run_script
+    assert "docker exec zetatech-smoke python - <<'PY'" in run_script
+    assert "docker restart zetatech-smoke >/dev/null" in run_script
+    assert "docker rm -f zetatech-smoke >/dev/null" in run_script
+    assert "start zetatech-smoke-recreated" in run_script
     assert "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update-recreated.json" in run_script
     assert "persisted across restart and recreate" in run_script
     assert "Path('/home/appuser/.zetatech/acceptance/persistence.txt')" in run_script
@@ -214,12 +214,12 @@ def test_reusable_validation_smoke_cleans_up_volume_and_containers():
     smoke_step = workflow["jobs"]["validate"]["steps"][-2]
     run_script = smoke_step["run"]
 
-    assert "docker rm -f zetatech-validation-smoke zetatech-validation-smoke-recreated >/dev/null 2>&1 || true" in run_script
-    assert "docker volume rm zetatech-validation-data zetatech-validation-plugins zetatech-validation-semgrep >/dev/null 2>&1 || true" in run_script
-    assert "trap cleanup EXIT" in run_script
-    assert "docker logs zetatech-validation-smoke || true" in run_script
-    assert "docker logs zetatech-validation-smoke-recreated || true" in run_script
-    assert "cleanup" in run_script
+    assert "docker rm -f zetatech-smoke zetatech-smoke-recreated >/dev/null 2>&1 || true" in run_script
+    assert "docker volume rm zetatech-data zetatech-plugin zetatech-semgrep >/dev/null 2>&1 || true" in run_script
+    assert "trap clean EXIT" in run_script
+    assert "docker logs zetatech-smoke || true" in run_script
+    assert "docker logs zetatech-smoke-recreated || true" in run_script
+    assert "clean" in run_script
     assert "trap - EXIT" in run_script
 
 

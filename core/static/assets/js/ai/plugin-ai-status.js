@@ -35,14 +35,14 @@
     }
 
     function formatPluginAiRunDuration(runStartedAt) {
-        const startedAt = String(runStartedAt || '').trim();
-        if (!startedAt) return '0m 00s';
-        const startedMs = new Date(startedAt).getTime();
-        if (!Number.isFinite(startedMs)) return '0m 00s';
-        const diffSeconds = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
-        const minutes = Math.floor(diffSeconds / 60);
-        const seconds = diffSeconds % 60;
-        return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+        const raw = String(runStartedAt || '').trim();
+        if (!raw) return '0m 00s';
+        const ms = new Date(raw).getTime();
+        if (!Number.isFinite(ms)) return '0m 00s';
+        const diff = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+        const mins = Math.floor(diff / 60);
+        const secs = diff % 60;
+        return `${mins}m ${String(secs).padStart(2, '0')}s`;
     }
 
     function buildPluginAiRunningBadgeLabel(runStartedAt) {

@@ -91,9 +91,9 @@ def _send_session_event_threadsafe(
 
 
 def _scan_was_cancelled(session_id: int, repo: ScanRepository) -> bool:
-    session_state = repo.get_session(session_id)
+    state = repo.get_session(session_id)
     return bool(
-        session_state and session_state.get("status") == ScanStatus.CANCELLED.value
+        state and state.get("status") == ScanStatus.CANCELLED.value
     )
 
 
@@ -131,22 +131,22 @@ async def _deduplicate_completed_scan(
     repo: ScanRepository,
     config: ScanConfig,
 ) -> bool:
-    prev_session_id = repo.get_latest_session_by_config(config.to_dict(), session_id)
-    if not prev_session_id:
+    prev_id = repo.get_latest_session_by_config(config.to_dict(), session_id)
+    if not prev_id:
         return False
 
-    current_slugs = set(repo.get_result_slugs(session_id))
-    prev_slugs = set(repo.get_result_slugs(prev_session_id))
-    if current_slugs != prev_slugs:
+    cur = set(repo.get_result_slugs(session_id))
+    prev = set(repo.get_result_slugs(prev_id))
+    if cur != prev:
         return False
 
     repo.delete_session(session_id)
-    repo.mark_session_merged(prev_session_id)
+    repo.mark_session_merged(prev_id)
     await _send_session_event(
         session_id,
         {
             "type": "deduplicated",
-            "original_session_id": prev_session_id,
+            "original_session_id": prev_id,
             "message": "Results identical to previous scan. Merged.",
         },
     )
@@ -206,34 +206,34 @@ async def _run_theme_scan(
     config: ScanConfig,
     repo: ScanRepository,
 ) -> tuple[int, int]:
-    found_count = 0
-    high_risk_count = 0
+    found = 0
+    high = 0
     loop = asyncio.get_running_loop()
 
-    def sync_on_theme_result(result: Dict[str, Any]) -> None:
-        nonlocal found_count, high_risk_count
-        found_count += 1
+    def on_theme(result: Dict[str, Any]) -> None:
+        nonlocal found, high
+        found += 1
         if result.get("risk_level") == "HIGH":
-            high_risk_count += 1
+            high += 1
 
-        plugin_result = _build_theme_plugin_result(result)
+        item = _build_theme_plugin_result(result)
         _save_plugin_result_and_emit(
             loop=loop,
             session_id=session_id,
             repo=repo,
-            result=plugin_result,
-            found_count=found_count,
+            result=item,
+            found_count=found,
         )
 
     scanner = ThemeScanner(
         pages=config.pages,
         limit=config.limit,
         sort=config.sort,
-        on_result=sync_on_theme_result,
+        on_result=on_theme,
     )
     active_scans[session_id] = scanner
     await loop.run_in_executor(None, scanner.scan)
-    return found_count, high_risk_count
+    return found, high
 
 
 async def _run_plugin_scan(
@@ -242,23 +242,23 @@ async def _run_plugin_scan(
     config: ScanConfig,
     repo: ScanRepository,
 ) -> tuple[int, int]:
-    found_count = 0
+    found = 0
     loop = asyncio.get_running_loop()
     scanner = PluginScanner(config)
     active_scans[session_id] = scanner
 
-    def sync_on_result(result: PluginResult) -> None:
-        nonlocal found_count
-        found_count += 1
+    def on_res(result: PluginResult) -> None:
+        nonlocal found
+        found += 1
         _save_plugin_result_and_emit(
             loop=loop,
             session_id=session_id,
             repo=repo,
             result=result,
-            found_count=found_count,
+            found_count=found,
         )
 
-    def sync_on_progress(current: int, total: int) -> None:
+    def on_prog(current: int, total: int) -> None:
         _emit_progress(
             loop=loop,
             session_id=session_id,
@@ -266,10 +266,10 @@ async def _run_plugin_scan(
             total=total,
         )
 
-    scanner.on_result = sync_on_result
-    scanner.on_progress = sync_on_progress
+    scanner.on_result = on_res
+    scanner.on_progress = on_prog
     await loop.run_in_executor(None, scanner.scan)
-    return found_count, _count_high_risk_plugin_results(scanner.results)
+    return found, _count_high_risk_plugin_results(scanner.results)
 
 
 async def _run_scan_mode(
@@ -330,7 +330,7 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
         repo.update_session_status(session_id, ScanStatus.RUNNING)
         await _send_session_event(session_id, {"type": "start", "session_id": session_id})
 
-        found_count, high_risk_count = await _run_scan_mode(
+        found, high = await _run_scan_mode(
             session_id=session_id,
             config=config,
             repo=repo,
@@ -340,8 +340,8 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
             session_id=session_id,
             config=config,
             repo=repo,
-            found_count=found_count,
-            high_risk_count=high_risk_count,
+            found_count=found,
+            high_risk_count=high,
         )
     except Exception as exc:
         repo.update_session_status(session_id, ScanStatus.FAILED, error_message=str(exc))
@@ -390,9 +390,9 @@ def get_scan_session_results(
     apply_relative_risk_labels_to_dict_results(results)
 
     slugs = [result["slug"] for result in results]
-    semgrep_statuses = repo.get_semgrep_statuses_for_slugs(slugs)
+    statuses = repo.get_semgrep_statuses_for_slugs(slugs)
     for result in results:
-        result["semgrep"] = semgrep_statuses.get(result["slug"])
+        result["semgrep"] = statuses.get(result["slug"])
 
     return {"session_id": session_id, "total": len(results), "results": results}
 
@@ -402,8 +402,8 @@ def delete_scan_session(*, repo: ScanRepository, session_id: int) -> Dict[str, A
     if scanner is not None:
         request_scanner_stop(scanner)
 
-    success = repo.delete_session(session_id)
-    if not success:
+    ok = repo.delete_session(session_id)
+    if not ok:
         raise HTTPException(status_code=404, detail="Scan session not found")
     return {"status": "deleted"}
 

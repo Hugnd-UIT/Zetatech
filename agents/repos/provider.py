@@ -124,17 +124,17 @@ class ProviderMixin:
             str(payload.get("model") or 'default'),
             payload.get("profile_key"),
         )
-        raw_models = payload.get("models_json")
+        raw = payload.get("models_json")
         try:
-            models = [str(item).strip() for item in json.loads(raw_models or "[]") if str(item).strip()]
+            models = [str(item).strip() for item in json.loads(raw or "[]") if str(item).strip()]
         except Exception:
             models = []
         if payload.get("model") and payload.get("model") not in models:
             models.insert(0, str(payload.get("model")))
         payload["models"] = models
-        raw_api_key = str(payload.get("api_key") or "") or None
-        payload["api_key_masked"] = self.mask_api_key(raw_api_key)
-        payload["has_api_key"] = bool(raw_api_key)
+        key = str(payload.get("api_key") or "") or None
+        payload["api_key_masked"] = self.mask_api_key(key)
+        payload["has_api_key"] = bool(key)
         payload["api_key"] = None
         payload["is_active"] = bool(payload.get("is_active"))
         return payload

@@ -117,21 +117,21 @@
     async function loadPluginAiMessages(options = {}) {
         const state = window.getPluginAiState();
         const slug = String(options.slug || state.plugin || '').trim();
-        const viewToken = options.viewToken ?? state.viewToken;
-        const threadId = options.threadId ?? state.threadId;
+        const token = options.viewToken ?? state.viewToken;
+        const tid = options.threadId ?? state.threadId;
         const silent = !!options.silent;
 
-        if (threadId && typeof window.hydratePluginAiThreadUiSnapshot === 'function') {
-            const hydratedSnapshot = window.hydratePluginAiThreadUiSnapshot(slug, threadId, !!state.isTheme);
-            if (hydratedSnapshot && !silent) {
+        if (tid && typeof window.hydratePluginAiThreadUiSnapshot === 'function') {
+            const snap = window.hydratePluginAiThreadUiSnapshot(slug, tid, !!state.isTheme);
+            if (snap && !silent) {
                 window.refreshPluginAiRenderedState();
-                if (hydratedSnapshot.badgeText) {
-                    window.setPluginAiBadge(hydratedSnapshot.badgeText);
+                if (snap.badgeText) {
+                    window.setPluginAiBadge(snap.badgeText);
                 }
-                if (hydratedSnapshot.statusText) {
-                    window.setPluginAiStatus(hydratedSnapshot.statusText);
+                if (snap.statusText) {
+                    window.setPluginAiStatus(snap.statusText);
                 }
-                if (hydratedSnapshot.sending && hydratedSnapshot.runStartedAt) {
+                if (snap.sending && snap.runStartedAt) {
                     if (state.runningIndicatorTimer) {
                         window.clearInterval(state.runningIndicatorTimer);
                     }
@@ -141,12 +141,12 @@
                         }
                     }, 1000);
                 }
-                window.updatePluginAiComposerState(!hydratedSnapshot.sending && !!threadId);
+                window.updatePluginAiComposerState(!snap.sending && !!tid);
             }
         }
 
-        if (!threadId) {
-            if (!slug || window.isPluginAiViewCurrent(slug, viewToken)) {
+        if (!tid) {
+            if (!slug || window.isPluginAiViewCurrent(slug, token)) {
                 window.setPluginAiMessagesEmptyView();
                 window.setPluginAiActivityEmptyView();
             }
@@ -159,42 +159,42 @@
                 is_theme: String(!!state.isTheme),
             });
             params.set('_ts', String(Date.now()));
-            const response = await fetch(`/api/ai/threads/${threadId}/messages?${params.toString()}`, {
+            const res = await fetch(`/api/ai/threads/${tid}/messages?${params.toString()}`, {
                 cache: 'no-store',
             });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data.detail || `HTTP ${response.status}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.detail || `HTTP ${res.status}`);
             }
-            if (slug && !window.isPluginAiViewCurrent(slug, viewToken)) {
+            if (slug && !window.isPluginAiViewCurrent(slug, token)) {
                 return { hasPendingRun: false, messages: [] };
             }
-            const messages = window.extractPluginAiMessages(data);
-            const hydratedMessages = Array.isArray(messages) ? [...messages] : [];
-            const hasPendingRun = !!data.has_pending_run;
-            const pendingSnapshot = typeof window.getPluginAiPendingSnapshot === 'function'
-                ? window.getPluginAiPendingSnapshot(slug, threadId, !!state.isTheme)
+            const msgs = window.extractPluginAiMessages(data);
+            const items = Array.isArray(msgs) ? [...msgs] : [];
+            const hasPending = !!data.has_pending_run;
+            const pending = typeof window.getPluginAiPendingSnapshot === 'function'
+                ? window.getPluginAiPendingSnapshot(slug, tid, !!state.isTheme)
                 : null;
-            const pendingSnapshotContent = String(pendingSnapshot?.content || '').trim();
-            const hasSameUserMessage = !!pendingSnapshotContent && hydratedMessages.some((item) => {
+            const draft = String(pending?.content || '').trim();
+            const hasUser = !!draft && items.some((item) => {
                 const role = String(item?.role || '').trim();
                 const content = String(item?.content || '').trim();
-                return role === 'user' && content === pendingSnapshotContent;
+                return role === 'user' && content === draft;
             });
-            const isActiveStreamThread = !!state.sending
-                && Number(state.streamThreadId || 0) === Number(threadId || 0)
+            const active = !!state.sending
+                && Number(state.streamThreadId || 0) === Number(tid || 0)
                 && !!String(state.streamRequestId || '').trim();
-            const shouldPreserveOptimisticState = !hasPendingRun && !!pendingSnapshotContent && !hasSameUserMessage;
-            if (hasSameUserMessage && typeof window.clearPluginAiPendingSnapshot === 'function') {
-                window.clearPluginAiPendingSnapshot(slug, threadId, !!state.isTheme);
+            const preserve = !hasPending && !!draft && !hasUser;
+            if (hasUser && typeof window.clearPluginAiPendingSnapshot === 'function') {
+                window.clearPluginAiPendingSnapshot(slug, tid, !!state.isTheme);
             }
-            if (pendingSnapshotContent && !hasSameUserMessage) {
-                hydratedMessages.push({
-                    id: `pending-user-${threadId}`,
-                    thread_id: threadId,
+            if (draft && !hasUser) {
+                items.push({
+                    id: `pending-user-${tid}`,
+                    thread_id: tid,
                     role: 'user',
-                    content: pendingSnapshotContent,
-                    created_at: pendingSnapshot.createdAt || new Date().toISOString(),
+                    content: draft,
+                    created_at: pending.createdAt || new Date().toISOString(),
                     tool_calls: [],
                     tool_results: [],
                 });

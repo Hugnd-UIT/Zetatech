@@ -64,13 +64,13 @@ def _resolve_single_scan_version(*, repo, slug: str) -> str:
 
 
 def start_semgrep_scan_for_plugin(*, repo, scan_request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
-    safe_slug = require_valid_slug(scan_request.slug)
-    resolved_version = _resolve_single_scan_version(repo=repo, slug=safe_slug)
-    scan_id = repo.create_semgrep_scan(safe_slug, version=resolved_version)
+    safe = require_valid_slug(scan_request.slug)
+    ver = _resolve_single_scan_version(repo=repo, slug=safe)
+    scan_id = repo.create_semgrep_scan(safe, version=ver)
     background_tasks.add_task(
         run_plugin_semgrep_scan,
         scan_id,
-        safe_slug,
+        safe,
         str(scan_request.download_url),
         repo,
     )
@@ -78,42 +78,42 @@ def start_semgrep_scan_for_plugin(*, repo, scan_request, background_tasks: Backg
 
 
 def get_latest_semgrep_scan(*, repo, slug: str) -> Dict[str, Any]:
-    safe_slug = require_valid_slug(slug)
-    scan = repo.get_semgrep_scan(safe_slug)
+    safe = require_valid_slug(slug)
+    scan = repo.get_semgrep_scan(safe)
     return scan or {"status": "none"}
 
 
 def add_custom_rule(rule) -> Dict[str, Any]:
     rule_id = require_valid_rule_id(rule.id)
-    existing_rules = load_custom_rules_document()
-    for existing in existing_rules.get("rules", []):
+    doc = load_custom_rules_document()
+    for existing in doc.get("rules", []):
         if existing.get("id") == rule_id:
             raise HTTPException(
                 status_code=400,
                 detail=f"Rule with ID '{rule_id}' already exists",
             )
 
-    new_rule = {
+    item = {
         "id": rule_id,
         "pattern": rule.pattern,
         "message": rule.message,
         "languages": rule.languages,
         "severity": rule.severity,
     }
-    existing_rules.setdefault("rules", []).append(new_rule)
+    doc.setdefault("rules", []).append(item)
 
-    validation_error = _validate_semgrep_rules_config(existing_rules)
-    if validation_error:
+    err = _validate_semgrep_rules_config(doc)
+    if err:
         raise HTTPException(
             status_code=400,
             detail=(
                 "Rule validation failed. Please check your Semgrep pattern syntax. "
-                f"Details: {validation_error}"
+                f"Details: {err}"
             ),
         )
 
     try:
-        save_custom_rules_document(existing_rules)
+        save_custom_rules_document(doc)
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -128,14 +128,14 @@ def delete_custom_rule(rule_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="No custom rules file found")
 
     try:
-        rules_data = load_custom_rules_document()
-        original_count = len(rules_data.get("rules", []))
-        rules_data["rules"] = [
-            rule for rule in rules_data.get("rules", []) if rule.get("id") != rule_id
+        data = load_custom_rules_document()
+        orig = len(data.get("rules", []))
+        data["rules"] = [
+            rule for rule in data.get("rules", []) if rule.get("id") != rule_id
         ]
-        if len(rules_data["rules"]) == original_count:
+        if len(data["rules"]) == orig:
             raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
-        save_custom_rules_document(rules_data)
+        save_custom_rules_document(data)
         return {"success": True, "deleted": rule_id}
     except HTTPException:
         raise
@@ -148,107 +148,107 @@ def delete_custom_rule(rule_id: str) -> Dict[str, Any]:
 
 def toggle_custom_rule(rule_id: str) -> Dict[str, Any]:
     rule_id = require_valid_rule_id(rule_id)
-    config = get_disabled_config()
-    if rule_id in config["rules"]:
-        config["rules"].remove(rule_id)
-        save_disabled_config(config)
+    cfg = get_disabled_config()
+    if rule_id in cfg["rules"]:
+        cfg["rules"].remove(rule_id)
+        save_disabled_config(cfg)
         return {"success": True, "rule_id": rule_id, "enabled": True}
 
-    config["rules"].append(rule_id)
-    save_disabled_config(config)
+    cfg["rules"].append(rule_id)
+    save_disabled_config(cfg)
     return {"success": True, "rule_id": rule_id, "enabled": False}
 
 
 def toggle_all_custom_rules(*, enabled: bool) -> Dict[str, Any]:
-    rules_data = load_custom_rules_document()
-    custom_rule_ids: List[str] = []
-    for rule in rules_data.get("rules", []):
+    data = load_custom_rules_document()
+    ids: List[str] = []
+    for rule in data.get("rules", []):
         if not isinstance(rule, dict):
             continue
         rule_id = rule.get("id")
         if not isinstance(rule_id, str):
             continue
         try:
-            custom_rule_ids.append(_validate_rule_id_or_raise(rule_id))
+            ids.append(_validate_rule_id_or_raise(rule_id))
         except ValueError:
             continue
 
-    if not custom_rule_ids:
+    if not ids:
         return {"success": True, "enabled": enabled, "changed": 0, "total": 0}
 
-    config = get_disabled_config()
-    disabled_rules = set(config.get("rules", []))
+    cfg = get_disabled_config()
+    disabled = set(cfg.get("rules", []))
     changed = 0
 
     if enabled:
-        for rule_id in custom_rule_ids:
-            if rule_id in disabled_rules:
-                disabled_rules.remove(rule_id)
+        for rule_id in ids:
+            if rule_id in disabled:
+                disabled.remove(rule_id)
                 changed += 1
     else:
-        for rule_id in custom_rule_ids:
-            if rule_id not in disabled_rules:
-                disabled_rules.add(rule_id)
+        for rule_id in ids:
+            if rule_id not in disabled:
+                disabled.add(rule_id)
                 changed += 1
 
-    config["rules"] = sorted(disabled_rules)
-    save_disabled_config(config)
+    cfg["rules"] = sorted(disabled)
+    save_disabled_config(cfg)
     return {
         "success": True,
         "enabled": enabled,
         "changed": changed,
-        "total": len(custom_rule_ids),
+        "total": len(ids),
     }
 
 
 def add_ruleset(ruleset: str) -> Dict[str, Any]:
-    ruleset_id = require_valid_ruleset(ruleset)
-    config = get_disabled_config()
+    rid = require_valid_ruleset(ruleset)
+    cfg = get_disabled_config()
     if (
-        ruleset_id not in config["extra_rulesets"]
-        and ruleset_id not in SEMGREP_REGISTRY_RULESETS
+        rid not in cfg["extra_rulesets"]
+        and rid not in SEMGREP_REGISTRY_RULESETS
     ):
-        config["extra_rulesets"].append(ruleset_id)
+        cfg["extra_rulesets"].append(rid)
 
-    if ruleset_id in config["rulesets"]:
-        config["rulesets"].remove(ruleset_id)
+    if rid in cfg["rulesets"]:
+        cfg["rulesets"].remove(rid)
 
-    save_disabled_config(config)
-    return {"success": True, "ruleset_id": ruleset_id, "enabled": True}
+    save_disabled_config(cfg)
+    return {"success": True, "ruleset_id": rid, "enabled": True}
 
 
 def toggle_ruleset(ruleset_id: str) -> Dict[str, Any]:
-    ruleset_id = require_valid_ruleset(ruleset_id)
-    config = get_disabled_config()
-    available_rulesets = set(CORE_RULESET_KEYS) | set(config.get("extra_rulesets", []))
-    if ruleset_id not in available_rulesets:
-        raise HTTPException(status_code=404, detail=f"Ruleset '{ruleset_id}' not found")
+    rid = require_valid_ruleset(ruleset_id)
+    cfg = get_disabled_config()
+    avail = set(CORE_RULESET_KEYS) | set(cfg.get("extra_rulesets", []))
+    if rid not in avail:
+        raise HTTPException(status_code=404, detail=f"Ruleset '{rid}' not found")
 
-    if ruleset_id in config["rulesets"]:
-        config["rulesets"].remove(ruleset_id)
-        save_disabled_config(config)
-        return {"success": True, "ruleset_id": ruleset_id, "enabled": True}
+    if rid in cfg["rulesets"]:
+        cfg["rulesets"].remove(rid)
+        save_disabled_config(cfg)
+        return {"success": True, "ruleset_id": rid, "enabled": True}
 
-    config["rulesets"].append(ruleset_id)
-    save_disabled_config(config)
-    return {"success": True, "ruleset_id": ruleset_id, "enabled": False}
+    cfg["rulesets"].append(rid)
+    save_disabled_config(cfg)
+    return {"success": True, "ruleset_id": rid, "enabled": False}
 
 
 def delete_ruleset(ruleset_id: str) -> Dict[str, Any]:
-    ruleset_id = require_valid_ruleset(ruleset_id)
-    canonical = _canonicalize_ruleset_value(ruleset_id)
+    rid = require_valid_ruleset(ruleset_id)
+    canonical = _canonicalize_ruleset_value(rid)
     if canonical in CORE_RULESET_KEYS or canonical in CORE_RULESET_CONFIGS:
         raise HTTPException(status_code=400, detail="Built-in rulesets cannot be deleted")
 
-    config = get_disabled_config()
-    extras = config.get("extra_rulesets", [])
-    if ruleset_id not in extras:
-        raise HTTPException(status_code=404, detail=f"Ruleset '{ruleset_id}' not found")
+    cfg = get_disabled_config()
+    extras = cfg.get("extra_rulesets", [])
+    if rid not in extras:
+        raise HTTPException(status_code=404, detail=f"Ruleset '{rid}' not found")
 
-    config["extra_rulesets"] = [item for item in extras if item != ruleset_id]
-    config["rulesets"] = [item for item in config.get("rulesets", []) if item != ruleset_id]
-    save_disabled_config(config)
-    return {"success": True, "deleted": ruleset_id}
+    cfg["extra_rulesets"] = [item for item in extras if item != rid]
+    cfg["rulesets"] = [item for item in cfg.get("rulesets", []) if item != rid]
+    save_disabled_config(cfg)
+    return {"success": True, "deleted": rid}
 
 
 def start_bulk_semgrep_scan(*, repo, session_id: int, background_tasks: BackgroundTasks) -> Dict[str, Any]:
@@ -259,9 +259,9 @@ def start_bulk_semgrep_scan(*, repo, session_id: int, background_tasks: Backgrou
     if not results:
         raise HTTPException(status_code=404, detail="No plugins found in this session")
 
-    stop_event = asyncio.Event()
-    active_bulk_scans[session_id] = stop_event
-    background_tasks.add_task(run_bulk_semgrep_task, session_id, results, repo, stop_event)
+    stop = asyncio.Event()
+    active_bulk_scans[session_id] = stop
+    background_tasks.add_task(run_bulk_semgrep_task, session_id, results, repo, stop)
     return {"success": True, "count": len(results), "status": "started"}
 
 
@@ -278,9 +278,9 @@ def get_bulk_semgrep_scan_stats(*, repo, session_id: int) -> Dict[str, Any]:
     slugs = [result["slug"] for result in results]
     stats = repo.get_semgrep_stats_for_slugs(slugs)
 
-    total_plugins = len(slugs)
-    scanned_count = int(stats.get("scanned_count", 0) or 0)
-    progress = int((scanned_count / total_plugins) * 100) if total_plugins > 0 else 0
+    total = len(slugs)
+    scanned = int(stats.get("scanned_count", 0) or 0)
+    progress = int((scanned / total) * 100) if total > 0 else 0
 
     return {
         "session_id": session_id,

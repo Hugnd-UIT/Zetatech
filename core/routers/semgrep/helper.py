@@ -69,8 +69,8 @@ def bootstrap_default_custom_rules() -> None:
     if not ensure_semgrep_state_dir():
         return
 
-    should_bootstrap_custom_rules = not _yaml_file_has_rules(CUSTOM_RULES_PATH)
-    if should_bootstrap_custom_rules:
+    boot = not _yaml_file_has_rules(CUSTOM_RULES_PATH)
+    if boot:
         for candidate in (
             ROOT_CUSTOM_RULES_PATH,
             LEGACY_CUSTOM_RULES_PATH,
@@ -92,42 +92,42 @@ def bootstrap_default_custom_rules() -> None:
 
 
 def get_disabled_config() -> Dict[str, List[str]]:
-    default_config = {"rules": [], "rulesets": [], "extra_rulesets": []}
-    legacy_default_rulesets = {"cwe-top-25"}
+    defaults = {"rules": [], "rulesets": [], "extra_rulesets": []}
+    legacy = {"cwe-top-25"}
     if DISABLED_CONFIG_PATH.exists():
         try:
             with open(DISABLED_CONFIG_PATH, "r") as f:
-                config = json.load(f)
-                before_rulesets = set(config.get("rulesets", []))
-                before_extras = set(config.get("extra_rulesets", []))
-                normalized = {
-                    "rules": config.get("rules", []),
-                    "rulesets": config.get("rulesets", []),
-                    "extra_rulesets": config.get("extra_rulesets", []),
+                cfg = json.load(f)
+                prev_sets = set(cfg.get("rulesets", []))
+                prev_extra = set(cfg.get("extra_rulesets", []))
+                norm = {
+                    "rules": cfg.get("rules", []),
+                    "rulesets": cfg.get("rulesets", []),
+                    "extra_rulesets": cfg.get("extra_rulesets", []),
                 }
-                normalized["rulesets"] = list(
-                    dict.fromkeys(_canonicalize_ruleset_value(r) for r in normalized["rulesets"])
+                norm["rulesets"] = list(
+                    dict.fromkeys(_canonicalize_ruleset_value(r) for r in norm["rulesets"])
                 )
-                normalized["extra_rulesets"] = list(
+                norm["extra_rulesets"] = list(
                     dict.fromkeys(
                         _canonicalize_ruleset_value(r)
-                        for r in normalized["extra_rulesets"]
+                        for r in norm["extra_rulesets"]
                     )
                 )
-                normalized["rulesets"] = [
-                    r for r in normalized["rulesets"] if r not in legacy_default_rulesets
+                norm["rulesets"] = [
+                    r for r in norm["rulesets"] if r not in legacy
                 ]
-                normalized["extra_rulesets"] = [
-                    r for r in normalized["extra_rulesets"] if r not in legacy_default_rulesets
+                norm["extra_rulesets"] = [
+                    r for r in norm["extra_rulesets"] if r not in legacy
                 ]
-                if before_rulesets != set(normalized["rulesets"]) or before_extras != set(
-                    normalized["extra_rulesets"]
+                if prev_sets != set(norm["rulesets"]) or prev_extra != set(
+                    norm["extra_rulesets"]
                 ):
-                    save_disabled_config(normalized)
-                return normalized
+                    save_disabled_config(norm)
+                return norm
         except Exception:
             pass
-    return default_config
+    return defaults
 
 
 def save_disabled_config(config: Dict[str, List[str]]):
@@ -139,10 +139,10 @@ def save_disabled_config(config: Dict[str, List[str]]):
 
 
 def get_active_rulesets() -> List[str]:
-    config = get_disabled_config()
-    disabled = set(config.get("rulesets", []))
-    extra_rulesets = config.get("extra_rulesets", [])
-    combined = DEFAULT_ENABLED_RULESETS + extra_rulesets
+    cfg = get_disabled_config()
+    disabled = set(cfg.get("rulesets", []))
+    extras = cfg.get("extra_rulesets", [])
+    combined = DEFAULT_ENABLED_RULESETS + extras
     unique = list(dict.fromkeys(combined))
     return [rs for rs in unique if rs not in disabled]
 
@@ -204,75 +204,75 @@ def _extract_bulk_plugin_meta(plugin: Dict[str, Any]) -> Optional[Dict[str, str]
 
 
 def _validate_semgrep_rules_config(rules_config: Dict[str, Any]) -> Optional[str]:
-    semgrep_command = get_semgrep_command()
-    if not semgrep_command:
+    cmd = get_semgrep_command()
+    if not cmd:
         return "Semgrep is not available for rule validation."
 
-    temp_path = None
+    tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, encoding="utf-8"
         ) as tmp:
             yaml.dump(rules_config, tmp, default_flow_style=False, sort_keys=False)
-            temp_path = tmp.name
+            tmp_path = tmp.name
 
-        result = subprocess.run(
-            [*semgrep_command, "--validate", "--config", temp_path],
+        res = subprocess.run(
+            [*cmd, "--validate", "--config", tmp_path],
             capture_output=True,
             text=True,
             timeout=30,
         )
-        if result.returncode == 0:
+        if res.returncode == 0:
             return None
 
-        error_text = (
-            result.stderr or result.stdout or "Unknown Semgrep validation error"
+        err = (
+            res.stderr or res.stdout or "Unknown Semgrep validation error"
         ).strip()
-        return error_text[:800]
+        return err[:800]
     except subprocess.TimeoutExpired:
         return "Semgrep validation timed out."
     except Exception as e:
         return f"Semgrep validation failed: {str(e)}"
     finally:
-        if temp_path:
+        if tmp_path:
             try:
-                Path(temp_path).unlink(missing_ok=True)
+                Path(tmp_path).unlink(missing_ok=True)
             except Exception:
                 pass
 
 
 def load_custom_rules() -> List[Dict[str, Any]]:
     bootstrap_default_custom_rules()
-    custom_rules: List[Dict[str, Any]] = []
+    items: List[Dict[str, Any]] = []
     if CUSTOM_RULES_PATH.exists():
         try:
             with open(CUSTOM_RULES_PATH, "r") as f:
-                custom_yaml = yaml.safe_load(f)
-                if custom_yaml and "rules" in custom_yaml:
-                    for rule in custom_yaml["rules"]:
-                        rule_id = rule.get("id", "unknown")
-                        pattern = rule.get("pattern", "")
-                        if not pattern and "patterns" in rule:
-                            patterns = rule["patterns"]
-                            if patterns:
-                                pattern = (
-                                    str(patterns[0])
-                                    if isinstance(patterns[0], str)
-                                    else patterns[0].get("pattern", "Complex")
+                doc = yaml.safe_load(f)
+                if doc and "rules" in doc:
+                    for rule in doc["rules"]:
+                        rid = rule.get("id", "unknown")
+                        pat = rule.get("pattern", "")
+                        if not pat and "patterns" in rule:
+                            pats = rule["patterns"]
+                            if pats:
+                                pat = (
+                                    str(pats[0])
+                                    if isinstance(pats[0], str)
+                                    else pats[0].get("pattern", "Complex")
                                 )
 
-                        custom_rules.append(
+                        items.append(
                             {
-                                "id": rule_id,
+                                "id": rid,
                                 "message": rule.get("message", ""),
                                 "severity": rule.get("severity", "WARNING"),
-                                "pattern": pattern,
+                                "pattern": pat,
                                 "is_custom": True,
                             }
                         )
         except Exception as e:
             logger.warning("Error loading custom rules", exc_info=e)
-    return custom_rules
+    return items
 
 
 def load_custom_rules_document() -> Dict[str, Any]:
@@ -296,9 +296,9 @@ def save_custom_rules_document(rules_data: Dict[str, Any]) -> None:
 
 def build_semgrep_rules_response() -> Dict[str, Any]:
     installed = is_semgrep_available()
-    disabled_config = get_disabled_config()
-    disabled_rules = set(disabled_config["rules"])
-    disabled_rulesets = set(disabled_config["rulesets"])
+    cfg = get_disabled_config()
+    disabled_rules = set(cfg["rules"])
+    disabled_sets = set(cfg["rulesets"])
 
     rulesets = []
     for key, info in SEMGREP_REGISTRY_RULESETS.items():
@@ -309,40 +309,40 @@ def build_semgrep_rules_response() -> Dict[str, Any]:
                 "id": key,
                 "name": info.get("description", key),
                 "url": info.get("url", "#"),
-                "enabled": key not in disabled_rulesets,
+                "enabled": key not in disabled_sets,
                 "description": info.get("description", ""),
                 "deletable": False,
             }
         )
 
-    existing_ids = {r["id"] for r in rulesets}
-    for extra in disabled_config.get("extra_rulesets", []):
-        normalized = _normalize_ruleset_value(extra)
-        if not normalized or normalized in existing_ids:
+    seen = {r["id"] for r in rulesets}
+    for extra in cfg.get("extra_rulesets", []):
+        norm = _normalize_ruleset_value(extra)
+        if not norm or norm in seen:
             continue
         url = (
-            f"https://semgrep.dev/{normalized}"
-            if normalized.startswith(("p/", "r/"))
+            f"https://semgrep.dev/{norm}"
+            if norm.startswith(("p/", "r/"))
             else "https://semgrep.dev/explore"
         )
         rulesets.append(
             {
-                "id": normalized,
-                "name": normalized,
+                "id": norm,
+                "name": norm,
                 "url": url,
-                "enabled": normalized not in disabled_rulesets,
+                "enabled": norm not in disabled_sets,
                 "description": "Custom Semgrep ruleset",
                 "deletable": True,
             }
         )
 
-    custom_rules = load_custom_rules()
-    for rule in custom_rules:
+    items = load_custom_rules()
+    for rule in items:
         rule["enabled"] = rule["id"] not in disabled_rules
 
     return {
         "installed": installed,
         "rulesets": rulesets,
-        "custom_rules": custom_rules,
+        "custom_rules": items,
         "community_sources": SEMGREP_COMMUNITY_SOURCES,
     }

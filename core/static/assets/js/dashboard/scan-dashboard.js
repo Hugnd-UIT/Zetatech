@@ -31,34 +31,34 @@ function renderRecentScans(sessions) {
     const percent = Math.round((completedCount / sessions.length) * 100);
     if (completedRate) completedRate.textContent = `${percent}% completed`;
 
-    const maxPluginsFound = sessions.reduce((max, session) => {
-        const sessionCount = parseInt(session.total_found || 0, 10) || 0;
-        return Math.max(max, sessionCount);
+    const max = sessions.reduce((top, session) => {
+        const count = parseInt(session.total_found || 0, 10) || 0;
+        return Math.max(top, count);
     }, 1);
 
     recentList.innerHTML = sessions.slice(0, 3).map(s => {
         const id = parseInt(s.id, 10) || 0;
-        const statusClass = String(s.status || 'unknown').toLowerCase();
-        const statusLabel = statusClass === 'merged' ? 'MERGED' : statusClass.toUpperCase();
+        const sCls = String(s.status || 'unknown').toLowerCase();
+        const sLbl = sCls === 'merged' ? 'MERGED' : sCls.toUpperCase();
         const found = parseInt(s.total_found || 0, 10) || 0;
-        const highRisk = parseInt(s.high_risk_count || 0, 10) || 0;
-        const foundRatio = maxPluginsFound > 0 ? Math.min(100, Math.round((found / maxPluginsFound) * 100)) : 0;
-        const foundLevel = foundRatio >= 70 ? 'high' : (foundRatio >= 35 ? 'medium' : 'low');
-        const riskLevel = highRisk >= 20 ? 'high' : (highRisk >= 5 ? 'medium' : 'low');
-        const riskRatio = found > 0 ? Math.min(100, Math.round((highRisk / found) * 100)) : 0;
+        const high = parseInt(s.high_risk_count || 0, 10) || 0;
+        const fPct = max > 0 ? Math.min(100, Math.round((found / max) * 100)) : 0;
+        const fLvl = fPct >= 70 ? 'high' : (fPct >= 35 ? 'medium' : 'low');
+        const rLvl = high >= 20 ? 'high' : (high >= 5 ? 'medium' : 'low');
+        const rPct = found > 0 ? Math.min(100, Math.round((high / found) * 100)) : 0;
         const date = new Date(s.created_at || s.start_time).toLocaleString();
         return `
             <div class="recent-row recent-history-row" tabindex="0" onclick="openDashboardScanFromChart(${id}, 'recent')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDashboardScanFromChart(${id}, 'recent');}">
                 <span class="recent-title recent-history-id">#${id}</span>
-                <span class="status-badge ${escapeHtml(statusClass)}">${escapeHtml(statusLabel)}</span>
-                <div class="history-found-cell" title="${found} plugins found (relative density ${foundRatio}%)">
+                <span class="status-badge ${escapeHtml(sCls)}">${escapeHtml(sLbl)}</span>
+                <div class="history-found-cell" title="${found} plugins found (relative density ${fPct}%)">
                     <span class="history-found-count">${escapeHtml(String(found))}</span>
                     <span class="history-found-label">plugins</span>
-                    <span class="history-found-track"><span class="history-found-fill ${foundLevel}" style="width: ${foundRatio}%;"></span></span>
+                    <span class="history-found-track"><span class="history-found-fill ${fLvl}" style="width: ${fPct}%;"></span></span>
                 </div>
-                <div class="history-risk-cell" title="${highRisk} high risk / ${found} total (${riskRatio}%)">
-                    <span class="history-risk-pill ${riskLevel}">${escapeHtml(String(highRisk))}</span>
-                    <span class="history-risk-meter"><span class="history-risk-fill ${riskLevel}" style="width: ${riskRatio}%;"></span></span>
+                <div class="history-risk-cell" title="${high} high risk / ${found} total (${rPct}%)">
+                    <span class="history-risk-pill ${rLvl}">${escapeHtml(String(high))}</span>
+                    <span class="history-risk-meter"><span class="history-risk-fill ${rLvl}" style="width: ${rPct}%;"></span></span>
                 </div>
                 <span class="recent-meta history-date-stamp recent-history-date">${escapeHtml(date)}</span>
                 <button class="history-action-open dashboard-history-open" type="button" onclick="event.stopPropagation();openDashboardScanFromChart(${id}, 'recent')" title="Open Scan" aria-label="Open scan #${id}">

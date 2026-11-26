@@ -4,73 +4,73 @@ const STAR_STRIP_PREF_KEY = 'zetatech-star-strip-hidden';
 
 function applySidebarState(collapsed) {
     const layout = document.querySelector('.layout');
-    const toggleBtn = document.getElementById('sidebar-toggle');
-    const isMobile = window.matchMedia('(max-width: 800px)').matches;
+    const btn = document.getElementById('sidebar-toggle');
+    const mobile = window.matchMedia('(max-width: 800px)').matches;
 
-    if (!layout || !toggleBtn) return;
+    if (!layout || !btn) return;
 
-    if (isMobile) {
+    if (mobile) {
         layout.classList.remove('sidebar-collapsed');
-        toggleBtn.setAttribute('aria-expanded', 'true');
-        toggleBtn.setAttribute('aria-label', 'Collapse sidebar');
-        toggleBtn.title = 'Collapse sidebar';
+        btn.setAttribute('aria-expanded', 'true');
+        btn.setAttribute('aria-label', 'Collapse sidebar');
+        btn.title = 'Collapse sidebar';
         return;
     }
 
     layout.classList.toggle('sidebar-collapsed', collapsed);
-    toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    toggleBtn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
-    toggleBtn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    btn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 }
 
 window.toggleSidebarCollapse = function() {
     const layout = document.querySelector('.layout');
     if (!layout) return;
 
-    const isMobile = window.matchMedia('(max-width: 800px)').matches;
-    if (isMobile) {
+    const mobile = window.matchMedia('(max-width: 800px)').matches;
+    if (mobile) {
         applySidebarState(false);
         localStorage.setItem(SIDEBAR_PREF_KEY, '0');
         return;
     }
 
-    const willCollapse = !layout.classList.contains('sidebar-collapsed');
-    applySidebarState(willCollapse);
-    localStorage.setItem(SIDEBAR_PREF_KEY, willCollapse ? '1' : '0');
+    const collapse = !layout.classList.contains('sidebar-collapsed');
+    applySidebarState(collapse);
+    localStorage.setItem(SIDEBAR_PREF_KEY, collapse ? '1' : '0');
 };
 
 function initializeSidebarToggle() {
-    const toggleBtn = document.getElementById('sidebar-toggle');
-    if (!toggleBtn) return;
+    const btn = document.getElementById('sidebar-toggle');
+    if (!btn) return;
 
-    toggleBtn.addEventListener('click', window.toggleSidebarCollapse);
+    btn.addEventListener('click', window.toggleSidebarCollapse);
 
-    const savedCollapsed = localStorage.getItem(SIDEBAR_PREF_KEY) === '1';
-    applySidebarState(savedCollapsed);
+    const saved = localStorage.getItem(SIDEBAR_PREF_KEY) === '1';
+    applySidebarState(saved);
 
     window.addEventListener('resize', () => {
-        const shouldCollapse = window.matchMedia('(max-width: 800px)').matches
+        const collapse = window.matchMedia('(max-width: 800px)').matches
             ? false
             : localStorage.getItem(SIDEBAR_PREF_KEY) === '1';
-        applySidebarState(shouldCollapse);
+        applySidebarState(collapse);
     });
 }
 
 function initializeStarStripDismiss() {
-    const starStrip = document.querySelector('.star-strip');
-    const closeBtn = document.getElementById('star-strip-close');
-    if (!starStrip || !closeBtn) return;
+    const strip = document.querySelector('.star-strip');
+    const close = document.getElementById('star-strip-close');
+    if (!strip || !close) return;
 
-    const setStarStripHidden = (hidden) => {
-        starStrip.classList.toggle('is-hidden', hidden);
+    const setHidden = (hidden) => {
+        strip.classList.toggle('is-hidden', hidden);
         document.body.classList.toggle('star-strip-hidden', hidden);
     };
 
     const hidden = localStorage.getItem(STAR_STRIP_PREF_KEY) === '1';
-    setStarStripHidden(hidden);
+    setHidden(hidden);
 
-    closeBtn.addEventListener('click', () => {
-        setStarStripHidden(true);
+    close.addEventListener('click', () => {
+        setHidden(true);
         localStorage.setItem(STAR_STRIP_PREF_KEY, '1');
     });
 }

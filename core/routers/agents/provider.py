@@ -23,35 +23,34 @@ OPENAI_COMPATIBLE_PROVIDERS = {"openai", "grok", "gemini"}
 
 
 def normalize_provider_base_url(provider: str, base_url: str | None) -> str:
-    explicit_base_url = str(base_url or "").strip().rstrip("/")
-    if explicit_base_url:
-        return explicit_base_url
+    url = str(base_url or "").strip().rstrip("/")
+    if url:
+        return url
     return DEFAULT_PROVIDER_BASE_URLS.get(provider, DEFAULT_PROVIDER_BASE_URLS["anthropic"])
 
 
 def post_json(url: str, *, headers: dict[str, str], body: dict, timeout: int = TEST_TIMEOUT_SECONDS) -> dict:
-    request = urllib_request.Request(
+    req = urllib_request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
         headers={**headers, "Content-Type": "application/json"},
         method="POST",
     )
     try:
-        with urllib_request.urlopen(request, timeout=timeout) as response:
-            raw_response = response.read().decode("utf-8")
-            return json.loads(raw_response) if raw_response else {}
+        with urllib_request.urlopen(req, timeout=timeout) as res:
+            raw = res.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
     except urllib_error.HTTPError as exc:
-        raw_detail = exc.read().decode("utf-8", errors="ignore").strip()
+        detail = exc.read().decode("utf-8", errors="ignore").strip()
 
         logger.warning(
-            "Provider HTTP %d error: %s", exc.code, raw_detail[:500]
+            "Provider HTTP %d error: %s", exc.code, detail[:500]
         )
 
-
-        safe_detail = raw_detail[:_MAX_ERROR_DETAIL_LENGTH] if raw_detail else ""
+        safe = detail[:_MAX_ERROR_DETAIL_LENGTH] if detail else ""
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=safe_detail or f"Provider returned HTTP {exc.code}.",
+            detail=safe or f"Provider returned HTTP {exc.code}.",
         ) from exc
     except urllib_error.URLError as exc:
         reason = getattr(exc, "reason", exc)
@@ -114,7 +113,7 @@ def test_anthropic_connection(*, api_key: str, model: str, base_url: str | None)
         ],
         "system": TEST_PROMPT,
     }
-    response = post_json(
+    res = post_json(
         f"{normalize_provider_base_url('anthropic', base_url)}/v1/messages",
         headers={
             "x-api-key": api_key,
@@ -122,10 +121,10 @@ def test_anthropic_connection(*, api_key: str, model: str, base_url: str | None)
         },
         body=payload,
     )
-    content_blocks = response.get("content") or []
+    blocks = res.get("content") or []
     content = " ".join(
         str(block.get("text") or "").strip()
-        for block in content_blocks
+        for block in blocks
         if isinstance(block, dict) and str(block.get("text") or "").strip()
     ).strip()
     if not content:

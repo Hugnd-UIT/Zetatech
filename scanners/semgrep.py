@@ -129,64 +129,64 @@ class SemgrepScanner:
         )
 
     def _load_disabled_rule_ids(self) -> set[str]:
-        disabled_ids: set[str] = set()
+        ids: set[str] = set()
 
-        legacy_disabled_file = self.output_dir / "disabled_rules.json"
-        if legacy_disabled_file.exists():
+        legacy = self.output_dir / "disabled_rules.json"
+        if legacy.exists():
             try:
-                with open(legacy_disabled_file, "r") as file_handle:
-                    loaded = json.load(file_handle)
+                with open(legacy, "r") as fh:
+                    loaded = json.load(fh)
                 if isinstance(loaded, list):
-                    disabled_ids.update(str(item) for item in loaded)
+                    ids.update(str(item) for item in loaded)
             except Exception:
                 pass
 
-        shared_disabled_file = SHARED_DISABLED_CONFIG_PATH
-        if shared_disabled_file.exists():
+        shared = SHARED_DISABLED_CONFIG_PATH
+        if shared.exists():
             try:
-                with open(shared_disabled_file, "r") as file_handle:
-                    loaded = json.load(file_handle)
+                with open(shared, "r") as fh:
+                    loaded = json.load(fh)
                 if isinstance(loaded, dict):
-                    disabled_ids.update(str(item) for item in loaded.get("rules", []))
+                    ids.update(str(item) for item in loaded.get("rules", []))
             except Exception:
                 pass
 
-        return disabled_ids
+        return ids
 
     def _resolve_custom_rules_file(self) -> Optional[Path]:
-        custom_candidates = [
+        cands = [
             self.output_dir / "custom_rules.yaml",
             CANONICAL_CUSTOM_RULES_PATH,
             LEGACY_SEMGREP_RESULTS_DIR / "custom_rules.yaml",
             LEGACY_PACKAGE_SEMGREP_RESULTS_DIR / "custom_rules.yaml",
         ]
-        return next((path for path in custom_candidates if path.exists()), None)
+        return next((path for path in cands if path.exists()), None)
 
     def _validate_custom_rule(self, rule: Dict[str, Any]) -> bool:
         if not self.semgrep_command:
             return True
 
-        temp_path = None
+        tmp_path = None
         try:
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".yaml", delete=False, encoding="utf-8"
             ) as tmp:
                 yaml.dump({"rules": [rule]}, tmp, default_flow_style=False, sort_keys=False)
-                temp_path = tmp.name
+                tmp_path = tmp.name
 
-            result = subprocess.run(
-                [*self.semgrep_command, "--validate", "--config", temp_path],
+            res = subprocess.run(
+                [*self.semgrep_command, "--validate", "--config", tmp_path],
                 capture_output=True,
                 text=True,
                 timeout=15,
             )
-            return result.returncode == 0
+            return res.returncode == 0
         except Exception:
             return False
         finally:
-            if temp_path:
+            if tmp_path:
                 try:
-                    Path(temp_path).unlink(missing_ok=True)
+                    Path(tmp_path).unlink(missing_ok=True)
                 except Exception:
                     pass
 
@@ -195,77 +195,77 @@ class SemgrepScanner:
         if not isinstance(rules, list):
             return None
 
-        active_rules: List[Dict[str, Any]] = []
-        invalid_rule_ids: List[str] = []
+        active: List[Dict[str, Any]] = []
+        invalid: List[str] = []
         for rule in rules:
             if not isinstance(rule, dict):
                 continue
-            rule_id = str(rule.get("id") or "")
-            if not rule_id or rule_id in disabled_ids:
+            rid = str(rule.get("id") or "")
+            if not rid or rid in disabled_ids:
                 continue
             if self._validate_custom_rule(rule):
-                active_rules.append(rule)
+                active.append(rule)
             else:
-                invalid_rule_ids.append(rule_id)
+                invalid.append(rid)
 
-        if invalid_rule_ids:
-            invalid_path = self.output_dir / "invalid_custom_rules.json"
-            with open(invalid_path, "w") as file_handle:
-                json.dump({"invalid_rule_ids": invalid_rule_ids}, file_handle)
+        if invalid:
+            path = self.output_dir / "invalid_custom_rules.json"
+            with open(path, "w") as fh:
+                json.dump({"invalid_rule_ids": invalid}, fh)
 
-        if not active_rules:
+        if not active:
             return None
 
-        filtered_file = self.output_dir / "active_custom_rules.yaml"
-        with open(filtered_file, "w") as file_handle:
+        out = self.output_dir / "active_custom_rules.yaml"
+        with open(out, "w") as fh:
             yaml.dump(
-                {"rules": active_rules},
-                file_handle,
+                {"rules": active},
+                fh,
                 default_flow_style=False,
                 sort_keys=False,
             )
-        return str(filtered_file)
+        return str(out)
 
     def _filter_custom_rules(self) -> Optional[str]:
-        custom_file = self._resolve_custom_rules_file()
-        if not custom_file:
+        file = self._resolve_custom_rules_file()
+        if not file:
             return None
 
-        disabled_ids = self._load_disabled_rule_ids()
+        disabled = self._load_disabled_rule_ids()
         try:
-            with open(custom_file, "r") as file_handle:
-                rules_data = yaml.safe_load(file_handle)
-            if rules_data and "rules" in rules_data:
-                return self._write_filtered_custom_rules(rules_data, disabled_ids)
+            with open(file, "r") as fh:
+                data = yaml.safe_load(fh)
+            if data and "rules" in data:
+                return self._write_filtered_custom_rules(data, disabled)
         except Exception:
-            return str(custom_file)
+            return str(file)
 
-        return str(custom_file)
+        return str(file)
 
     def _get_config_args(self) -> List[str]:
-        config_values: List[str] = []
+        vals: List[str] = []
 
-        filtered_custom = self._filter_custom_rules()
-        if filtered_custom:
-            config_values.append(filtered_custom)
+        custom = self._filter_custom_rules()
+        if custom:
+            vals.append(custom)
 
         if self.use_registry_rules:
-            for ruleset_key in self.registry_rulesets:
-                config_value = str(
-                    SEMGREP_REGISTRY_RULESETS.get(ruleset_key, {}).get(
+            for key in self.registry_rulesets:
+                val = str(
+                    SEMGREP_REGISTRY_RULESETS.get(key, {}).get(
                         "config",
-                        ruleset_key,
+                        key,
                     )
                     or ""
                 ).strip()
-                if config_value:
-                    config_values.append(config_value)
+                if val:
+                    vals.append(val)
 
-        deduped_configs = list(dict.fromkeys(config_values))
-        configs: List[str] = []
-        for config_value in deduped_configs:
-            configs.extend(["--config", config_value])
-        return configs
+        dedup = list(dict.fromkeys(vals))
+        cfgs: List[str] = []
+        for val in dedup:
+            cfgs.extend(["--config", val])
+        return cfgs
 
     def _validate_scan_target(self, plugin_path: str, slug: str) -> SemgrepTarget | SemgrepResult:
         if not slug or not isinstance(slug, str):
@@ -323,8 +323,8 @@ class SemgrepScanner:
 
     def _parse_output_file(self, output_file: Path, stderr: str) -> SemgrepExecutionResult:
         try:
-            with open(output_file, "r") as file_handle:
-                data = json.load(file_handle)
+            with open(output_file, "r") as fh:
+                data = json.load(fh)
         except json.JSONDecodeError:
             return SemgrepExecutionResult(
                 findings=[],
@@ -333,31 +333,30 @@ class SemgrepScanner:
             )
 
         findings = data.get("results", [])
-        raw_errors = data.get("errors", [])
+        raw = data.get("errors", [])
         errors = [
             str(error.get("message") or "").strip()
-            for error in raw_errors
+            for error in raw
             if isinstance(error, dict) and str(error.get("message") or "").strip()
         ]
-        stderr_text = str(stderr or "").strip()
+        err = str(stderr or "").strip()
 
         if errors:
-            non_fatal_errors = [error for error in errors if self._is_non_fatal_semgrep_error(error)]
-            fatal_errors = [error for error in errors if error not in non_fatal_errors]
+            minor = [item for item in errors if self._is_non_fatal_semgrep_error(item)]
+            fatal = [item for item in errors if item not in minor]
 
-            if fatal_errors or not findings:
-                if stderr_text:
-                    errors.append(f"stderr: {stderr_text}")
+            if fatal or not findings:
+                if err:
+                    errors.append(f"stderr: {err}")
                 return SemgrepExecutionResult(
                     findings=findings if findings else [],
                     errors=errors,
                     success=False,
                 )
 
-
             return SemgrepExecutionResult(
                 findings=findings,
-                errors=non_fatal_errors,
+                errors=minor,
                 success=True,
             )
 
@@ -464,13 +463,13 @@ class SemgrepScanner:
             return self._result(target.slug, errors=["Stopped"])
 
         try:
-            execution_result = self._execute_scan(target)
+            res = self._execute_scan(target)
             return self._result(
                 target.slug,
-                findings=execution_result.findings,
-                errors=execution_result.errors,
-                success=execution_result.success,
-                partial=execution_result.partial,
+                findings=res.findings,
+                errors=res.errors,
+                success=res.success,
+                partial=res.partial,
             )
         except subprocess.TimeoutExpired:
             return self._result(target.slug, errors=["Scan timeout"])

@@ -53,25 +53,25 @@
     }
 
     function syncPluginAiApprovalModeUi(preferredValue = null) {
-        const strategyEl = document.getElementById('plugin-ai-strategy');
-        const approvalEl = document.getElementById('plugin-ai-approval-mode');
-        if (!approvalEl) return 'manual';
+        const stratEl = document.getElementById('plugin-ai-strategy');
+        const modeEl = document.getElementById('plugin-ai-approval-mode');
+        if (!modeEl) return 'manual';
 
-        const strategyValue = normalizePluginAiStrategy(strategyEl?.value || 'auto');
-        const allowedModes = getPluginAiAllowedApprovalModes(strategyValue);
+        const strat = normalizePluginAiStrategy(stratEl?.value || 'auto');
+        const allowed = getPluginAiAllowedApprovalModes(strat);
         const labels = {
             manual: 'Manual gate',
             auto_approve: 'Auto approve',
             off: 'Off (YOLO • Dangerous)',
         };
-        const current = preferredValue != null ? String(preferredValue).trim() : String(approvalEl.value || '').trim();
-        const normalized = normalizePluginAiApprovalMode(current, strategyValue);
+        const cur = preferredValue != null ? String(preferredValue).trim() : String(modeEl.value || '').trim();
+        const mode = normalizePluginAiApprovalMode(cur, strat);
 
-        approvalEl.innerHTML = allowedModes
-            .map((mode) => `<option value="${escapeOption(mode)}">${escapeOption(labels[mode] || mode)}</option>`)
+        modeEl.innerHTML = allowed
+            .map((item) => `<option value="${escapeOption(item)}">${escapeOption(labels[item] || item)}</option>`)
             .join('');
-        approvalEl.value = normalized;
-        return normalized;
+        modeEl.value = mode;
+        return mode;
     }
 
     function getPluginAiState() {

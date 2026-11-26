@@ -38,28 +38,28 @@
     }
 
     function applyProviderFormHints(provider, { preserveBaseUrl = true } = {}) {
-        const providerConfig = getProviderDefaults(provider);
+        const cfg = getProviderDefaults(provider);
         const modelEl = document.getElementById('plugin-ai-model');
-        const apiKeyEl = document.getElementById('plugin-ai-api-key');
-        const baseUrlEl = document.getElementById('plugin-ai-base-url');
-        const apiKeySavedHintEl = document.getElementById('plugin-ai-api-key-saved-hint');
+        const keyEl = document.getElementById('plugin-ai-api-key');
+        const urlEl = document.getElementById('plugin-ai-base-url');
+        const hintEl = document.getElementById('plugin-ai-api-key-saved-hint');
         if (modelEl) {
-            modelEl.placeholder = `Type model name and press Enter — e.g. ${providerConfig.modelHint}`;
+            modelEl.placeholder = `Type model name and press Enter — e.g. ${cfg.modelHint}`;
         }
-        if (apiKeyEl) {
-            const currentPlaceholder = String(apiKeyEl.dataset.savedPlaceholder || '').trim();
-            apiKeyEl.placeholder = currentPlaceholder || providerConfig.apiKeyPlaceholder;
+        if (keyEl) {
+            const ph = String(keyEl.dataset.savedPlaceholder || '').trim();
+            keyEl.placeholder = ph || cfg.apiKeyPlaceholder;
         }
-        if (apiKeySavedHintEl) {
-            const currentHint = String(apiKeySavedHintEl.dataset.savedHint || '').trim();
-            apiKeySavedHintEl.textContent = currentHint;
-            apiKeySavedHintEl.style.display = currentHint ? 'block' : 'none';
+        if (hintEl) {
+            const hint = String(hintEl.dataset.savedHint || '').trim();
+            hintEl.textContent = hint;
+            hintEl.style.display = hint ? 'block' : 'none';
         }
-        if (baseUrlEl) {
-            baseUrlEl.placeholder = `${providerConfig.baseUrl} or local compatible endpoint`;
-            const current = String(baseUrlEl.value || '').trim();
-            if (!preserveBaseUrl || !current) {
-                baseUrlEl.value = current;
+        if (urlEl) {
+            urlEl.placeholder = `${cfg.baseUrl} or local compatible endpoint`;
+            const cur = String(urlEl.value || '').trim();
+            if (!preserveBaseUrl || !cur) {
+                urlEl.value = cur;
             }
         }
     }

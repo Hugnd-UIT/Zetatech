@@ -27,57 +27,57 @@ from core.routers.agents.serialize import list_structured_thread_events, seriali
 
 
 def resolve_active_provider(*, repo, payload) -> Dict[str, Any]:
-    requested_profile_key = str(getattr(payload, "profile_key", "") or "").strip()
-    active_provider = (
-        repo.get_provider_by_profile_key(requested_profile_key)
-        if requested_profile_key
+    key = str(getattr(payload, "profile_key", "") or "").strip()
+    prov = (
+        repo.get_provider_by_profile_key(key)
+        if key
         else repo.get_active_provider()
     )
-    if active_provider is None:
+    if prov is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No active AI provider configured.",
         )
 
-    requested_model = str(getattr(payload, "model", "") or "").strip()
-    if requested_model:
-        active_provider = {**active_provider, "model": requested_model}
-    return active_provider
+    model = str(getattr(payload, "model", "") or "").strip()
+    if model:
+        prov = {**prov, "model": model}
+    return prov
 
 
 def prepare_message_execution(*, repo, payload, active_provider: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    thread, effective_last_scan_session_id = prepare_thread_for_message(
+    thread, last_sid = prepare_thread_for_message(
         repo=repo,
         payload=payload,
     )
-    recent_context_summary = summarize_recent_thread_context(repo, payload.thread_id)
-    memory_summary = summarize_thread_memory(repo, payload.thread_id)
-    context_summary = "\n".join(
-        part for part in [memory_summary, recent_context_summary] if part
+    recent = summarize_recent_thread_context(repo, payload.thread_id)
+    mem = summarize_thread_memory(repo, payload.thread_id)
+    summary = "\n".join(
+        part for part in [mem, recent] if part
     )
-    intent_info = resolve_message_intent(
+    intent = resolve_message_intent(
         content=payload.content,
         repo=repo,
         thread_id=payload.thread_id,
         thread=thread,
-        context_summary=context_summary,
+        context_summary=summary,
         active_provider=active_provider,
     )
-    requested_strategy = str(getattr(payload, "strategy", "auto") or "auto").strip().lower()
-    if requested_strategy and requested_strategy != "auto":
-        intent_info["strategy"] = requested_strategy
-        intent_info["team_mode"] = "single_agent" if requested_strategy == "agent" else requested_strategy
+    strat = str(getattr(payload, "strategy", "auto") or "auto").strip().lower()
+    if strat and strat != "auto":
+        intent["strategy"] = strat
+        intent["team_mode"] = "single_agent" if strat == "agent" else strat
     if getattr(payload, "output_schema", None):
-        intent_info["structured_output_requested"] = True
-    strategy = str(intent_info.get("strategy") or "agent")
+        intent["structured_output_requested"] = True
+    mode = str(intent.get("strategy") or "agent")
     return {
         "thread": thread,
-        "last_scan_session_id": effective_last_scan_session_id,
-        "intent_info": intent_info,
+        "last_scan_session_id": last_sid,
+        "intent_info": intent,
         "execution_mode": "raw_open_multi_agent",
-        "team_mode": "single_agent" if strategy == "agent" else strategy,
-        "strategy": strategy,
-        "context_summary": context_summary,
+        "team_mode": "single_agent" if mode == "agent" else mode,
+        "strategy": mode,
+        "context_summary": summary,
     }
 
 
@@ -92,7 +92,7 @@ def prepare_execution_workspace(
     runtime_events: List[Dict[str, Any]],
     intent_info: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    source_dir, workspace_root, workspace_source_path = prepare_thread_run_context(
+    src, root, src_path = prepare_thread_run_context(
         repo=repo,
         thread=thread,
         last_scan_session_id=last_scan_session_id,
@@ -100,20 +100,20 @@ def prepare_execution_workspace(
         resolve_existing_thread_source_path=resolve_existing_thread_source_path,
         runtime_events=runtime_events,
     )
-    context = build_plugin_context_for_source(
+    ctx = build_plugin_context_for_source(
         db_path=repo.db_path,
         plugin_slug=thread["plugin_slug"],
         is_theme=bool(thread.get("is_theme")),
-        source_dir=source_dir,
+        source_dir=src,
         last_scan_session_id=last_scan_session_id,
     )
 
-    context = {**context, "intent_info": dict(intent_info or {})}
+    ctx = {**ctx, "intent_info": dict(intent_info or {})}
     return {
-        "source_dir": source_dir,
-        "workspace_root": workspace_root,
-        "workspace_source_path": workspace_source_path,
-        "context": context,
+        "source_dir": src,
+        "workspace_root": root,
+        "workspace_source_path": src_path,
+        "context": ctx,
     }
 
 
@@ -221,78 +221,78 @@ def execute_ai_message(
     cleanup_run_workspace: Callable[[Path], None],
     run_agent_bridge,
 ) -> Dict[str, object]:
-    active_provider = resolve_active_provider(repo=repo, payload=payload)
-    execution = prepare_message_execution(repo=repo, payload=payload, active_provider=active_provider)
-    thread = execution["thread"]
+    prov = resolve_active_provider(repo=repo, payload=payload)
+    exec_ctx = prepare_message_execution(repo=repo, payload=payload, active_provider=prov)
+    thread = exec_ctx["thread"]
 
-    workspace_root: Path | None = None
-    source_dir: Path | None = None
+    root: Path | None = None
+    src: Path | None = None
     run = None
-    user_message = None
-    assistant_message = None
-    bridge_result: Dict[str, object] = {"events": []}
-    team_events: List[Dict[str, object]] = []
-    persisted_tasks: List[Dict[str, object]] = []
-    runtime_events: List[Dict[str, object]] = []
+    user_msg = None
+    bot_msg = None
+    res: Dict[str, object] = {"events": []}
+    team: List[Dict[str, object]] = []
+    tasks: List[Dict[str, object]] = []
+    evts: List[Dict[str, object]] = []
 
     try:
-        workspace = prepare_execution_workspace(
+        ws = prepare_execution_workspace(
             repo=repo,
             thread=thread,
-            last_scan_session_id=execution["last_scan_session_id"],
+            last_scan_session_id=exec_ctx["last_scan_session_id"],
             path_cwd=path_cwd,
             resolve_existing_thread_source_path=resolve_existing_thread_source_path,
             build_plugin_context_for_source=build_plugin_context_for_source,
-            runtime_events=runtime_events,
-            intent_info=execution["intent_info"],
+            runtime_events=evts,
+            intent_info=exec_ctx["intent_info"],
         )
-        source_dir = workspace["source_dir"]
-        workspace_root = workspace["workspace_root"]
-        runtime_events.append(
+        src = ws["source_dir"]
+        root = ws["workspace_root"]
+        evts.append(
             {
                 "type": "intent_resolved",
                 "data": {
-                    "decision_trace": summarize_intent_decision(execution["intent_info"]),
+                    "decision_trace": summarize_intent_decision(exec_ctx["intent_info"]),
                 },
             }
         )
 
-        user_message, run = create_user_message_and_run(
+        user_msg, run = create_user_message_and_run(
             repo=repo,
             thread_id=payload.thread_id,
             content=payload.content,
-            active_provider=active_provider,
-            workspace_source_path=workspace["workspace_source_path"],
+            active_provider=prov,
+            workspace_source_path=ws["workspace_source_path"],
         )
-        approval_control_path = arm_manual_run_approval_if_needed(
+        ctrl = arm_manual_run_approval_if_needed(
             repo=repo,
             payload=payload,
             run_id=run["id"],
-            workspace_root=workspace_root,
+            workspace_root=root,
         )
-        bridge_payload = build_bridge_request(
-            active_provider=active_provider,
+        req = build_bridge_request(
+            active_provider=prov,
             payload=payload,
-            context=workspace["context"],
-            workspace_root=workspace_root,
-            source_dir=source_dir,
-            execution_mode=execution["execution_mode"],
-            team_mode=execution["team_mode"],
-            strategy=execution["strategy"],
+            context=ws["context"],
+            workspace_root=root,
+            source_dir=src,
+            execution_mode=exec_ctx["execution_mode"],
+            team_mode=exec_ctx["team_mode"],
+            strategy=exec_ctx["strategy"],
             context_summary=build_effective_context_summary(
-                intent_info=execution["intent_info"],
-                context_summary=execution["context_summary"],
+                intent_info=exec_ctx["intent_info"],
+                context_summary=exec_ctx["context_summary"],
             ),
-            approval_control_path=approval_control_path,
+            approval_control_path=ctrl,
         )
-        bridge_result = run_agent_bridge(bridge_payload)
-        assistant_message, team_events, persisted_tasks = persist_completed_run(
+        res = run_agent_bridge(req)
+        bot_msg, team, tasks = persist_completed_run(
             repo=repo,
             thread_id=payload.thread_id,
             run_id=run["id"],
-            bridge_result=bridge_result,
-            source_dir=source_dir,
-            runtime_events=runtime_events,
+            bridge_result=res,
+            source_dir=src,
+            runtime_events=evts,
         )
         auto_approve_pending_run_approval(
             repo=repo,
@@ -302,11 +302,11 @@ def execute_ai_message(
         update_thread_memory_from_run(
             repo=repo,
             payload=payload,
-            assistant_message=assistant_message,
-            source_dir=source_dir,
-            runtime_events=runtime_events,
-            run_events=bridge_result.get("events", []) or [],
-            run_tasks=persisted_tasks,
+            assistant_message=bot_msg,
+            source_dir=src,
+            runtime_events=evts,
+            run_events=res.get("events", []) or [],
+            run_tasks=tasks,
         )
     except Exception as exc:
         raise_mapped_ai_error(
@@ -317,18 +317,18 @@ def execute_ai_message(
         )
     finally:
         cleanup_workspace(
-            source_dir=source_dir,
-            workspace_root=workspace_root,
+            source_dir=src,
+            workspace_root=root,
             cleanup_run_workspace=cleanup_run_workspace,
         )
 
     return build_final_response(
         repo=repo,
         payload=payload,
-        user_message=user_message,
-        assistant_message=assistant_message,
+        user_message=user_msg,
+        assistant_message=bot_msg,
         run=run,
-        team_events=team_events,
-        persisted_tasks=persisted_tasks,
-        bridge_result=bridge_result,
+        team_events=team,
+        persisted_tasks=tasks,
+        bridge_result=res,
     )

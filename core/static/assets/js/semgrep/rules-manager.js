@@ -76,34 +76,34 @@ window.loadSemgrepRules = async function() {
             rulesetsHtml += '<div class="semgrep-empty">No rulesets found. Add one above (example: p/cwe-top-25).</div>';
         }
 
-        const customRules = data.custom_rules || [];
-        const enabledCustomRules = customRules.filter(rule => rule.enabled).length;
-        const allCustomRulesEnabled = customRules.length > 0 && enabledCustomRules === customRules.length;
-        const bulkToggleTargetEnabled = !allCustomRulesEnabled;
-        const bulkToggleLabel = allCustomRulesEnabled ? 'ALL OFF' : 'ALL ON';
-        const bulkToggleStyles = allCustomRulesEnabled
+        const custom = data.custom_rules || [];
+        const onCount = custom.filter(rule => rule.enabled).length;
+        const allOn = custom.length > 0 && onCount === custom.length;
+        const nextOn = !allOn;
+        const btnText = allOn ? 'ALL OFF' : 'ALL ON';
+        const onStyle = allOn
             ? 'background: rgba(255,0,85,0.1); color: #ff0055; border: 1px solid rgba(255,0,85,0.35);'
             : 'background: rgba(0,255,157,0.1); color: var(--accent-primary); border: 1px solid rgba(0,255,157,0.35);';
-        const bulkToggleDisabled = customRules.length === 0;
-        const bulkToggleDisabledAttr = bulkToggleDisabled
+        const empty = custom.length === 0;
+        const disabledAttr = empty
             ? 'disabled title="No custom rules to toggle"'
             : '';
-        const bulkToggleResolvedStyles = bulkToggleDisabled
+        const btnStyle = empty
             ? 'opacity:0.6; cursor:not-allowed; border:1px solid #444; color:#777; background:rgba(90,90,90,0.1);'
-            : bulkToggleStyles;
+            : onStyle;
 
         let customHtml = `<div class="semgrep-section-head">
                     <h3>CUSTOM RULES</h3>
                     <button
-                        onclick="toggleAllCustomRules(${bulkToggleTargetEnabled})"
-                        class="action-btn semgrep-outline-btn ${allCustomRulesEnabled ? 'is-danger' : ''}"
-                        style="${bulkToggleResolvedStyles}"
-                        ${bulkToggleDisabledAttr}
-                    >${bulkToggleLabel}</button>
+                        onclick="toggleAllCustomRules(${nextOn})"
+                        class="action-btn semgrep-outline-btn ${allOn ? 'is-danger' : ''}"
+                        style="${btnStyle}"
+                        ${disabledAttr}
+                    >${btnText}</button>
                 </div>`;
 
-        if (customRules.length > 0) {
-            customHtml += customRules.map(rule => `
+        if (custom.length > 0) {
+            customHtml += custom.map(rule => `
                 <div class="semgrep-custom-card${!rule.enabled ? ' is-disabled' : ''}">
                     <div class="semgrep-custom-row">
                         <div class="semgrep-custom-meta">

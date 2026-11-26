@@ -338,10 +338,10 @@ def _table_has_unique_thread_scope(cursor) -> bool:
     for row in cursor.fetchall():
         if not row[2]:
             continue
-        index_name = row[1]
-        cursor.execute(f"PRAGMA index_info({index_name!r})")
-        columns = [index_row[2] for index_row in cursor.fetchall()]
-        if columns == ["plugin_slug", "is_theme"]:
+        idx = row[1]
+        cursor.execute(f"PRAGMA index_info({idx!r})")
+        cols = [r[2] for r in cursor.fetchall()]
+        if cols == ["plugin_slug", "is_theme"]:
             return True
     return False
 
@@ -365,8 +365,8 @@ def _safe_execute(cursor, statement: str) -> None:
     try:
         cursor.execute(statement)
     except sqlite3.OperationalError as exc:
-        message = str(exc).lower()
-        if "duplicate column name" in message or "already exists" in message:
+        msg = str(exc).lower()
+        if "duplicate column name" in msg or "already exists" in msg:
             return
         raise
 
@@ -470,7 +470,7 @@ def _migrate_ai_provider_settings_for_profiles(cursor) -> None:
 def _rebuild_ai_messages_table(cursor) -> None:
     if not _table_sql_references(cursor, "ai_messages", '"ai_threads_legacy"'):
         return
-    legacy_columns = _table_columns(cursor, "ai_messages")
+    cols = _table_columns(cursor, "ai_messages")
     cursor.execute("ALTER TABLE ai_messages RENAME TO ai_messages_legacy")
     cursor.execute(
         """
@@ -486,12 +486,12 @@ def _rebuild_ai_messages_table(cursor) -> None:
         )
         """
     )
-    tool_calls_select = "tool_calls_json" if "tool_calls_json" in legacy_columns else "NULL"
-    tool_results_select = "tool_results_json" if "tool_results_json" in legacy_columns else "NULL"
+    calls_col = "tool_calls_json" if "tool_calls_json" in cols else "NULL"
+    results_col = "tool_results_json" if "tool_results_json" in cols else "NULL"
     cursor.execute(
         f"""
         INSERT INTO ai_messages (id, thread_id, role, content, tool_calls_json, tool_results_json, created_at)
-        SELECT id, thread_id, role, content, {tool_calls_select}, {tool_results_select}, created_at
+        SELECT id, thread_id, role, content, {calls_col}, {results_col}, created_at
         FROM ai_messages_legacy
         ORDER BY id ASC
         """
@@ -502,7 +502,7 @@ def _rebuild_ai_messages_table(cursor) -> None:
 def _rebuild_ai_runs_table(cursor) -> None:
     if not _table_sql_references(cursor, "ai_runs", '"ai_threads_legacy"'):
         return
-    legacy_columns = _table_columns(cursor, "ai_runs")
+    cols = _table_columns(cursor, "ai_runs")
     cursor.execute("ALTER TABLE ai_runs RENAME TO ai_runs_legacy")
     cursor.execute(
         """
@@ -523,10 +523,10 @@ def _rebuild_ai_runs_table(cursor) -> None:
         )
         """
     )
-    provider_label_select = "provider_label" if "provider_label" in legacy_columns else "NULL"
-    message_id_select = "message_id" if "message_id" in legacy_columns else "NULL"
-    workspace_path_select = "workspace_path" if "workspace_path" in legacy_columns else "NULL"
-    error_message_select = "error_message" if "error_message" in legacy_columns else "NULL"
+    label_col = "provider_label" if "provider_label" in cols else "NULL"
+    msg_col = "message_id" if "message_id" in cols else "NULL"
+    ws_col = "workspace_path" if "workspace_path" in cols else "NULL"
+    err_col = "error_message" if "error_message" in cols else "NULL"
     cursor.execute(
         f"""
         INSERT INTO ai_runs (
@@ -534,8 +534,8 @@ def _rebuild_ai_runs_table(cursor) -> None:
             error_message, status, created_at, completed_at
         )
         SELECT
-            id, thread_id, provider, {provider_label_select}, model, {message_id_select}, {workspace_path_select},
-            {error_message_select}, status, created_at, completed_at
+            id, thread_id, provider, {label_col}, model, {msg_col}, {ws_col},
+            {err_col}, status, created_at, completed_at
         FROM ai_runs_legacy
         ORDER BY id ASC
         """

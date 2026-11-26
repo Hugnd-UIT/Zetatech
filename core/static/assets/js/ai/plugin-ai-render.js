@@ -79,82 +79,81 @@
     }
 
     function buildPluginAiActivityEntries(events = [], options = {}) {
-        const liveOptions = options && typeof options === 'object' ? options : {};
-        const showSource = !!liveOptions.showSource;
-        const workspaceRoot = String(liveOptions.workspaceRoot || '').trim();
-        const rawEntries = (Array.isArray(events) ? events : []).map((event, index) => {
+        const opts = options && typeof options === 'object' ? options : {};
+        const root = String(opts.workspaceRoot || '').trim();
+        const items = (Array.isArray(events) ? events : []).map((event, idx) => {
             const type = String(event?.type || 'event');
             const data = event?.data && typeof event.data === 'object' ? event.data : {};
-            const toolName = String(data.name || data.toolName || data.tool || '').trim();
+            const tool = String(data.name || data.toolName || data.tool || '').trim();
             const input = data.input && typeof data.input === 'object' ? data.input : data;
             let label = 'Activity';
             let detail = '';
             let icon = '•';
             let tone = 'neutral';
-            let category = 'activity';
+            let cat = 'activity';
             let state = 'done';
-            let hidden = false;
+            let hide = false;
 
             if (type === 'tool_call') {
-                category = 'tool';
+                cat = 'tool';
                 tone = 'running';
                 state = 'active';
-                if (toolName === 'read' || toolName === 'file_read') {
+                if (tool === 'read' || tool === 'file_read') {
                     label = 'File read';
-                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot });
+                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
                     icon = '📄';
-                } else if (toolName === 'grep') {
+                } else if (tool === 'grep') {
                     label = 'Code search';
-                    const pattern = shortenPluginAiPattern(input.pattern || '');
-                    const path = shortenPluginAiPath(String(input.path || ''), { workspaceRoot });
-                    detail = [pattern ? `pattern: ${pattern}` : '', path ? `path: ${path}` : ''].filter(Boolean).join(' • ');
+                    const pat = shortenPluginAiPattern(input.pattern || '');
+                    const path = shortenPluginAiPath(String(input.path || ''), { workspaceRoot: root });
+                    detail = [pat ? `pattern: ${pat}` : '', path ? `path: ${path}` : ''].filter(Boolean).join(' • ');
                     icon = '⌕';
-                } else if (toolName === 'bash') {
+                } else if (tool === 'bash') {
                     label = 'Bash';
                     detail = truncatePluginAiText(String(input.command || data.command || '(no command)'), 96);
                     icon = '⌘';
-                } else if (toolName === 'edit' || toolName === 'file_edit') {
+                } else if (tool === 'edit' || tool === 'file_edit') {
                     label = 'File edited';
-                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot });
+                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
                     icon = '✎';
-                } else if (toolName === 'write' || toolName === 'file_write') {
+                } else if (tool === 'write' || tool === 'file_write') {
                     label = 'File written';
-                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot });
+                    detail = shortenPluginAiPath(String(input.path || data.path || '(no path)'), { workspaceRoot: root });
                     icon = '✚';
-                } else if (toolName === 'run_semgrep') {
+                } else if (tool === 'run_semgrep') {
                     label = 'Semgrep';
                     detail = truncatePluginAiText(String(input.config || data.config || 'auto'), 72);
                     icon = 'S';
                 } else {
                     label = 'Tool';
-                    detail = truncatePluginAiText([toolName || 'tool', shortenPluginAiPath(String(input.path || input.command || data.path || data.command || '').trim(), { workspaceRoot })].filter(Boolean).join(' • '), 96);
+                    detail = truncatePluginAiText([tool || 'tool', shortenPluginAiPath(String(input.path || input.command || data.path || data.command || '').trim(), { workspaceRoot: root })].filter(Boolean).join(' • '), 96);
                     icon = '⋯';
                 }
             } else {
-                hidden = true;
+                hide = true;
             }
 
             return {
-                id: `${type}-${index}`,
+                id: `${type}-${idx}`,
                 type,
                 label,
                 detail,
                 icon,
                 tone,
-                category,
+                category: cat,
                 state,
-                hidden,
-                toolName,
-                toolTone: pluginAiToolBadgeTone(toolName),
-                bashCommand: toolName === 'bash' ? String(input.command || data.command || '').trim() : '',
+                hidden: hide,
+                toolName: tool,
+                toolTone: pluginAiToolBadgeTone(tool),
+                bashCommand: tool === 'bash' ? String(input.command || data.command || '').trim() : '',
             };
         }).filter((entry) => !entry.hidden);
 
-        const groupedEntries = groupPluginAiActivityEntries(rawEntries);
-        const lastActiveIndex = [...groupedEntries].map((entry, index) => ({ entry, index })).reverse().find((item) => item.entry.state === 'active')?.index;
-        return groupedEntries.map((entry, index) => ({
+        const grouped = groupPluginAiActivityEntries(items);
+        const last = [...grouped].map((entry, idx) => ({ entry, idx })).reverse().find((item) => item.entry.state === 'active')?.idx;
+        return grouped.map((entry, idx) => ({
             ...entry,
-            isCurrent: lastActiveIndex === index,
+            isCurrent: last === idx,
         }));
     }
 
