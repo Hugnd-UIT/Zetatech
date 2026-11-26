@@ -1,0 +1,30 @@
+# Zetatech Requirements
+
+# Core
+requests>=2.31.0
+rich>=13.0.0
+
+# Web Dashboard
+fastapi>=0.109.0
+uvicorn>=0.27.0
+websockets>=11.0
+pydantic>=2.5.0
+
+# Security - Rate Limiting
+slowapi>=0.1.9
+limits>=3.7.0
+
+# Database
+# SQLite is built-in
+
+# Security Analysis
+semgrep>=1.74.0; python_version >= "3.10"
+
+# Configuration
+pyyaml>=6.0.1
+
+# Typing
+annotated-types>=0.6.0
+
+# Testing
+pytest>=8.3.0

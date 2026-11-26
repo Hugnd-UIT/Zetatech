@@ -1,0 +1,208 @@
+name: DevOps
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Runtime version metadata passed into the Docker build.
+        required: true
+        type: string
+      tag:
+        description: Runtime tag metadata passed into the Docker build.
+        required: true
+        type: string
+      build:
+        description: Runtime build identifier passed into the Docker build.
+        required: true
+        type: string
+      test:
+        description: Runtime tests identifier passed into the Docker build.
+        required: true
+        type: boolean
+      release:
+        description: Select the release-parity local image reference.
+        required: true
+        type: boolean
+    outputs:
+      image:
+        description: ""
+        value: ${{ jobs.validate.outputs.image }}
+      result:
+        description: ""
+        value: ${{ jobs.validate.outputs.result }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      image: ${{ steps.image.outputs.value }}
+      result: ${{ steps.result.outputs.value }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve image reference
+        id: image
+        shell: bash
+        run: |
+          if [[ "${{ inputs.release }}" == 'true' ]]; then
+            echo 'value=zetatech-agent:release-validation' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'value=zetatech-agent:ci-validation' >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: agents/nodejs/package-lock.json
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+
+      - name: Install Node dependencies
+        run: npm --prefix agents/nodejs ci
+
+      - name: Build Node
+        run: npm --prefix agents/nodejs run build
+
+      - name: Run Node tests
+        run: npm --prefix agents/nodejs run test
+
+      - name: Run Python tests
+        run: ZETATECH_DB=/tmp/zetatech-ci.db python -m pytest
+
+      - name: Build image
+        run: |
+          docker build \
+            --label org.opencontainers.image.title="Zetatech" \
+            --label org.opencontainers.image.description="AI agent-powered WordPress plugin security" \
+            --label org.opencontainers.image.version="${{ inputs.version }}" \
+            --label org.opencontainers.image.revision="${{ inputs.build }}" \
+            --label org.opencontainers.image.source="${{ github.server_url }}/${{ github.repository }}" \
+            --build-arg ZETATECH_IMAGE_VERSION=${{ inputs.version }} \
+            --build-arg ZETATECH_IMAGE_TAG=${{ inputs.tag }} \
+            --build-arg ZETATECH_IMAGE_BUILD=${{ inputs.build }} \
+            -t ${{ steps.image.outputs.value }} \
+            .
+
+      - name: Test image
+        if: ${{ inputs.test }}
+        shell: bash
+        run: |
+          docker rm -f zetatech-smoke zetatech-smoke-recreated >/dev/null 2>&1 || true
+          docker volume rm zetatech-data zetatech-plugin zetatech-semgrep >/dev/null 2>&1 || true
+
+          docker volume create zetatech-data >/dev/null
+          docker volume create zetatech-plugin >/dev/null
+          docker volume create zetatech-semgrep >/dev/null
+
+          clean() {
+            docker logs zetatech-smoke || true
+            docker logs zetatech-smoke-recreated || true
+            docker rm -f zetatech-smoke zetatech-smoke-recreated >/dev/null 2>&1 || true
+            docker volume rm zetatech-data zetatech-plugin zetatech-semgrep >/dev/null 2>&1 || true
+          }
+
+          trap clean EXIT
+
+          wait() {
+            local url="$1"
+            for _ in {1..30}; do
+              if curl --fail --silent "$url" >/dev/null; then
+                return 0
+              fi
+              sleep 2
+            done
+            curl --fail --silent "$url" >/dev/null
+          }
+
+          start() {
+            local name="$1"
+            docker run -d --name "$name" -p 18080:8080 \
+              -v zetatech-data:/home/appuser/.zetatech \
+              -v zetatech-plugin:/app/Plugins \
+              -v zetatech-semgrep:/app/semgrep_results \
+              ${{ steps.image.outputs.value }}
+          }
+
+          check() {
+            local name="$1"
+            docker exec "$name" sh -lc 'id && touch /home/appuser/.zetatech/write-test && touch /app/Plugins/write-test && touch /app/semgrep_results/write-test'
+          }
+
+          start zetatech-smoke
+          wait http://127.0.0.1:18080/health
+          check zetatech-smoke
+          curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update.json
+
+          docker exec zetatech-smoke python - <<'PY'
+          from pathlib import Path
+
+          root = Path('/home/appuser/.zetatech')
+          (root / 'acceptance').mkdir(parents=True, exist_ok=True)
+          (root / 'acceptance' / 'persistence.txt').write_text('persisted across restart and recreate', encoding='utf-8')
+          PY
+
+          docker restart zetatech-smoke >/dev/null
+          wait http://127.0.0.1:18080/health
+
+          docker exec zetatech-smoke python - <<'PY'
+          from pathlib import Path
+
+          marker = Path('/home/appuser/.zetatech/acceptance/persistence.txt')
+          assert marker.read_text(encoding='utf-8') == 'persisted across restart and recreate'
+          PY
+
+          docker rm -f zetatech-smoke >/dev/null
+          start zetatech-smoke-recreated
+          wait http://127.0.0.1:18080/health
+          check zetatech-smoke-recreated
+          curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/zetatech-system-update-recreated.json
+
+          docker exec zetatech-smoke-recreated python - <<'PY'
+          from pathlib import Path
+
+          marker = Path('/home/appuser/.zetatech/acceptance/persistence.txt')
+          assert marker.read_text(encoding='utf-8') == 'persisted across restart and recreate'
+          PY
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          required = {
+              'current_version',
+              'current_tag',
+              'runtime_status',
+              'status',
+              'update_available',
+              'manual_update_required',
+          }
+          for name in ('/tmp/zetatech-system-update.json', '/tmp/zetatech-system-update-recreated.json'):
+            payload = json.loads(Path(name).read_text(encoding='utf-8'))
+            missing = required - payload.keys()
+            if missing:
+              raise SystemExit(f'Missing keys from {name}: {sorted(missing)}')
+          PY
+
+          trap - EXIT
+          clean
+
+      - name: Emit smoke result for callers
+        id: result
+        shell: bash
+        run: |
+          if [[ "${{ inputs.test }}" == 'true' ]]; then
+            echo 'value=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'value=false' >> "${GITHUB_OUTPUT}"
+          fi

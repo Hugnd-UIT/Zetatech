@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ops.yml
+    with:
+      version: ci
+      tag: ${{ github.ref_name }}
+      build: ${{ github.sha }}
+      test: true
+      release: false
