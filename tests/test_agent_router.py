@@ -684,3 +684,60 @@ def test_source_scope(monkeypatch, tmp_path):
 
     assert res.status_code == 404
     assert res.json()["detail"] == "AI thread not found."
+
+
+def test_openai_nonstream(monkeypatch):
+    from core.routers.agents import provider as mod
+
+    seen = {}
+
+    def _post(url, *, headers, body, timeout=20):
+        seen["url"] = url
+        seen["headers"] = headers
+        seen["body"] = body
+        seen["timeout"] = timeout
+        return {"choices": [{"message": {"content": "OK"}}]}
+
+    monkeypatch.setattr(mod, "post_json", _post)
+    out = mod.test_openai_connection(
+        api_key="sk-test",
+        model="ag/gemini-3.8-flash",
+        base_url="http://host.docker.internal:20128/v1/",
+    )
+
+    assert out == "OK"
+    assert seen["url"] == "http://host.docker.internal:20128/v1/chat/completions"
+    assert seen["body"]["stream"] is False
+
+
+def test_preserve_active(monkeypatch, tmp_path):
+    db = tmp_path / "ai_router.db"
+    repo = AIRepository(db_path=db)
+    repo.upsert_provider_settings(
+        provider="openai",
+        profile_key="9router-default",
+        display_name="9router",
+        api_key="sk-test",
+        model="ag/gemini-3.8-flash",
+        base_url="http://host.docker.internal:20128/v1",
+        is_active=True,
+    )
+
+    monkeypatch.setattr("core.routers.agents.test_provider", lambda **_: "OK")
+    client = _create_test_client(monkeypatch, db)
+    res = client.post(
+        "/api/ai/settings/test",
+        json={
+            "provider": "openai",
+            "profile_key": "9router-default",
+            "display_name": "9router",
+            "model": "ag/gemini-3.8-flash",
+            "base_url": "http://host.docker.internal:20128/v1",
+        },
+    )
+
+    assert res.status_code == 200
+    assert res.json()["ok"] is True
+    saved = repo.get_active_provider()
+    assert saved is not None
+    assert saved["profile_key"] == "9router-default"

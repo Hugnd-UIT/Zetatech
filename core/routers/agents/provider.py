@@ -80,6 +80,7 @@ def test_openai_connection(*, api_key: str, model: str, base_url: str | None) ->
         ],
         "max_tokens": 5,
         "temperature": 0,
+        "stream": False,
     }
     response = post_json(
         f"{norm_url('openai', base_url)}/chat/completions",

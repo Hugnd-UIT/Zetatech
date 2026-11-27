@@ -77,6 +77,11 @@ def save_settings(payload: AISettingsRequest):
 
 @router.post("/settings/test", response_model=AISettingsTestResponse)
 def test_settings_profile(payload: AISettingsTestRequest):
+    existing = (
+        repo.get_provider_by_profile_key(payload.profile_key)
+        if payload.profile_key
+        else None
+    )
     cand = repo.upsert_provider_settings(
         provider=payload.provider,
         profile_key=payload.profile_key,
@@ -85,7 +90,7 @@ def test_settings_profile(payload: AISettingsTestRequest):
         model=payload.model,
         models=payload.models,
         base_url=str(payload.base_url) if payload.base_url else None,
-        is_active=False,
+        is_active=bool(existing.get("is_active")) if existing else False,
     )
     key = str(cand.get("api_key") or payload.api_key or "").strip()
     url = str(payload.base_url) if payload.base_url else cand.get("base_url")

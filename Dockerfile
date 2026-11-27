@@ -34,7 +34,7 @@ RUN useradd -m -u 10001 appuser && \
     mkdir -p /app/Plugins /app/semgrep_results /app/sessions /home/appuser/.zetatech && \
     chown -R appuser:appuser /app /home/appuser
 
-RUN chmod +x /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 8080
 
