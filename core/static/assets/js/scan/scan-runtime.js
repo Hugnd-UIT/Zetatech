@@ -151,13 +151,21 @@
     window.setProgressDetailsButton = function(visible) {
         const btn = document.getElementById('scan-progress-details-btn');
         if (!btn) return;
-        const show = Boolean(visible) && Boolean(runtime.getCurrentScanId());
+        const sid = runtime.getCurrentScanId();
+        if (visible && sid) {
+            btn.dataset.scanId = String(sid);
+        } else if (!visible) {
+            delete btn.dataset.scanId;
+        }
+        const show = Boolean(visible) && Boolean(sid || btn.dataset.scanId);
         btn.style.display = show ? 'inline-flex' : 'none';
     };
 
     window.openProgressScanDetails = function() {
-        if (!runtime.getCurrentScanId()) return;
-        window.viewScan(runtime.getCurrentScanId());
+        const btn = document.getElementById('scan-progress-details-btn');
+        const sid = runtime.getCurrentScanId() || parseInt(btn?.dataset.scanId || '0', 10);
+        if (!sid) return;
+        window.viewScan(sid);
     };
 
     window.logTerminal = function(text, type = 'info') {

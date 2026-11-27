@@ -1342,6 +1342,7 @@ input[type="number"]:focus, input[type="text"]:focus, select:focus {
 .toggle-switch {
     width: 32px;
     height: 18px;
+    flex-shrink: 0;
     background: #333;
     border-radius: 20px;
     position: relative;
