@@ -534,41 +534,24 @@
             .catch(() => {});
     }
 
-    function renderSemgrep(scan) {
+    const SEMGREP_PAGE_SIZE = 5;
+    let semgrepViewState = { findings: [], prefixHtml: '', page: 1 };
+
+    function renderSemgrepPage() {
         const box = document.getElementById('semgrep-results-container');
         if (!box) return;
 
-        const findings = Array.isArray(scan && scan.findings) ? scan.findings : null;
-        const sum = (scan && scan.summary && typeof scan.summary === 'object') ? scan.summary : {};
-        const total = Number(sum.total_findings || 0);
-        const doneAt = scan && scan.completed_at ? String(scan.completed_at) : '';
-        const done = String((scan && scan.status) || '').toLowerCase() === 'completed';
-        const errs = Array.isArray(sum.errors) ? sum.errors.filter(Boolean) : [];
+        const findings = semgrepViewState.findings || [];
+        const total = findings.length;
+        const totalPages = Math.max(1, Math.ceil(total / SEMGREP_PAGE_SIZE));
+        const page = Math.min(Math.max(1, semgrepViewState.page || 1), totalPages);
+        semgrepViewState.page = page;
 
-        if (!scan || !done || findings === null) {
-            box.innerHTML = '<div class="plugin-semgrep-empty">Semgrep result is incomplete or unavailable right now. Please retry the scan or refresh this plugin view.</div>';
-            setScanBtn('rescan');
-            return;
-        }
+        const startIdx = (page - 1) * SEMGREP_PAGE_SIZE;
+        const pageItems = findings.slice(startIdx, startIdx + SEMGREP_PAGE_SIZE);
 
-        if (findings.length === 0 && total === 0) {
-            const label = doneAt ? ` Last completed: <strong>${escapeHtml(doneAt)}</strong>.` : '';
-            const warn = errs.length
-                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
-                : '';
-            box.innerHTML = `${warn}<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${label}</div>`;
-            setScanBtn('rescan');
-            return;
-        }
-
-        const counts = (sum && sum.breakdown) ? sum.breakdown : {};
-        const warn = errs.length
-            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
-            : '';
-
-        let html = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${counts.ERROR || 0}</span>, WARNING: <span class="sev-warning">${counts.WARNING || 0}</span>)</div>`;
-
-        html += findings.map((f) => {
+        let html = semgrepViewState.prefixHtml || '';
+        html += pageItems.map((f) => {
             const sev = String(f.severity || 'INFO').toUpperCase();
             const cls = sev === 'ERROR' ? 'error' : (sev === 'WARNING' ? 'warning' : 'info');
             const path = `${escapeHtml(String(f.file_path || ''))}${f.line_number ? `:${f.line_number}` : ''}`;
@@ -584,7 +567,69 @@
             `;
         }).join('');
 
+        if (total > SEMGREP_PAGE_SIZE) {
+            const from = startIdx + 1;
+            const to = Math.min(startIdx + pageItems.length, total);
+            html += `
+                <div class="table-pagination" style="display: flex; margin-top: 12px;">
+                    <span class="table-pagination-info">Showing ${from}-${to} of ${total}</span>
+                    <div class="table-pagination-controls">
+                        <button class="table-page-btn" type="button" onclick="changeSemgrepPage(-1)" ${page <= 1 ? 'disabled' : ''}>Prev</button>
+                        <span class="table-page-current">${page} / ${totalPages}</span>
+                        <button class="table-page-btn" type="button" onclick="changeSemgrepPage(1)" ${page >= totalPages ? 'disabled' : ''}>Next</button>
+                    </div>
+                </div>
+            `;
+        }
+
         box.innerHTML = html;
+    }
+
+    window.changeSemgrepPage = function(delta) {
+        const totalPages = Math.max(1, Math.ceil((semgrepViewState.findings || []).length / SEMGREP_PAGE_SIZE));
+        const next = Math.min(Math.max(1, (semgrepViewState.page || 1) + delta), totalPages);
+        if (next === semgrepViewState.page) return;
+        semgrepViewState.page = next;
+        renderSemgrepPage();
+    };
+
+    function renderSemgrep(scan) {
+        const box = document.getElementById('semgrep-results-container');
+        if (!box) return;
+
+        const findings = Array.isArray(scan && scan.findings) ? scan.findings : null;
+        const sum = (scan && scan.summary && typeof scan.summary === 'object') ? scan.summary : {};
+        const total = Number(sum.total_findings || 0);
+        const doneAt = scan && scan.completed_at ? String(scan.completed_at) : '';
+        const done = String((scan && scan.status) || '').toLowerCase() === 'completed';
+        const errs = Array.isArray(sum.errors) ? sum.errors.filter(Boolean) : [];
+
+        if (!scan || !done || findings === null) {
+            semgrepViewState = { findings: [], prefixHtml: '', page: 1 };
+            box.innerHTML = '<div class="plugin-semgrep-empty">Semgrep result is incomplete or unavailable right now. Please retry the scan or refresh this plugin view.</div>';
+            setScanBtn('rescan');
+            return;
+        }
+
+        if (findings.length === 0 && total === 0) {
+            const label = doneAt ? ` Last completed: <strong>${escapeHtml(doneAt)}</strong>.` : '';
+            const warn = errs.length
+                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
+                : '';
+            semgrepViewState = { findings: [], prefixHtml: '', page: 1 };
+            box.innerHTML = `${warn}<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${label}</div>`;
+            setScanBtn('rescan');
+            return;
+        }
+
+        const counts = (sum && sum.breakdown) ? sum.breakdown : {};
+        const warn = errs.length
+            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
+            : '';
+
+        const prefixHtml = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${counts.ERROR || 0}</span>, WARNING: <span class="sev-warning">${counts.WARNING || 0}</span>)</div>`;
+        semgrepViewState = { findings, prefixHtml, page: 1 };
+        renderSemgrepPage();
         setScanBtn('rescan');
     }
 

@@ -367,7 +367,7 @@ function agentConfig(
     apiKey: agent?.apiKey ?? payload.apiKey,
     systemPrompt: agent?.systemPrompt ?? payload.systemPrompt ?? fallback.systemPrompt,
     tools,
-    maxTurns: agent?.maxTurns ?? payload.maxTurns ?? 10,
+    maxTurns: agent?.maxTurns ?? payload.maxTurns ?? 25,
     maxTokens: agent?.maxTokens ?? payload.maxTokens,
     temperature: agent?.temperature ?? payload.temperature,
     timeoutMs: agent?.timeoutMs ?? payload.timeoutMs,
