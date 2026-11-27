@@ -284,8 +284,8 @@ def bulk_stats(*, repo, session_id: int) -> Dict[str, Any]:
 
     return {
         "session_id": session_id,
-        "total_plugins": total_plugins,
-        "scanned_count": scanned_count,
+        "total_plugins": total,
+        "scanned_count": scanned,
         "progress": progress,
         "total_findings": stats.get("total_findings", 0),
         "breakdown": stats.get("breakdown", {}),

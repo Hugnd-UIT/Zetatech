@@ -131,7 +131,7 @@ def test_semgrep_scan(monkeypatch, tmp_path):
 
 
 def test_semgrep_rules(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     cli = _client(monkeypatch, tmp_path)
 
     res = cli.get("/api/semgrep/rules")
@@ -305,7 +305,7 @@ def test_write_writable(monkeypatch, tmp_path):
 
 
 def test_bootstrap_legacy(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     legacy = tmp_path / "legacy-semgrep-results" / "custom_rules.yaml"
     legacy.parent.mkdir(parents=True, exist_ok=True)
     legacy.write_text(
@@ -327,7 +327,7 @@ def test_bootstrap_legacy(monkeypatch, tmp_path):
 
 
 def test_migrate_disabled(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     canon = dir / "custom_rules.yaml"
     canon.parent.mkdir(parents=True, exist_ok=True)
     canon.write_text(
@@ -345,7 +345,7 @@ def test_migrate_disabled(monkeypatch, tmp_path):
 
 
 def test_load_doc(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     legacy = tmp_path / "legacy-semgrep-results" / "custom_rules.yaml"
     legacy.parent.mkdir(parents=True, exist_ok=True)
     legacy.write_text(
@@ -380,7 +380,7 @@ def test_load_rules(monkeypatch, tmp_path):
 
 
 def test_bootstrap_idempotent(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     canon = dir / "custom_rules.yaml"
     canon.parent.mkdir(parents=True, exist_ok=True)
     canon.write_text(
@@ -418,7 +418,7 @@ def test_empty_rules(monkeypatch, tmp_path):
 
 
 def test_package_fallback(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     pkg = tmp_path / "package-semgrep-results" / "custom_rules.yaml"
     pkg.parent.mkdir(parents=True, exist_ok=True)
     pkg.write_text(
@@ -436,7 +436,7 @@ def test_package_fallback(monkeypatch, tmp_path):
 
 
 def test_root_priority(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     root = tmp_path / "root-custom-rules.yaml"
     root.write_text(
         "rules:\n  - id: root-rule\n    message: Root\n    severity: WARNING\n    pattern: eval($X)\n",
@@ -460,7 +460,7 @@ def test_root_priority(monkeypatch, tmp_path):
 
 
 def test_keep_disabled(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     legacy = tmp_path / "legacy-semgrep-results" / "custom_rules.yaml"
     legacy.parent.mkdir(parents=True, exist_ok=True)
     legacy.write_text(
@@ -494,7 +494,7 @@ def test_missing_doc(monkeypatch, tmp_path):
 
 
 def test_empty_legacy(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     legacy = tmp_path / "legacy-semgrep-results" / "custom_rules.yaml"
     legacy.parent.mkdir(parents=True, exist_ok=True)
     legacy.write_text("rules: []\n", encoding="utf-8")
@@ -508,7 +508,7 @@ def test_empty_legacy(monkeypatch, tmp_path):
 
 
 def test_missing_disabled(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     monkeypatch.setattr(semgrep_helpers, "LEGACY_DISABLED_CONFIG_PATH", tmp_path / "missing-disabled.json")
 
     semgrep_helpers.bootstrap_rules()
@@ -517,7 +517,7 @@ def test_missing_disabled(monkeypatch, tmp_path):
 
 
 def test_preserve_disabled(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     path = dir / "disabled_config.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"rules": ["keep-disabled"], "rulesets": [], "extra_rulesets": []}), encoding="utf-8")
@@ -531,7 +531,7 @@ def test_preserve_disabled(monkeypatch, tmp_path):
 
 
 def test_endpoint_bootstrap(monkeypatch, tmp_path):
-    dir = _patch_semgrep_state(monkeypatch, tmp_path)
+    dir = _patch_state(monkeypatch, tmp_path)
     legacy = tmp_path / "legacy-semgrep-results" / "custom_rules.yaml"
     legacy.parent.mkdir(parents=True, exist_ok=True)
     legacy.write_text(
