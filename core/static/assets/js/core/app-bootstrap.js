@@ -1,5 +1,6 @@
 (function() {
     async function initializeApp() {
+        initializeCustomSelects();
         initializeSidebarToggle();
         initializeStarStripDismiss();
         initializeDashboardChartInteractions();
