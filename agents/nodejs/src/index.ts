@@ -564,7 +564,24 @@ async function runAgent(
   const executor = new ToolExecutor(registry);
   const agent = new Agent(config, registry, executor);
   emitEvent(handlers, { type: 'agent_started', data: { name: config.name, role: 'source_code_assistant' } });
-  const result = await agent.run(payload.prompt);
+  let result = await agent.run(payload.prompt);
+  if (!String(result.output || '').trim()) {
+    const priorCalls = (result.toolCalls ?? []).slice(-8).map((tc) => {
+      const out = String(tc.output || '').slice(0, 600);
+      return `- ${tc.toolName}(${JSON.stringify(tc.input)}): ${out}`;
+    });
+    const retryPrompt = priorCalls.length > 0
+      ? `${payload.prompt}\n\nPrevious tool results already gathered:\n${priorCalls.join('\n')}\n\nContinue inspecting the key files if needed and write the complete final report.`
+      : payload.prompt;
+    const retryAgent = new Agent(config, registry, executor);
+    const retryResult = await retryAgent.run(retryPrompt);
+    if (String(retryResult.output || '').trim() || (retryResult.toolCalls?.length ?? 0) > (result.toolCalls?.length ?? 0)) {
+      result = {
+        ...retryResult,
+        toolCalls: [...(result.toolCalls ?? []), ...(retryResult.toolCalls ?? [])],
+      };
+    }
+  }
   emitEvent(handlers, { type: 'agent_completed', data: { name: config.name, role: 'source_code_assistant' } });
   return {
     success: result.success,

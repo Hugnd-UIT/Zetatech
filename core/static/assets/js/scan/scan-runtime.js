@@ -471,10 +471,10 @@
         box.innerHTML = `
             <section class="plugin-hero">
                 <div class="plugin-metrics-grid">
-                    <article class="plugin-metric-card"><span class="plugin-metric-label">Risk Score</span><span class="plugin-metric-value" style="color:${vm.pluginScoreColor}">${vm.pluginScore}/100</span><span class="plugin-metric-sub">Current plugin risk level</span></article>
-                    <article class="plugin-metric-card"><span class="plugin-metric-label">Installs</span><span class="plugin-metric-value">${escapeHtml(String(plugin.installations || 0))}+</span><span class="plugin-metric-sub">Active install footprint</span></article>
+                    <article class="plugin-metric-card"><span class="plugin-metric-label">Risk Score</span><span class="plugin-metric-value" style="color:${vm.pluginScoreColor}">${vm.pluginScore}/100</span><span class="plugin-metric-sub">Plugin risk level</span></article>
+                    <article class="plugin-metric-card"><span class="plugin-metric-label">Installs</span><span class="plugin-metric-value">${escapeHtml(String(plugin.installations || 0))}+</span><span class="plugin-metric-sub"Number of downloads</span></article>
                     <article class="plugin-metric-card"><span class="plugin-metric-label">Updated</span><span class="plugin-metric-value">${escapeHtml(String(plugin.days_since_update || 0))}d</span><span class="plugin-metric-sub">Days since last update</span></article>
-                    <article class="plugin-metric-card"><span class="plugin-metric-label">Semgrep</span><span class="plugin-metric-value">${escapeHtml(vm.semgrepFindings)}</span><span class="plugin-metric-sub">Known findings count</span></article>
+                    <article class="plugin-metric-card"><span class="plugin-metric-label">Semgrep</span><span class="plugin-metric-value">${escapeHtml(vm.semgrepFindings)}</span><span class="plugin-metric-sub">Findings count</span></article>
                 </div>
             </section>
 
@@ -743,7 +743,7 @@
         const box = document.getElementById('plugin-page-content');
 
         if (title) title.textContent = String(plugin.slug || plugin.name || 'PLUGIN').toUpperCase();
-        if (desc) desc.textContent = `Inspect metadata and Semgrep findings for ${plugin.slug || plugin.name || 'the selected plugin'}.`;
+        if (desc) desc.textContent = `Inspect findings for ${plugin.slug || plugin.name || 'the selected plugin'}.`;
 
         initAiPanel(plugin);
         if (!box) return;

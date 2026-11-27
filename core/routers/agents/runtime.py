@@ -289,7 +289,7 @@ def persist_completed_run(
         if calls:
             out = f"[Run ended after {len(calls)} tool call(s) without a final text summary. Try narrowing the scope or asking a follow-up question in this thread.]"
         else:
-            out = "[Model returned an empty response (0 tokens / possible upstream safety filter or provider refusal). Try rephrasing in defensive code-review terms or switching model.]"
+            out = "[Something wrong. Try rephrasing in defensive code-review terms or switching model.]"
     if source_dir is None:
         note = "\n\n[Context note] No trusted local source directory was available, so this response used stored metadata only."
         out = f"{out}{note}" if out else note.strip()
