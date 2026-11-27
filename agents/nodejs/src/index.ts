@@ -566,20 +566,33 @@ async function runAgent(
   emitEvent(handlers, { type: 'agent_started', data: { name: config.name, role: 'source_code_assistant' } });
   let result = await agent.run(payload.prompt);
   if (!String(result.output || '').trim()) {
-    const priorCalls = (result.toolCalls ?? []).slice(-8).map((tc) => {
-      const out = String(tc.output || '').slice(0, 600);
-      return `- ${tc.toolName}(${JSON.stringify(tc.input)}): ${out}`;
+    const priorCalls = (result.toolCalls ?? []).slice(-15).map((tc) => {
+      const out = String(tc.output || '').slice(0, 1200);
+      return `- ${tc.toolName}(${JSON.stringify(tc.input)}):\n${out}`;
     });
-    const retryPrompt = priorCalls.length > 0
-      ? `${payload.prompt}\n\nPrevious tool results already gathered:\n${priorCalls.join('\n')}\n\nContinue inspecting the key files if needed and write the complete final report.`
-      : payload.prompt;
-    const retryAgent = new Agent(config, registry, executor);
-    const retryResult = await retryAgent.run(retryPrompt);
-    if (String(retryResult.output || '').trim() || (retryResult.toolCalls?.length ?? 0) > (result.toolCalls?.length ?? 0)) {
-      result = {
-        ...retryResult,
-        toolCalls: [...(result.toolCalls ?? []), ...(retryResult.toolCalls ?? [])],
+    if (priorCalls.length > 0) {
+      const summaryConfig: AgentConfig = {
+        ...config,
+        tools: [],
+        maxTurns: 1,
+        systemPrompt: 'You are a senior WordPress security auditor. Tools are disabled for this final step. Write the complete final security review report based strictly on the gathered evidence below.',
       };
+      const summaryPrompt = `${payload.prompt}\n\nEvidence gathered from ${result.toolCalls?.length ?? priorCalls.length} tool call(s):\n${priorCalls.join('\n\n')}\n\nWrite the final security report now.`;
+      const summaryRegistry = new ToolRegistry();
+      const summaryAgent = new Agent(summaryConfig, summaryRegistry, new ToolExecutor(summaryRegistry));
+      const summaryResult = await summaryAgent.run(summaryPrompt);
+      if (String(summaryResult.output || '').trim()) {
+        result = {
+          ...summaryResult,
+          toolCalls: result.toolCalls,
+        };
+      }
+    } else {
+      const retryAgent = new Agent(config, registry, executor);
+      const retryResult = await retryAgent.run(payload.prompt);
+      if (String(retryResult.output || '').trim() || (retryResult.toolCalls?.length ?? 0) > 0) {
+        result = retryResult;
+      }
     }
   }
   emitEvent(handlers, { type: 'agent_completed', data: { name: config.name, role: 'source_code_assistant' } });

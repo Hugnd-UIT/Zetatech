@@ -566,7 +566,7 @@
             ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
             : '';
 
-        let html = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${counts.ERROR || 0}</span>, WARNING: <span class="sev-warning">${counts.WARNING || 0}</span>)</div>`;
+        let html = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues ERROR: <span class="sev-error">${counts.ERROR || 0}</span>, WARNING: <span class="sev-warning">${counts.WARNING || 0}</span></div>`;
         html += '<div class="plugin-semgrep-list">';
         html += findings.map((f) => {
             const sev = String(f.severity || 'INFO').toUpperCase();
