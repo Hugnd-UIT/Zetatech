@@ -2434,3 +2434,30 @@ output {
     opacity: 0.42;
     cursor: not-allowed;
 }
+
+.plugin-semgrep-list {
+    max-height: 480px;
+    overflow-y: auto;
+    padding-right: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.plugin-semgrep-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.plugin-semgrep-list::-webkit-scrollbar-track {
+    background: #070a0e;
+    border-radius: 3px;
+}
+
+.plugin-semgrep-list::-webkit-scrollbar-thumb {
+    background: #232d3b;
+    border-radius: 3px;
+}
+
+.plugin-semgrep-list::-webkit-scrollbar-thumb:hover {
+    background: #36455a;
+}

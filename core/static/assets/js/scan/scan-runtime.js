@@ -1,4 +1,4 @@
-(function() {
+(function () {
     const runtime = window.zetatechRuntime;
 
     function runMarkup() {
@@ -97,7 +97,7 @@
         return Array.isArray(window.currentScanResults) ? window.currentScanResults : [];
     }
 
-    window.refreshAfterScanEvent = function(sid) {
+    window.refreshAfterScanEvent = function (sid) {
         loadHistory();
         const view = document.getElementById('catalog-view');
         if (view && view.style.display !== 'none') {
@@ -115,7 +115,7 @@
         }
     };
 
-    window.syncFinalScanResults = async function(sid, total = 0) {
+    window.syncFinalScanResults = async function (sid, total = 0) {
         if (!sid || !isDetailsViewActive()) return;
         const target = parseInt(total || 0, 10);
         for (let i = 0; i < 6; i += 1) {
@@ -127,7 +127,7 @@
         }
     };
 
-    window.setScanProgressState = function(pct, stage, detail) {
+    window.setScanProgressState = function (pct, stage, detail) {
         const fill = document.getElementById('scan-progress-fill');
         const track = document.getElementById('scan-progress-track');
         const pctEl = document.getElementById('scan-progress-percent');
@@ -148,7 +148,7 @@
         if (detailEl && detail) detailEl.textContent = detail;
     };
 
-    window.setProgressDetailsButton = function(visible) {
+    window.setProgressDetailsButton = function (visible) {
         const btn = document.getElementById('scan-progress-details-btn');
         if (!btn) return;
         const sid = runtime.getCurrentScanId();
@@ -161,14 +161,14 @@
         btn.style.display = show ? 'inline-flex' : 'none';
     };
 
-    window.openProgressScanDetails = function() {
+    window.openProgressScanDetails = function () {
         const btn = document.getElementById('scan-progress-details-btn');
         const sid = runtime.getCurrentScanId() || parseInt(btn?.dataset.scanId || '0', 10);
         if (!sid) return;
         window.viewScan(sid);
     };
 
-    window.logTerminal = function(text, type = 'info') {
+    window.logTerminal = function (text, type = 'info') {
         const map = {
             error: 'Failed',
             'high-risk': 'Warning',
@@ -180,12 +180,12 @@
         window.setScanProgressState(null, stage, text);
     };
 
-    window.clearTerminal = function() {
+    window.clearTerminal = function () {
         window.setScanProgressState(0, 'Initializing', 'Preparing scan session...');
         window.setProgressDetailsButton(false);
     };
 
-    window.connectWebSocket = function(sid) {
+    window.connectWebSocket = function (sid) {
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const url = `${proto}//${window.location.host}/ws/scans/${sid}`;
         closeSock();
@@ -215,7 +215,7 @@
         };
     };
 
-    window.reconcileScanStatus = async function(sid) {
+    window.reconcileScanStatus = async function (sid) {
         if (!sid) return;
         if (runtime.getCurrentScanId() !== sid) return;
 
@@ -251,7 +251,7 @@
         }
     };
 
-    window.handleMessage = function(msg, sourceSid = null) {
+    window.handleMessage = function (msg, sourceSid = null) {
         const btn = document.getElementById('runBtn');
         const curId = runtime.getCurrentScanId();
 
@@ -324,7 +324,7 @@
         }
     };
 
-    window.runScan = async function() {
+    window.runScan = async function () {
         const form = document.getElementById('configForm');
         const btn = document.getElementById('runBtn');
         const req = scanReq(form);
@@ -493,7 +493,7 @@
             </section>
 
             <section class="plugin-section">
-                <div class="section-title">Semgrep Analysis</div>
+                <div class="section-title">Static Application Security Testing</div>
                 <div id="semgrep-results-container"><div class="plugin-semgrep-empty">No Semgrep analysis yet. Click <strong>RE-SCAN</strong> to run deep static analysis for this plugin.</div></div>
             </section>
         `;
@@ -513,7 +513,7 @@
                     pollSemgrep(slug);
                 }
             })
-            .catch(() => {});
+            .catch(() => { });
     }
 
     function checkSemgrep() {
@@ -531,27 +531,44 @@
                     btn.style.opacity = '0.6';
                 }
             })
-            .catch(() => {});
+            .catch(() => { });
     }
 
-    const SEMGREP_PAGE_SIZE = 5;
-    let semgrepViewState = { findings: [], prefixHtml: '', page: 1 };
-
-    function renderSemgrepPage() {
+    function renderSemgrep(scan) {
         const box = document.getElementById('semgrep-results-container');
         if (!box) return;
 
-        const findings = semgrepViewState.findings || [];
-        const total = findings.length;
-        const totalPages = Math.max(1, Math.ceil(total / SEMGREP_PAGE_SIZE));
-        const page = Math.min(Math.max(1, semgrepViewState.page || 1), totalPages);
-        semgrepViewState.page = page;
+        const findings = Array.isArray(scan && scan.findings) ? scan.findings : null;
+        const sum = (scan && scan.summary && typeof scan.summary === 'object') ? scan.summary : {};
+        const total = Number(sum.total_findings || 0);
+        const doneAt = scan && scan.completed_at ? String(scan.completed_at) : '';
+        const done = String((scan && scan.status) || '').toLowerCase() === 'completed';
+        const errs = Array.isArray(sum.errors) ? sum.errors.filter(Boolean) : [];
 
-        const startIdx = (page - 1) * SEMGREP_PAGE_SIZE;
-        const pageItems = findings.slice(startIdx, startIdx + SEMGREP_PAGE_SIZE);
+        if (!scan || !done || findings === null) {
+            box.innerHTML = '<div class="plugin-semgrep-empty">Semgrep result is incomplete or unavailable right now. Please retry the scan or refresh this plugin view.</div>';
+            setScanBtn('rescan');
+            return;
+        }
 
-        let html = semgrepViewState.prefixHtml || '';
-        html += pageItems.map((f) => {
+        if (findings.length === 0 && total === 0) {
+            const label = doneAt ? ` Last completed: <strong>${escapeHtml(doneAt)}</strong>.` : '';
+            const warn = errs.length
+                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
+                : '';
+            box.innerHTML = `${warn}<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${label}</div>`;
+            setScanBtn('rescan');
+            return;
+        }
+
+        const counts = (sum && sum.breakdown) ? sum.breakdown : {};
+        const warn = errs.length
+            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
+            : '';
+
+        let html = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${counts.ERROR || 0}</span>, WARNING: <span class="sev-warning">${counts.WARNING || 0}</span>)</div>`;
+        html += '<div class="plugin-semgrep-list">';
+        html += findings.map((f) => {
             const sev = String(f.severity || 'INFO').toUpperCase();
             const cls = sev === 'ERROR' ? 'error' : (sev === 'WARNING' ? 'warning' : 'info');
             const path = `${escapeHtml(String(f.file_path || ''))}${f.line_number ? `:${f.line_number}` : ''}`;
@@ -566,70 +583,9 @@
                 </article>
             `;
         }).join('');
-
-        if (total > SEMGREP_PAGE_SIZE) {
-            const from = startIdx + 1;
-            const to = Math.min(startIdx + pageItems.length, total);
-            html += `
-                <div class="table-pagination" style="display: flex; margin-top: 12px;">
-                    <span class="table-pagination-info">Showing ${from}-${to} of ${total}</span>
-                    <div class="table-pagination-controls">
-                        <button class="table-page-btn" type="button" onclick="changeSemgrepPage(-1)" ${page <= 1 ? 'disabled' : ''}>Prev</button>
-                        <span class="table-page-current">${page} / ${totalPages}</span>
-                        <button class="table-page-btn" type="button" onclick="changeSemgrepPage(1)" ${page >= totalPages ? 'disabled' : ''}>Next</button>
-                    </div>
-                </div>
-            `;
-        }
+        html += '</div>';
 
         box.innerHTML = html;
-    }
-
-    window.changeSemgrepPage = function(delta) {
-        const totalPages = Math.max(1, Math.ceil((semgrepViewState.findings || []).length / SEMGREP_PAGE_SIZE));
-        const next = Math.min(Math.max(1, (semgrepViewState.page || 1) + delta), totalPages);
-        if (next === semgrepViewState.page) return;
-        semgrepViewState.page = next;
-        renderSemgrepPage();
-    };
-
-    function renderSemgrep(scan) {
-        const box = document.getElementById('semgrep-results-container');
-        if (!box) return;
-
-        const findings = Array.isArray(scan && scan.findings) ? scan.findings : null;
-        const sum = (scan && scan.summary && typeof scan.summary === 'object') ? scan.summary : {};
-        const total = Number(sum.total_findings || 0);
-        const doneAt = scan && scan.completed_at ? String(scan.completed_at) : '';
-        const done = String((scan && scan.status) || '').toLowerCase() === 'completed';
-        const errs = Array.isArray(sum.errors) ? sum.errors.filter(Boolean) : [];
-
-        if (!scan || !done || findings === null) {
-            semgrepViewState = { findings: [], prefixHtml: '', page: 1 };
-            box.innerHTML = '<div class="plugin-semgrep-empty">Semgrep result is incomplete or unavailable right now. Please retry the scan or refresh this plugin view.</div>';
-            setScanBtn('rescan');
-            return;
-        }
-
-        if (findings.length === 0 && total === 0) {
-            const label = doneAt ? ` Last completed: <strong>${escapeHtml(doneAt)}</strong>.` : '';
-            const warn = errs.length
-                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
-                : '';
-            semgrepViewState = { findings: [], prefixHtml: '', page: 1 };
-            box.innerHTML = `${warn}<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${label}</div>`;
-            setScanBtn('rescan');
-            return;
-        }
-
-        const counts = (sum && sum.breakdown) ? sum.breakdown : {};
-        const warn = errs.length
-            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${errs.slice(0, 5).map((err) => `• ${escapeHtml(String(err))}`).join('<br>')}</div>`
-            : '';
-
-        const prefixHtml = `${warn}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${counts.ERROR || 0}</span>, WARNING: <span class="sev-warning">${counts.WARNING || 0}</span>)</div>`;
-        semgrepViewState = { findings, prefixHtml, page: 1 };
-        renderSemgrepPage();
         setScanBtn('rescan');
     }
 
@@ -657,7 +613,7 @@
         }, 3000);
     }
 
-    window.runPluginSemgrep = async function(slug, url) {
+    window.runPluginSemgrep = async function (slug, url) {
         try {
             const res = await fetch('/api/semgrep/rules');
             const data = await res.json();
@@ -700,7 +656,7 @@
         }
     };
 
-    window.viewScan = async function(id, opts = {}) {
+    window.viewScan = async function (id, opts = {}) {
         const { syncUrl = true } = opts;
         switchTab('details', { syncUrl: false });
         runtime.setCurrentScanId(id);
@@ -764,7 +720,7 @@
         }
     };
 
-    window.openPluginModal = function(idx, opts = {}) {
+    window.openPluginModal = function (idx, opts = {}) {
         const { syncUrl = true } = opts;
         const plugin = getResults()[idx];
         if (!plugin) return;
@@ -799,7 +755,7 @@
         checkSemgrep();
     };
 
-    window.closeModal = function() {
+    window.closeModal = function () {
         const fb = runtime.getCurrentScanId() ? `details/${runtime.getCurrentScanId()}` : 'history';
         const cur = runtime.getModalReturnHash();
         const target = cur && !String(cur).startsWith('plugin/') ? cur : fb;

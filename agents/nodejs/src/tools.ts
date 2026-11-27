@@ -153,16 +153,51 @@ async function semgrep(config: string, root: string): Promise<string> {
   }
 }
 
+function compactSemgrepOutput(raw: string): string {
+  const MAX_CHARS = 16000;
+  try {
+    const parsed = JSON.parse(raw) as {
+      results?: Array<{
+        check_id?: string;
+        path?: string;
+        start?: { line?: number };
+        extra?: { severity?: string; message?: string; lines?: string };
+      }>;
+      errors?: unknown[];
+    };
+    if (parsed && Array.isArray(parsed.results)) {
+      const findings = parsed.results.slice(0, 40).map((r) => ({
+        rule: r.check_id || '',
+        file: r.path || '',
+        line: r.start?.line ?? 0,
+        severity: r.extra?.severity || '',
+        message: String(r.extra?.message || '').slice(0, 240),
+        snippet: String(r.extra?.lines || '').slice(0, 200),
+      }));
+      const summary = JSON.stringify({
+        total_results: parsed.results.length,
+        truncated: parsed.results.length > 40,
+        showing: findings.length,
+        findings,
+      });
+      return summary.length > MAX_CHARS ? summary.slice(0, MAX_CHARS) + '...[truncated]' : summary;
+    }
+  } catch {
+    // Fall back to plain text truncation when output is not JSON.
+  }
+  return raw.length > MAX_CHARS ? raw.slice(0, MAX_CHARS) + '\n...[truncated]' : raw;
+}
+
 function makeSemgrep(root: string): ToolDefinition {
   return defineTool({
     name: 'run_semgrep',
-    description: 'Run semgrep inside the workspace and return JSON output.',
+    description: 'Run semgrep inside the workspace and return compact JSON findings.',
     inputSchema: z.object({
       config: z.string().min(1).default('auto'),
     }),
     execute: async ({ config }) => {
       const output = await semgrep(config ?? 'auto', root);
-      return { data: output };
+      return { data: compactSemgrepOutput(output) };
     },
   });
 }
